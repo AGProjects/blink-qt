@@ -39,13 +39,14 @@ from blink.logging import ActivityLog
 from blink.webrtc import ws_server
 
 
-__all__ = ['SylkRTCConnection', 'SylkRTCConnections', 'ws_server', 'websockets_available', 'PROTOCOL']
+__all__ = ['SylkRTCConnection', 'SylkRTCConnections', 'ws_server', 'websockets_available', 'known_features', 'probe_features', 'PROTOCOL']
 
 
 PROTOCOL = 'sylkRTC-2'
 PING_INTERVAL = 30 * 1000       # ms, a WebSocket ping keeps NATs and proxies from dropping the connection
 CONNECT_TIMEOUT = 15 * 1000     # ms until ready-event
 REQUEST_TIMEOUT = 20 * 1000     # ms without ack or error: the request failed
+FEATURES_KEY = 'webrtc/gateway_features'    # {wsServer URL: [feature]}, what each gateway announced last
 
 
 def websockets_available():
@@ -80,6 +81,7 @@ class SylkRTCConnection(QObject):
         self.url = url
         self.state = 'idle'         # idle, connecting, ready, closed
         self.accounts = set()       # account ids added
+        self.features = set()       # what the gateway announced in its ready-event (sip-instance, multiple-video-feeds)
         self._pending_accounts = {} # account id -> callbacks waiting for account-add
         self._queue = []            # requests made before ready
         self._transactions = {}     # transaction -> (request name, callback, timer)
@@ -203,7 +205,10 @@ class SylkRTCConnection(QObject):
         if kind == 'ready-event':
             self._connect_timer.stop()
             self.state = 'ready'
-            ActivityLog().info(f'[sylkrtc] {self.url} is ready')
+            features = message.get('features')
+            self.features = {feature for feature in features if isinstance(feature, str)} if isinstance(features, list) else set()
+            _remember_features(self.url, self.features)
+            ActivityLog().info(f'[sylkrtc] {self.url} is ready' + (f' ({", ".join(sorted(self.features))})' if self.features else ''))
             queued, self._queue = self._queue, []
             for data, callback in queued:
                 self._send(data, callback)
@@ -298,3 +303,56 @@ class SylkRTCConnections(object, metaclass=Singleton):
         if self._connections.get(connection.url) is connection:
             del self._connections[connection.url]
         connection.close('not used')
+
+
+# What a gateway can do (its ready-event features): remembered per server, asked again when it matters
+
+def _saved_features():
+    from blink.resources import ui_settings
+    try:
+        saved = json.loads(ui_settings().value(FEATURES_KEY, '') or '{}')
+    except (TypeError, ValueError):
+        saved = {}
+    return saved if isinstance(saved, dict) else {}
+
+
+def _remember_features(url, features):
+    from blink.resources import ui_settings
+    saved = _saved_features()
+    if saved.get(url) != sorted(features):
+        saved[url] = sorted(features)
+        ui_settings().setValue(FEATURES_KEY, json.dumps(saved))
+
+
+def known_features(url):
+    """The features the gateway at url announced: from its connection when there is one, else as last seen; None when never seen."""
+    connection = SylkRTCConnections()._connections.get(url)
+    if connection is not None and connection.state == 'ready':
+        return set(connection.features)
+    features = _saved_features().get(url)
+    return set(features) if isinstance(features, list) else None
+
+
+_probes = set()
+
+
+def probe_features(url, callback):
+    """Ask the gateway at url what it can do: callback(features) once it is ready (now, if a connection is); nothing when it cannot be reached."""
+    connection = SylkRTCConnections()._connections.get(url)
+    if connection is not None and connection.state == 'ready':
+        callback(set(connection.features))
+        return
+    if not websockets_available():
+        return
+    probe = SylkRTCConnection(url)      # one of its own, closed once answered, not one a room may come to use
+
+    def ready():
+        _probes.discard(probe)
+        features = set(probe.features)
+        probe.close('features known')
+        callback(features)
+
+    probe.ready.connect(ready)
+    probe.closed.connect(lambda reason: _probes.discard(probe))
+    _probes.add(probe)
+    probe.open()

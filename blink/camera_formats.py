@@ -11,7 +11,10 @@ and V4L2 nodes that deliver no picture (metadata nodes, codecs) are left out
 of the camera lists (usable_cameras()).
 """
 
-__all__ = ['SYNTHETIC_CAMERAS', 'resolve_device', 'camera_formats', 'describe_formats', 'resolution_support', 'is_usable_camera', 'usable_cameras', 'log_camera_formats']
+__all__ = ['SYNTHETIC_CAMERAS', 'resolve_device', 'camera_formats', 'describe_formats', 'resolution_support', 'is_usable_camera', 'usable_cameras', 'log_camera_formats', 'is_external_camera']
+
+import re
+import sys
 
 from sipsimple.application import SIPApplication
 
@@ -113,3 +116,49 @@ def log_camera_formats(devices):
             activity.info('Camera %s delivers no picture, not offered' % device)
             continue
         activity.info('Camera %s resolutions: %s' % (device, describe_formats(camera_formats(device))))
+
+
+# Built in or plugged in
+
+_BUILT_IN_NAMES = re.compile(r'integrated|built-?in|internal|facetime|front|laptop|notebook|ir camera', re.I)
+
+
+def _v4l2_removable():
+    """{V4L2 card name: True for a camera on a removable (external) USB port, False for a fixed one} (Linux sysfs)."""
+    import glob
+    import os
+    cameras = {}
+    for node in glob.glob('/sys/class/video4linux/video*'):
+        try:
+            with open(os.path.join(node, 'name')) as f:
+                name = f.read().strip()
+            path = os.path.realpath(os.path.join(node, 'device'))
+        except OSError:
+            continue
+        removable = None
+        while path.startswith('/sys/') and removable is None:
+            try:
+                with open(os.path.join(path, 'removable')) as f:
+                    value = f.read().strip()
+                removable = True if value == 'removable' else False if value == 'fixed' else None
+                if removable is None:
+                    break       # unknown: the port does not say
+            except OSError:
+                pass
+            path = os.path.dirname(path)
+        if removable is not None:
+            cameras[name] = cameras.get(name, False) or removable
+    return cameras
+
+
+def is_external_camera(device):
+    """Whether the camera is plugged in rather than built in: by the USB port it is on (Linux), else by its name."""
+    if sys.platform.startswith('linux'):
+        try:
+            removable = _v4l2_removable()
+        except Exception:
+            removable = {}
+        for name, value in removable.items():
+            if name and (device == name or device.startswith(name) or name.startswith(device)):
+                return value
+    return not _BUILT_IN_NAMES.search(device or '')

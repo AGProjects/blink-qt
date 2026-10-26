@@ -11,7 +11,8 @@ from time import monotonic
 
 from PyQt6.QtCore import Qt, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QTimer
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF
-from PyQt6.QtWidgets import QAbstractButton, QApplication, QGraphicsOpacityEffect, QLabel, QMenu, QWidget
+from PyQt6.QtWidgets import (QAbstractButton, QApplication, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGraphicsOpacityEffect,
+                             QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QRadioButton, QWidget)
 
 from application.notification import IObserver, NotificationCenter
 from zope.interface import implementer
@@ -320,6 +321,8 @@ class ParticipantTile(QWidget):
     def check_video(self, now):
         """Sample the video bitrate, once a second, and degrade, demote or recover the tile."""
         participant = self.participant
+        if getattr(participant, 'extra_video', None) is not None:
+            return      # our own extra video: its picture comes from here, not from a feed
         if participant.video is not True or participant.state != 'established':
             self.since = self._sample = self.last_bytes = None
             self.bitrate = 0.0
@@ -1167,6 +1170,75 @@ class VideoroomWindow(QWidget):
                 self.set_picked(None)       # a click anywhere else, our own tile included, cancels
         return False
 
+    # Extra videos of ours: a second camera, an RTSP camera (blink.webrtc.extravideo)
+
+    def _add_video_dialog(self):
+        number = len(self.session.extra_videos) + 1
+        dialog = AddVideoDialog(f'Camera {number}', parent=self)
+        if dialog.exec() != AddVideoDialog.DialogCode.Accepted:
+            return
+        self._start_extra_video(dialog.source(), dialog.label())
+
+    def _multiple_video_feeds(self):
+        """Whether the room's gateway takes more videos of ours (it announced multiple-video-feeds)."""
+        return 'multiple-video-feeds' in getattr(self.session.connection, 'features', ())
+
+    def _start_pending_extra_videos(self, waited=0):
+        """What Join Conference chose besides the camera, once the room is joined: the screen to share, and the other videos."""
+        if self._closing or self.session.state != 'established':
+            return
+        screen = getattr(self.session, 'pending_screen', None)
+        if screen:
+            self.session.pending_screen = None
+            self._screen_pending = True
+            self._share_screen(screen)
+        sources = getattr(self.session, 'pending_extra_sources', None)
+        if not sources:
+            return
+        if not self.session.video_codec:
+            QTimer.singleShot(500, lambda: self._start_pending_extra_videos(waited + 500))     # the answer's codec is not known yet
+            return
+        if not self._multiple_video_feeds():
+            self.session.pending_extra_sources = []
+            ActivityLog().warning(f'[videoroom] {self.session.room}: the server takes one video per participant, not publishing {", ".join(label for source, label in sources)}')
+            self.flash('This server takes one video per participant', duration=5)
+            return
+        # the cameras of this computer wait for the screen to take the place of the SDK's camera: it is free then
+        from blink.webrtc.videoroom import VideoroomSession
+        if getattr(self, '_screen_pending', False) and waited < 30000 and not VideoroomSession.sending_screen_device() and \
+                any(source['kind'] == 'camera' for source, label in sources):
+            QTimer.singleShot(500, lambda: self._start_pending_extra_videos(waited + 500))
+            return
+        self._screen_pending = False
+        self.session.pending_extra_sources = []
+        for source, label in sources:
+            self._start_extra_video(source, label)
+
+    def _start_extra_video(self, source, label):
+        from blink.webrtc.extravideo import ExtraVideo
+        extra = ExtraVideo(self.session, source, label)
+        extra.stateChanged.connect(lambda state, reason, extra=extra: self._SH_ExtraVideoStateChanged(extra, state, reason))
+        try:
+            extra.start()
+        except Exception as e:
+            self.flash(f'{label}: {e}', duration=5)
+            ActivityLog().warning(f'[videoroom] {self.session.room}: cannot add {label}: {e}')
+            return
+        self._SH_ParticipantJoined(extra.participant)
+        self.flash(f'Adding {label}...')
+
+    def _SH_ExtraVideoStateChanged(self, extra, state, reason):
+        if self._closing:
+            return
+        if state == 'established':
+            self.flash(f'{extra.label} added')
+            self._update_auto_speakers()
+        elif state == 'ended':
+            self._SH_ParticipantLeft(extra.participant)
+            self._update_auto_speakers()
+            if reason not in ('stopped', 'left'):
+                self.flash(f'{extra.label}: {reason}', duration=6)
+
     def _show_info(self):
         from blink.webrtc.infopanel import ConferenceInfoPanel
         ConferenceInfoPanel.show_for(self)
@@ -1362,6 +1434,8 @@ class VideoroomWindow(QWidget):
         if not self.grid.self_hidden and self.local_tile.thumbnail_button.isEnabled():
             menu.addAction('Put me back in the grid' if self.grid.floating else 'Show me as a thumbnail').triggered.connect(self.grid.toggle_local_placement)
         menu.addSeparator()
+        if self.session.state == 'established' and self.session.video_codec and self._multiple_video_feeds():
+            menu.addAction('Add video...').triggered.connect(self._add_video_dialog)
         menu.addAction('Invite participants...').triggered.connect(self._invite_dialog)
         menu.addAction('Conference info...').triggered.connect(self._show_info)
         share = menu.addAction('Share conference address...')
@@ -1411,11 +1485,14 @@ class VideoroomWindow(QWidget):
             # speaker while it is shared, and the grid comes back after (unless someone changed it)
             if screen and not self.session.speakers:
                 self._speaker_for_screen = True
-                self.session.set_speakers([self.session.id])
+                self._auto_speakers = None
+                self._auto_issued = []
+                self._update_auto_speakers()
             elif not screen and getattr(self, '_speaker_for_screen', False):
                 self._speaker_for_screen = False
-                if self.session.speakers == [self.session.id]:
+                if self.session.speakers and self.session.speakers in getattr(self, '_auto_issued', []):
                     self.session.set_speakers([])
+                self._auto_speakers = None
             if screen:
                 # out of the way of what is shared; back as it was when the sharing ends
                 self._minimized_for_screen = not self.isMinimized()
@@ -1430,6 +1507,25 @@ class VideoroomWindow(QWidget):
                         self.showNormal()
                     self.raise_()
                     self.activateWindow()
+
+    def _update_auto_speakers(self):
+        """While our screen is shared with nobody chosen as speaker: the screen is the speaker, and with one
+        more video of ours (a camera) both are; with more than two videos of ours, nobody is made speaker.
+        Followed as our extra videos come and go, until someone chooses the speakers."""
+        if not getattr(self, '_speaker_for_screen', False) or self.session.state != 'established':
+            return
+        current = list(self.session.speakers)
+        issued = getattr(self, '_auto_issued', [])     # what we set (the server's answer to one may come after the next)
+        if current and current not in issued:
+            self._speaker_for_screen = False        # chosen by someone: left alone from now on
+            return
+        extras = [extra.id for extra in self.session.extra_videos.values() if extra.state == 'established']
+        feeds = [self.session.id] + extras
+        wanted = feeds if len(feeds) <= 2 else []
+        self._auto_speakers = wanted
+        self._auto_issued = issued + [wanted]
+        if wanted != current:
+            self.session.set_speakers(wanted)
 
     # Inviting (the server calls them: videoroom-invite, then invite-status as it goes)
 
@@ -1498,13 +1594,27 @@ class VideoroomWindow(QWidget):
                 hide.triggered.connect(lambda: self._set_self_hidden(True))
             menu.addSeparator()
             menu.addAction('Lower hand' if tile.hand else 'Raise hand').triggered.connect(lambda: session.toggle_hand())
+        elif getattr(tile.participant, 'extra_video', None) is not None:
+            participant = tile.participant
+            id = participant.id
+            menu.addAction(participant.name).setEnabled(False)
+            menu.addSeparator()
+            from blink.webrtc.extravideo import RESOLUTIONS
+            sizes = menu.addMenu('Send at')
+            for name, width, height, bitrate in RESOLUTIONS:
+                action = sizes.addAction(f'{width}x{height}, about {bitrate} kbit/s')
+                action.setCheckable(True)
+                action.setChecked(participant.extra_video.resolution == name)
+                action.triggered.connect(lambda checked, name=name: participant.extra_video.set_resolution(name))
+            menu.addAction('Stop this video').triggered.connect(lambda: participant.extra_video.stop())
         else:
             participant = tile.participant
             id = participant.id
             menu.addAction(participant.name).setEnabled(False)
             menu.addSeparator()
-            menu.addAction('Unmute' if participant.muted else 'Mute').triggered.connect(
-                lambda: session.mute_participant(participant, not participant.muted))
+            if not participant.parent:      # an extra video has no microphone nor hand of its own
+                menu.addAction('Unmute' if participant.muted else 'Mute').triggered.connect(
+                    lambda: session.mute_participant(participant, not participant.muted))
             if tile.hand:
                 menu.addAction('Lower hand').triggered.connect(lambda: session.toggle_hand(id))
         can_speak = isinstance(tile, LocalTile) or tile.participant.video is True
@@ -1567,7 +1677,9 @@ class VideoroomWindow(QWidget):
             if id == self.session.id:
                 tiles.append(self.local_tile)
             else:
-                participant = self.session.participants.get(id)
+                # someone's video, or one of our extra videos (not among the room's participants: we publish it)
+                extra = self.session.extra_videos.get(id)
+                participant = extra.participant if extra is not None else self.session.participants.get(id)
                 tile = self.tiles.get(participant) if participant is not None else None
                 if tile is not None:
                     tiles.append(tile)
@@ -1636,6 +1748,7 @@ class VideoroomWindow(QWidget):
             self.clock.start()
             self._update_status()
             self.idle_timer.start()
+            self._start_pending_extra_videos()
         elif state == 'terminated':
             self.clock.stop()
             self._end_room_chat()       # however it ended, the chat opened for it goes with it
@@ -1726,7 +1839,7 @@ class VideoroomWindow(QWidget):
     def _update_status(self):
         if self.session.state != 'established':
             return
-        people = sum(1 for participant in self.session.participants.values() if participant.visible) + 1
+        people = sum(1 for participant in self.session.participants.values() if participant.visible and not participant.parent) + 1     # an extra video is not a participant
         parts = [self.title, '%d %s' % (people, 'participant' if people == 1 else 'participants')]
         if self.joined_at is not None:
             from time import monotonic
@@ -1737,3 +1850,137 @@ class VideoroomWindow(QWidget):
         if monotonic() >= getattr(self, '_flash_until', 0):
             self.status_label.set_status(None)     # once connected the title says it; the pill is for connecting, ending and notes
         self.setWindowTitle('  ·  '.join(parts))
+
+
+class AddVideoDialog(QDialog):
+    """Another video of ours for the room: a camera of this computer, or an RTSP camera (CCTV)."""
+
+    def __init__(self, label, parent=None):
+        super(AddVideoDialog, self).__init__(parent)
+        from blink.webrtc.extravideo import local_cameras, saved_sources
+        self.setWindowTitle('Add video')
+        self.setMinimumWidth(440)
+        layout = QFormLayout(self)
+        self.label_edit = QLineEdit(label, self)
+        self.label_edit.setPlaceholderText('Camera 1')
+        layout.addRow('Name', self.label_edit)
+
+        self.camera_radio = QRadioButton('Camera of this computer', self)
+        self.rtsp_radio = QRadioButton('Network camera (RTSP)', self)
+        layout.addRow(self.camera_radio)
+        self.camera_combo = QComboBox(self)
+        try:
+            self.cameras = local_cameras()
+        except Exception:
+            self.cameras = []
+        for name, device in self.cameras:
+            self.camera_combo.addItem(name)
+        layout.addRow('Camera', self.camera_combo)
+        layout.addRow(self.rtsp_radio)
+        self.saved = saved_sources()
+        self.saved_combo = QComboBox(self)
+        self.saved_combo.addItem('New...')
+        for source in self.saved:
+            self._add_saved(source)
+        # the addresses are long: the combo is not as wide as they are, each shows as name and host, the address in its tooltip
+        self.saved_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.saved_combo.setMinimumContentsLength(24)
+        self.saved_combo.currentIndexChanged.connect(self._SH_SavedChanged)
+        saved_row = QHBoxLayout()
+        saved_row.addWidget(self.saved_combo, 1)
+        find_button = QPushButton('Find on network...', self)
+        find_button.setAutoDefault(False)
+        find_button.setToolTip('Cameras on your network (ONVIF, Bonjour), tested before they are added')
+        find_button.clicked.connect(self._find_camera)
+        saved_row.addWidget(find_button)
+        layout.addRow('Used before', saved_row)
+        self.url_edit = QLineEdit(self)
+        self.url_edit.setPlaceholderText('rtsp://192.168.1.10:554/stream1')
+        layout.addRow('Address', self.url_edit)
+        self.user_edit = QLineEdit(self)
+        layout.addRow('User', self.user_edit)
+        self.password_edit = QLineEdit(self)
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        layout.addRow('Password', self.password_edit)
+        self.resolution_combo = QComboBox(self)
+        from blink.webrtc.extravideo import DEFAULT_RESOLUTION, RESOLUTIONS
+        for name, width, height, bitrate in RESOLUTIONS:
+            self.resolution_combo.addItem(f'{width}x{height}, about {bitrate} kbit/s', name)
+        self.resolution_combo.setCurrentIndex(self.resolution_combo.findData(DEFAULT_RESOLUTION))
+        layout.addRow('Send at', self.resolution_combo)
+        note = QLabel('Video only, 10 fps. A network camera that works is remembered here, with its password.', self)
+        note.setWordWrap(True)
+        note.setEnabled(False)
+        layout.addRow(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Add')
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+        self.ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        for widget in (self.camera_radio, self.rtsp_radio):
+            widget.toggled.connect(self._update)
+        self.url_edit.textChanged.connect(self._update)
+        (self.rtsp_radio if self.saved or not self.cameras else self.camera_radio).setChecked(True)
+        if self.saved:
+            self.saved_combo.setCurrentIndex(1)
+        self.camera_radio.setEnabled(bool(self.cameras))
+        self._update()
+
+    def _add_saved(self, source):
+        from urllib.parse import urlsplit
+        try:
+            host = urlsplit(source['url']).hostname or ''
+        except ValueError:
+            host = ''
+        self.saved_combo.addItem(f'{source.get("label") or "Camera"}' + (f' ({host})' if host else ''))
+        self.saved_combo.setItemData(self.saved_combo.count() - 1, source['url'], Qt.ItemDataRole.ToolTipRole)
+
+    def _find_camera(self):
+        from blink.webrtc.camerasetup import NetworkCameraDialog
+        from blink.webrtc.extravideo import saved_sources
+        dialog = NetworkCameraDialog(self.label_edit.text().strip(), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.saved = saved_sources()       # it is the first of them now
+        self.saved_combo.blockSignals(True)
+        while self.saved_combo.count() > 1:
+            self.saved_combo.removeItem(1)
+        for source in self.saved:
+            self._add_saved(source)
+        self.saved_combo.blockSignals(False)
+        self.rtsp_radio.setChecked(True)
+        self.saved_combo.setCurrentIndex(1)
+        self._SH_SavedChanged(1)
+        self._update()
+
+    def _SH_SavedChanged(self, index):
+        if index <= 0:
+            return
+        source = self.saved[index - 1]
+        self.url_edit.setText(source['url'])
+        self.user_edit.setText(source.get('user') or '')
+        self.password_edit.setText(source.get('password') or '')
+        index = self.resolution_combo.findData(source.get('resolution'))
+        if index >= 0:
+            self.resolution_combo.setCurrentIndex(index)
+        if source.get('label'):
+            self.label_edit.setText(source['label'])
+
+    def _update(self):
+        rtsp = self.rtsp_radio.isChecked()
+        self.camera_combo.setEnabled(not rtsp)
+        for widget in (self.saved_combo, self.url_edit, self.user_edit, self.password_edit):
+            widget.setEnabled(rtsp)
+        self.ok_button.setEnabled(self.url_edit.text().strip().lower().startswith(('rtsp://', 'rtsps://')) if rtsp else bool(self.cameras))
+
+    def label(self):
+        return self.label_edit.text().strip() or self.label_edit.placeholderText()
+
+    def source(self):
+        if self.rtsp_radio.isChecked():
+            return dict(kind='rtsp', url=self.url_edit.text().strip(), user=self.user_edit.text().strip(), password=self.password_edit.text(),
+                        resolution=self.resolution_combo.currentData())
+        name, device = self.cameras[self.camera_combo.currentIndex()]
+        return dict(kind='camera', name=name, device=device, resolution=self.resolution_combo.currentData())
+

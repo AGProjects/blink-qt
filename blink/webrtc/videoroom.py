@@ -410,6 +410,9 @@ class Participant(QObject):
         self.display_name = publisher.get('display_name') or ''
         self._contact_name = None    # looked up once, on first use
         self.type = publisher.get('type') or 'webrtc'
+        self.parent = publisher.get('parent') or None   # an extra video of another participant: that participant's publisher id
+        self.label = publisher.get('label') or None     # and its name ("Camera 1")
+        self.session = None                             # the room session it is in (set when added), for its parent's name
         self.muted = bool(publisher.get('muted'))
         self.feed = None            # feed id once attached
         self.state = None           # None, attaching, connecting, established, failed
@@ -433,7 +436,13 @@ class Participant(QObject):
 
     @property
     def name(self):
-        """The name of the contact with this address in our contacts, else the one the room gives, else the address."""
+        """The name of the contact with this address in our contacts, else the one the room gives, else the address.
+        An extra video: its participant's name and its label, "Adrian · Camera 1"."""
+        if self.parent:
+            owner = self.session.participants.get(self.parent) if self.session is not None else None
+            if owner is not None:
+                return f'{owner.name} · {self.label or "Camera"}'
+            return self.display_name or f'{self.uri} · {self.label or "Camera"}'
         if self._contact_name is None:
             self._contact_name = _contact_name(self.uri) or ''
         return self._contact_name or self.display_name or self.uri
@@ -497,7 +506,8 @@ class VideoroomSession(QObject):
         self.feeds = {}             # feed id -> Participant
         self.speakers = []          # publisher ids the room shows large, for everyone (videoroom-configure); [] is the grid
         self.raised_hands = []      # publisher ids with a raised hand, in the order raised
-        self.video_codec = self.video_encoder_name = None   # what we send (the answer's codec, our encoder)
+        self.video_codec = self.video_encoder_name = self.video_pt = None   # what we send (the answer's codec, our encoder, its payload type)
+        self.extra_videos = {}      # session id -> ExtraVideo: our extra videos in the room (blink.webrtc.extravideo)
         self.stats = {}             # our publisher's get-stats (type, kind) -> fields (the info panel)
         self.video_paused = False   # the feeds' video stopped at the server (our window is out of sight)
         self._muting_everyone = False   # we asked: the room's mute-audio is not for us
@@ -598,6 +608,8 @@ class VideoroomSession(QObject):
     def _terminate(self, reason):
         if self.state == 'terminated':
             return
+        for extra in list(self.extra_videos.values()):
+            extra.stop('left')      # our extra videos go with us (the server ends them too)
         self.reason = reason
         self._establish_timer.stop()
         self._black_timer.stop()
@@ -810,7 +822,7 @@ class VideoroomSession(QObject):
             raise RuntimeError('cannot link the video to webrtcbin')
         for element in chain:
             element.sync_state_with_parent()
-        self.video_codec, self.video_encoder_name = name, encoder_factory
+        self.video_codec, self.video_encoder_name, self.video_pt = name, encoder_factory, pt
         self.log(f'sending video {name} with {encoder_factory}')
         self._apply_video_profile()     # sharing the screen already
         self._start_camera()
@@ -984,6 +996,9 @@ class VideoroomSession(QObject):
     def speaker_name(self, id):
         if id == self.id:
             return 'you'
+        extra = self.extra_videos.get(id)
+        if extra is not None:
+            return f'your {extra.label}'
         participant = self.participants.get(id)
         return participant.name if participant is not None else id
 
@@ -1005,6 +1020,9 @@ class VideoroomSession(QObject):
         for participant in list(self.feeds.values()):
             if participant.webrtcbin is not None:
                 self._get_stats(participant.webrtcbin, lambda stats, participant=participant: setattr(participant, 'stats', stats))
+        for extra in list(self.extra_videos.values()):      # our other videos: what each sends
+            if extra.webrtcbin is not None:
+                self._get_stats(extra.webrtcbin, lambda stats, participant=extra.participant: setattr(participant, 'stats', stats))
 
     @staticmethod
     def _get_stats(webrtcbin, store):
@@ -1340,9 +1358,10 @@ class VideoroomSession(QObject):
         if participant is not None:
             participant.update(publisher)
             return
-        if publisher_id == self.id:
-            return      # ourselves
+        if publisher_id == self.id or publisher_id in self.extra_videos or publisher.get('parent') == self.id:
+            return      # ourselves, or one of our extra videos (shown from its own pipeline)
         participant = Participant(publisher)
+        participant.session = self
         participant.is_self = participant.type == 'sip' and participant.uri.lower() in (str(self.account.id).lower(), self.identity.lower())
         self.participants[publisher_id] = participant
         self.log(f'{participant.uri} is in the room ({participant.type})')
@@ -1556,14 +1575,18 @@ class VideoroomManager(object, metaclass=Singleton):
         room = room.replace('sip:', '', 1).lower()
         return next((session for session in self.sessions if room in (session.room.lower(), session.sip_room.lower()) and session.state != 'terminated'), None)
 
-    def join(self, account, room, audio=True, video=True, target=None):
-        """Join room from account, or bring forward the session already in it."""
+    def join(self, account, room, audio=True, video=True, target=None, extra_sources=None, screen=None):
+        """Join room from account, or bring forward the session already in it. extra_sources:
+        [(source, label)] published as our extra videos once the room is joined (blink.webrtc.extravideo);
+        screen: a screen device shared once joined."""
         session = self.find(room)
         if session is not None:
             from blink.webrtc.videoroomwindow import VideoroomWindow
             VideoroomWindow.for_session(session).raise_and_activate()
             return session
         session = VideoroomSession(account, room, audio=audio, video=video, target=target)
+        session.pending_extra_sources = list(extra_sources or [])
+        session.pending_screen = screen
         self.sessions.append(session)
         from blink.webrtc.videoroomwindow import VideoroomWindow
         VideoroomWindow.for_session(session).show()

@@ -724,6 +724,18 @@ class BlinkSession(BlinkSessionBase):
         hand). The two are equivalent; the domain is known before the call connects."""
         return self.remote_focus or getattr(self, 'was_focus', False) or (self.contact_uri is not None and _is_conference_address(self.contact_uri.uri, self.account))
 
+    def _remember_conference(self):
+        """A conference dialed: the room Join Conference offers first next time (its name alone on the account's own server)."""
+        try:
+            if not self.is_conference or self.contact_uri is None or self.account is BonjourAccount():
+                return
+            from blink.webrtc import local_room_host, remember_room
+            user, host = split_uri(self.contact_uri.uri)
+            if user and host:
+                remember_room(user if local_room_host(host, self.account) else f'{user}@{host}', keep_form=True)
+        except Exception as e:
+            log.warning(f'Cannot remember the conference {self.contact_uri}: {e}')
+
     @property
     def conference_room(self):
         """The room, the user part of the URI, of a conference."""
@@ -862,6 +874,7 @@ class BlinkSession(BlinkSessionBase):
 
     def connect(self):
         assert self.direction == 'outgoing' and self.state == 'initialized'
+        self._remember_conference()
         notification_center = NotificationCenter()
         self.streams.extend(stream_description.create_stream() for stream_description in self.stream_descriptions)
         self.state = 'connecting/dns_lookup'
@@ -6992,22 +7005,23 @@ class ConferenceParticipantModel(QAbstractListModel):
         return True
 
     def _invite(self, contact, contact_uri):
-        """Invite someone dropped on the participants: the room calls them. Through the MSRP session
-        to the room (a REFER to the focus) when it is connected, else through its video room (WebRTC)."""
+        """Invite someone dropped on the participants: the room calls them. Through its video room
+        (WebRTC: the invitee gets the video conference, and the status comes back) while we are in it,
+        else through the MSRP session to the room (a REFER to the focus)."""
         from blink.webrtc import active_videoroom
         session = self.session
         if session is None:
             return
         uri = re.sub('^sips?:', '', str(contact_uri.uri))
+        video_room = active_videoroom(session.contact_uri.uri) if session.contact_uri is not None else None
+        if video_room is not None and video_room.state not in ('terminated', 'ended'):
+            ActivityLog().info(f'[conference] Inviting {uri} to {video_room.room} (through the video room)')
+            video_room.invite([uri])
+            return
         conference = getattr(session, 'server_conference', None)
         if conference is not None and str(session.state or '').startswith('connected'):
             ActivityLog().info(f'[conference] Inviting {uri} to {session.uri} (REFER to the focus)')
             conference.add_participant(contact, contact_uri)
-            return
-        video_room = active_videoroom(session.contact_uri.uri) if session.contact_uri is not None else None
-        if video_room is not None:
-            ActivityLog().info(f'[conference] Inviting {uri} to {video_room.room} (through the video room)')
-            video_room.invite([uri])
             return
         ActivityLog().warning(f'[conference] Cannot invite {uri} to {session.uri}: not in the room')
 
@@ -7831,7 +7845,7 @@ class ConferenceDialog(base_class, ui_class):
         super(ConferenceDialog, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
-        from PyQt6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QVBoxLayout
+        from PyQt6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QVBoxLayout, QWidget
         from blink.messagepane.forward import ConversationRowDelegate
         self.room_button.lineEdit().setPlaceholderText(translate('conference_dialog', 'Room or user@domain'))
         from blink.webrtc import recent_rooms
@@ -7841,6 +7855,10 @@ class ConferenceDialog(base_class, ui_class):
         # rooms of other domains: their SylkServer is looked up as the room is typed or pasted,
         # and Join waits for the answer (host: 'pending', a RoomTarget, or None for none found)
         self._room_targets = {}
+        self._multiple_feeds = False    # the room's gateway takes more than one video of ours (multiple-video-feeds)
+        self._features_url = None       # the gateway that is about
+        self._checked_keys = None       # the checked video lines while the dialog is open (kept when the list is rebuilt)
+        self._applying_profile = False
         self._lookup_timer = QTimer(self)
         self._lookup_timer.setSingleShot(True)
         self._lookup_timer.setInterval(400)
@@ -7848,7 +7866,7 @@ class ConferenceDialog(base_class, ui_class):
         # the media: audio and video; the room's chat is always joined, there is nothing to choose
         from PyQt6.QtWidgets import QCheckBox
         self.video_button = QCheckBox(translate('conference_dialog', 'Video'), self)
-        self.video_button.setChecked(True)
+        self.video_button.setChecked(False)
         # Chat first, always on (checked, not changeable), then Audio and Video
         self.media_layout.removeWidget(self.chat_button)
         self.media_layout.insertWidget(0, self.chat_button)
@@ -7862,12 +7880,12 @@ class ConferenceDialog(base_class, ui_class):
             self.grid_layout.removeItem(spacer)
         self.invite_label = QLabel(translate('conference_dialog', 'Invite:'), self)
         self.invite_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
-        self.grid_layout.addWidget(self.invite_label, 2, 0)
+        self.grid_layout.addWidget(self.invite_label, 3, 0)
         invite_layout = QVBoxLayout()
         invite_layout.setSpacing(4)
         self.invite_list = ConferenceInviteList(self)
         self.invite_list.inviteesDropped.connect(self._add_invitees)
-        self.invite_list.setMinimumHeight(120)
+        self.invite_list.setMinimumHeight(70)
         self.invite_list.setAlternatingRowColors(True)
         self.invite_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.invite_list.setItemDelegate(ConversationRowDelegate(self.invite_list))
@@ -7882,8 +7900,62 @@ class ConferenceDialog(base_class, ui_class):
         invite_buttons.addWidget(self.invite_remove_button)
         invite_buttons.addStretch(1)
         invite_layout.addLayout(invite_buttons)
-        self.grid_layout.addLayout(invite_layout, 2, 1)
-        self.grid_layout.setRowStretch(2, 1)
+        self.grid_layout.addLayout(invite_layout, 3, 1)
+        self.grid_layout.setRowStretch(3, 1)
+        self.grid_layout.setRowStretch(2, 2)       # the videos get twice the height the people to invite get
+        # with Video: the videos we publish, one per line, checked to be published: the cameras of this
+        # computer (the first checked one is our camera, the others extra videos) and the network cameras
+        # added before (blink.webrtc.extravideo); rows: 2 these, 3 invite, 5 the buttons, 6 the requirements
+        self.grid_layout.removeItem(self.button_box_layout)
+        self.grid_layout.addLayout(self.button_box_layout, 5, 0, 1, 2)
+        # profiles: the room, its media and videos, and the people to invite, saved under a name, next to Join
+        from PyQt6.QtWidgets import QComboBox
+        self.profile_combo = QComboBox(self)
+        self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.profile_combo.setMinimumContentsLength(12)
+        self.profile_combo.setToolTip(translate('conference_dialog', 'A saved composition: the room, audio and video, the videos published and the people invited'))
+        self.profile_combo.activated.connect(self._SH_ProfileActivated)
+        self.profile_save_button = QPushButton(translate('conference_dialog', 'Save...'), self)
+        self.profile_save_button.setAutoDefault(False)
+        self.profile_save_button.setToolTip(translate('conference_dialog', 'Save what is here as a profile (a new one, or the one chosen, changed)'))
+        self.profile_save_button.clicked.connect(self._SH_ProfileSaveClicked)
+        self.profile_delete_button = QPushButton(translate('conference_dialog', 'Delete'), self)
+        self.profile_delete_button.setAutoDefault(False)
+        self.profile_delete_button.clicked.connect(self._SH_ProfileDeleteClicked)
+        for position, widget in enumerate((QLabel(translate('conference_dialog', 'Profile:'), self), self.profile_combo, self.profile_save_button, self.profile_delete_button)):
+            self.button_box_layout.insertWidget(position, widget)
+        self.video_sources_label = QLabel(translate('conference_dialog', 'Publish:'), self)
+        self.video_sources_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        self.grid_layout.addWidget(self.video_sources_label, 2, 0)
+        self.video_sources_widget = QWidget(self)
+        sources_layout = QVBoxLayout(self.video_sources_widget)
+        sources_layout.setContentsMargins(0, 0, 0, 0)
+        sources_layout.setSpacing(4)
+        self.video_sources = QListWidget(self.video_sources_widget)
+        self.video_sources.setToolTip(translate('conference_dialog', 'The checked videos are published to the conference: the first camera is yours, '
+                                                                     'the others appear under your name. Double click a network camera to rename it'))
+        sources_layout.addWidget(self.video_sources)
+        source_buttons = QHBoxLayout()
+        self.video_source_add_button = QPushButton(translate('conference_dialog', 'Add network camera...'), self.video_sources_widget)
+        self.video_source_add_button.setAutoDefault(False)
+        self.video_source_add_button.setToolTip(translate('conference_dialog', 'An RTSP camera: found on your network (ONVIF, Bonjour) or by its address, tested before it is added'))
+        self.video_source_remove_button = QPushButton(translate('conference_dialog', 'Forget'), self.video_sources_widget)
+        self.video_source_remove_button.setAutoDefault(False)
+        self.video_source_remove_button.setEnabled(False)
+        source_buttons.addWidget(self.video_source_add_button)
+        source_buttons.addWidget(self.video_source_remove_button)
+        source_buttons.addStretch(1)
+        sources_layout.addLayout(source_buttons)
+        self.grid_layout.addWidget(self.video_sources_widget, 2, 1)
+        self.video_sources_label.hide()
+        self.video_sources_widget.hide()
+        self.video_source_add_button.clicked.connect(self._SH_VideoSourceAddClicked)
+        self.video_source_remove_button.clicked.connect(self._SH_VideoSourceRemoveClicked)
+        self.video_sources.itemChanged.connect(self._SH_VideoSourceChanged)
+        self.video_sources.currentItemChanged.connect(lambda item, previous: self.video_source_remove_button.setEnabled(item is not None and (item.data(Qt.ItemDataRole.UserRole) or {}).get('kind') == 'rtsp'))
+        self.video_button.toggled.connect(self._update_video_sources)
+        self.video_sources.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.video_sources.customContextMenuRequested.connect(self._SH_VideoSourceMenu)
         # under the buttons: what conferencing needs
         self.requirements_label = QLabel(translate('conference_dialog', 'Conferencing requires a server running MSRP switch RFC 7701. '
                                                    'You can deploy a free server from <a href="https://sylkserver.com">sylkserver.com</a>'), self)
@@ -7897,7 +7969,7 @@ class ConferenceDialog(base_class, ui_class):
         self.requirements_label.setFont(font)
         self.requirements_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self._requirements_text = self.requirements_label.text()
-        self.grid_layout.addWidget(self.requirements_label, 4, 0, 1, 2)
+        self.grid_layout.addWidget(self.requirements_label, 6, 0, 1, 2)
         self.invite_add_button.clicked.connect(self._SH_InviteAddButtonClicked)
         self.invite_remove_button.clicked.connect(self._SH_InviteRemoveButtonClicked)
         self.invite_list.itemSelectionChanged.connect(lambda: self.invite_remove_button.setEnabled(bool(self.invite_list.selectedItems())))
@@ -7949,7 +8021,20 @@ class ConferenceDialog(base_class, ui_class):
     def _SH_MediaButtonClicked(self, checked):
         self._update_accept_button()
 
+    def _uncheck_network_cameras(self):
+        """Another room: the network cameras are not sent there unless chosen again."""
+        if not self._checked_keys or not any(key.startswith('rtsp:') for key in self._checked_keys):
+            return
+        self._checked_keys = {key for key in self._checked_keys if not key.startswith('rtsp:')}
+        self.video_sources.blockSignals(True)
+        for item in self._video_source_items():
+            if item.data(Qt.ItemDataRole.UserRole)['kind'] == 'rtsp':
+                item.setCheckState(Qt.CheckState.Unchecked)
+        self.video_sources.blockSignals(False)
+
     def _SH_RoomButtonEditTextChanged(self, text):
+        if not self._applying_profile:
+            self._uncheck_network_cameras()
         self._lookup_timer.start()      # once the typing pauses
         self._update_media_labels()
         self._update_accept_button()
@@ -8027,12 +8112,26 @@ class ConferenceDialog(base_class, ui_class):
             self.restoreGeometry(geometry)
         self.resize(self.size().expandedTo(self.minimumSize()))      # a geometry saved when the dialog was smaller
 
-        self.room_button.setCurrentIndex(-1)
-        self.room_button.setEditText(self.random_room())
+        # the room joined last on top, in the field; a new random one only when no conference was joined yet
+        from blink.webrtc import recent_rooms
+        self.room_button.blockSignals(True)
+        self.room_button.clear()
+        self.room_button.addItems(recent_rooms()[:self.room_button.maxCount()])
+        self.room_button.blockSignals(False)
+        if self.room_button.count():
+            self.room_button.setCurrentIndex(0)
+            self._SH_RoomButtonEditTextChanged(self.room_button.currentText())
+        else:
+            self.room_button.setCurrentIndex(-1)
+            self.room_button.setEditText(self.random_room())
         self.invite_list.clear()
         self.audio_button.setChecked(True)
-        self.video_button.setChecked(True)
+        self.video_button.setChecked(False)      # video is chosen each time
         self.chat_button.setChecked(True)
+        self._features_url = None       # asked again: the server may have changed
+        self._checked_keys = None       # the videos chosen afresh: the plugged in camera first
+        self._fill_profiles()       # no profile chosen: the last room, as it was joined
+        self._load_video_sources()
         self._update_media_labels()
         self._update_accept_button()
         self.raise_()
@@ -8041,6 +8140,10 @@ class ConferenceDialog(base_class, ui_class):
         (self.accept_button if self.accept_button.isEnabled() else self.invite_list).setFocus()
 
     def _update_media_labels(self):
+        self._update_media_text()
+        self._update_video_sources()
+
+    def _update_media_text(self):
         """With a SylkServer domain audio and video go over WebRTC (blink.webrtc) and the MSRP
         switch is joined with chat only; elsewhere there is no video and audio is SIP, as it always was."""
         from blink.webrtc import ws_server
@@ -8089,6 +8192,368 @@ class ConferenceDialog(base_class, ui_class):
             self.video_button.setToolTip(translate('conference_dialog', 'Audio and video in the video conference window (WebRTC), the chat over MSRP'))
             self.requirements_label.setText(provided)
 
+    # Profiles
+
+    PROFILES_KEY = 'conference_dialog/profiles'     # [{name, room, audio, video, invitees: [[key, name]], sources: [video line keys]}]
+
+    def _profiles(self):
+        import json
+        try:
+            profiles = json.loads(ui_settings().value(self.PROFILES_KEY, '') or '[]')
+        except (TypeError, ValueError):
+            profiles = []
+        return [profile for profile in profiles if isinstance(profile, dict) and profile.get('name')]
+
+    def _store_profiles(self, profiles):
+        import json
+        ui_settings().setValue(self.PROFILES_KEY, json.dumps(sorted(profiles, key=lambda profile: profile['name'].lower())))
+
+    def _fill_profiles(self, selected=None):
+        self.profile_combo.clear()
+        self.profile_combo.addItem(translate('conference_dialog', 'None'), None)
+        for profile in self._profiles():
+            self.profile_combo.addItem(profile['name'], profile['name'])
+        index = self.profile_combo.findData(selected) if selected else 0
+        self.profile_combo.setCurrentIndex(max(index, 0))
+        self.profile_delete_button.setEnabled(self.profile_combo.currentData() is not None)
+
+    def _SH_ProfileActivated(self, index):
+        name = self.profile_combo.itemData(index)
+        self.profile_delete_button.setEnabled(name is not None)
+        profile = next((profile for profile in self._profiles() if profile['name'] == name), None)
+        if profile is not None:
+            self._apply_profile(profile)
+
+    def _apply_profile(self, profile):
+        if profile.get('room'):
+            self._applying_profile = True       # its network cameras are chosen with its room
+            try:
+                self.room_button.setEditText(profile['room'])
+            finally:
+                self._applying_profile = False
+        self.audio_button.setChecked(bool(profile.get('audio', True)))
+        self.video_button.setChecked(bool(profile.get('video', True)))
+        self.invite_list.clear()
+        self._add_invitees([(key, name) for key, name in profile.get('invitees') or [] if key])
+        if profile.get('sources') is not None:
+            self._checked_keys = set(profile['sources'])        # what is not here any more is left out; a camera stays checked
+        self._load_video_sources()
+        self._update_media_labels()
+        self._update_accept_button()
+
+    def _current_profile(self, name):
+        from blink.messagepane.forward import NameRole
+        invitees = [[item.data(Qt.ItemDataRole.UserRole), item.data(NameRole) or ''] for item in (self.invite_list.item(number) for number in range(self.invite_list.count()))]
+        sources = [self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in self._video_source_items() if item.checkState() == Qt.CheckState.Checked]
+        return dict(name=name, room=self.room_button.currentText().strip(), audio=self.audio_button.isChecked(), video=self.video_button.isChecked(),
+                    invitees=invitees, sources=sources)
+
+    def _SH_ProfileSaveClicked(self):
+        from PyQt6.QtWidgets import QInputDialog
+        current = self.profile_combo.currentData()
+        name, ok = QInputDialog.getText(self, translate('conference_dialog', 'Save profile'),
+                                        translate('conference_dialog', 'Profile name (the room, audio and video, the videos and the invitees are saved):'),
+                                        text=current or self.room_button.currentText().strip())
+        name = name.strip()
+        if not ok or not name:
+            return
+        profiles = self._profiles()
+        if name != current and any(profile['name'] == name for profile in profiles):
+            answer = QMessageBox.question(self, translate('conference_dialog', 'Save profile'), translate('conference_dialog', 'Replace the profile %s?') % name)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        profiles = [profile for profile in profiles if profile['name'] != name]
+        profiles.append(self._current_profile(name))
+        self._store_profiles(profiles)
+        self._fill_profiles(name)
+
+    def _SH_ProfileDeleteClicked(self):
+        name = self.profile_combo.currentData()
+        if name is None:
+            return
+        answer = QMessageBox.question(self, translate('conference_dialog', 'Delete profile'), translate('conference_dialog', 'Delete the profile %s?') % name)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._store_profiles([profile for profile in self._profiles() if profile['name'] != name])
+        self._fill_profiles()
+
+    # The videos to publish
+    #
+    # One line per video, checked to be published. When the room's gateway announces
+    # multiple-video-feeds there are three groups: Local cameras, Screens and RTSP cameras; our
+    # publisher sends the first checked camera, or the checked screen (shared once joined), and
+    # everything else goes as extra feeds under us (blink.webrtc.extravideo). An older gateway takes
+    # one video per participant: a single choice among the cameras and screens.
+
+    VIDEO_SOURCES_KEY = 'conference_dialog/video_sources'      # the checked lines: ["camera:<device>", "screen:<device>", "rtsp:<url>"]
+
+    @staticmethod
+    def _video_source_key(data):
+        return f'rtsp:{data["url"]}' if data['kind'] == 'rtsp' else f'{data["kind"]}:{data["name"]}'
+
+    def _add_video_source_header(self, text):
+        from PyQt6.QtWidgets import QListWidgetItem
+        item = QListWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.NoItemFlags | Qt.ItemFlag.ItemIsEnabled)
+        font = item.font()
+        font.setBold(True)
+        item.setFont(font)
+        item.setData(Qt.ItemDataRole.UserRole, None)
+        if self.video_sources.count():
+            # room above every group but the first: its title is not against the lines of the one before
+            from PyQt6.QtGui import QFontMetrics
+            item.setSizeHint(QSize(0, QFontMetrics(font).height() + 14))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        self.video_sources.addItem(item)
+
+    def _add_video_source_item(self, data, checked):
+        from PyQt6.QtWidgets import QListWidgetItem
+        from urllib.parse import urlsplit
+        if data['kind'] == 'camera':
+            text, tooltip = data['name'], translate('conference_dialog', 'A camera of this computer')
+        elif data['kind'] == 'screen':
+            text, tooltip = data['title'], translate('conference_dialog', 'Shared once the conference is joined')
+        else:
+            try:
+                host = urlsplit(data['url']).hostname or data['url']
+            except ValueError:
+                host = data['url']
+            text = data.get('label') or host
+            tooltip = translate('conference_dialog', 'Network camera %s, sent at %s (right click to change)') % (data['url'], data.get('resolution') or '640x360')
+        item = QListWidgetItem(('    ' if self._multiple_feeds else '') + text)
+        item.setToolTip(tooltip)
+        item.setData(Qt.ItemDataRole.UserRole, data)
+        flags = item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+        if data['kind'] == 'rtsp':
+            flags |= Qt.ItemFlag.ItemIsEditable
+            item.setText(text)      # edited as it is
+        item.setFlags(flags)
+        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        self.video_sources.addItem(item)
+        return item
+
+    @staticmethod
+    def _screens():
+        """[(device, title)] of the SDK's screen devices, with the monitor each one is."""
+        from PyQt6.QtGui import QGuiApplication
+        from blink.screen_pointer import is_screen_device, screen_index
+        try:
+            devices = sorted((device for device in SIPApplication.engine.video_devices if is_screen_device(device)), key=screen_index)
+        except Exception:
+            return []
+        monitors = QGuiApplication.screens()
+        screens = []
+        for device in devices:
+            index = screen_index(device)
+            if index < len(monitors):
+                size = monitors[index].size()
+                title = f'{device}: {monitors[index].name()}, {size.width()}x{size.height()}'
+            else:
+                title = device
+            screens.append((device, title))
+        return screens
+
+    def _load_video_sources(self):
+        """The cameras and screens the SDK has (as in the room's Camera menu) and, with multiple feeds, the network cameras that worked before."""
+        import json
+        from blink.camera_formats import is_external_camera, usable_cameras
+        from blink.webrtc.extravideo import saved_sources
+        try:
+            cameras = usable_cameras(list(SIPApplication.engine.video_devices))
+        except Exception:
+            cameras = []
+        if self._checked_keys is None:
+            # as the dialog opens: a plugged in camera (else the one in use); no screen, no network camera (chosen again each time)
+            current = str(SIPSimpleSettings().video.device or '')
+            camera = next((device for device in cameras if is_external_camera(device)), None) or \
+                     (current if current in cameras else cameras[0] if cameras else None)
+            self._checked_keys = set()
+            if camera is not None:
+                self._checked_keys.add(f'camera:{camera}')
+        def is_checked(data):
+            return self._video_source_key(data) in self._checked_keys
+        self.video_sources.blockSignals(True)
+        self.video_sources.clear()
+        if self._multiple_feeds:
+            self._add_video_source_header(translate('conference_dialog', 'Local cameras'))
+        for device in cameras:
+            data = dict(kind='camera', name=device)
+            self._add_video_source_item(data, is_checked(data))
+        screens = self._screens()
+        if screens and self._multiple_feeds:
+            self._add_video_source_header(translate('conference_dialog', 'Screens'))
+        for device, title in screens:
+            data = dict(kind='screen', name=device, title=title)
+            self._add_video_source_item(data, is_checked(data))
+        if self._multiple_feeds:
+            self._add_video_source_header(translate('conference_dialog', 'RTSP cameras'))
+            for source in saved_sources():
+                data = dict(kind='rtsp', url=source['url'], user=source.get('user') or '', password=source.get('password') or '', label=source.get('label') or '',
+                            resolution=source.get('resolution') or '')
+                self._add_video_source_item(data, is_checked(data))
+        local = [item for item in self._video_source_items() if item.data(Qt.ItemDataRole.UserRole)['kind'] in ('camera', 'screen')]
+        if not self._multiple_feeds:
+            # one video per participant: the first checked one only
+            items = [item for item in local if item.checkState() == Qt.CheckState.Checked]
+            for item in items[1:]:
+                item.setCheckState(Qt.CheckState.Unchecked)
+        if local and not any(item.checkState() == Qt.CheckState.Checked for item in local):
+            local[0].setCheckState(Qt.CheckState.Checked)       # with Video, a camera (or screen) of ours is always sent
+        shown = {self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in self._video_source_items() if item.checkState() == Qt.CheckState.Checked}
+        # with one video per participant only one line is checked, but what was chosen stays: the server's answer may come later, and allow more
+        self._checked_keys = shown if self._multiple_feeds else (self._checked_keys | shown)
+        self.video_sources.blockSignals(False)
+        self.video_source_add_button.setVisible(self._multiple_feeds)
+        self.video_source_remove_button.setVisible(self._multiple_feeds)
+        self.video_source_remove_button.setEnabled(False)
+        self.video_sources.setMinimumHeight(160 if self._multiple_feeds else 90)
+        self.video_sources.setToolTip(translate('conference_dialog', 'The checked videos are published to the conference: your camera or screen, '
+                                                                     'and the others under your name. Double click a network camera to rename it')
+                                      if self._multiple_feeds else
+                                      translate('conference_dialog', 'The video you publish to the conference: this server takes one video per participant'))
+
+    def _video_source_items(self):
+        """The video lines (no group headers)."""
+        items = (self.video_sources.item(number) for number in range(self.video_sources.count()))
+        return [item for item in items if item.data(Qt.ItemDataRole.UserRole) is not None]
+
+    def _save_checked_video_sources(self):
+        import json
+        keys = [self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in self._video_source_items() if item.checkState() == Qt.CheckState.Checked]
+        self._checked_keys = set(keys)
+        ui_settings().setValue(self.VIDEO_SOURCES_KEY, json.dumps(keys))
+
+    def _update_video_sources(self, *args):
+        visible = self.video_button.isChecked() and not self.video_button.isHidden()
+        self.video_sources_label.setVisible(visible)
+        self.video_sources_widget.setVisible(visible)
+        self.grid_layout.setRowStretch(2, 2 if visible else 0)     # without video, the people to invite take the height (an empty row with a stretch would keep it)
+        if visible:
+            self._update_gateway_features()
+
+    def _room_ws_server(self):
+        """The webrtcgateway the room in the field is joined at."""
+        from blink.webrtc import ws_server
+        room = self._foreign_room()
+        if room is not None:
+            target = self._room_targets.get(room[1])
+            if target is None or target == 'pending':
+                return None
+            if target.remote:
+                return target.ws_server
+        return ws_server(AccountManager().default_account)
+
+    def _update_gateway_features(self):
+        """Whether the room's gateway takes more than one video of ours: as last seen, then asked."""
+        from blink.webrtc.sylkrtc import known_features, probe_features
+        url = self._room_ws_server()
+        if url is None or url == self._features_url:
+            return
+        self._features_url = url
+        self._set_multiple_feeds('multiple-video-feeds' in (known_features(url) or ()))
+        probe_features(url, lambda features, url=url: url == self._features_url and self._set_multiple_feeds('multiple-video-feeds' in features))
+
+    def _set_multiple_feeds(self, multiple):
+        if multiple == self._multiple_feeds:
+            return
+        self._save_checked_video_sources()
+        self._multiple_feeds = multiple
+        self._load_video_sources()
+
+    def _SH_VideoSourceChanged(self, item):
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data is None:
+            return
+        self.video_sources.blockSignals(True)
+        if data['kind'] == 'rtsp' and item.text().strip() and item.text().strip() != data.get('label'):
+            from blink.webrtc.extravideo import remember_source
+            data = dict(data, label=item.text().strip())        # renamed
+            item.setData(Qt.ItemDataRole.UserRole, data)
+            remember_source(data)
+        if item.checkState() == Qt.CheckState.Checked:
+            # one video when the server takes one; with more, still one screen (it is our publisher's video)
+            for other in self._video_source_items():
+                if other is not item and other.checkState() == Qt.CheckState.Checked and (not self._multiple_feeds or data['kind'] == other.data(Qt.ItemDataRole.UserRole)['kind'] == 'screen'):
+                    other.setCheckState(Qt.CheckState.Unchecked)
+        elif data['kind'] in ('camera', 'screen'):
+            # with Video, one camera (or screen) of ours stays checked: the last one cannot be unchecked
+            if not any(other.checkState() == Qt.CheckState.Checked and other.data(Qt.ItemDataRole.UserRole)['kind'] in ('camera', 'screen') for other in self._video_source_items()):
+                item.setCheckState(Qt.CheckState.Checked)
+        self._checked_keys = {self._video_source_key(other.data(Qt.ItemDataRole.UserRole)) for other in self._video_source_items() if other.checkState() == Qt.CheckState.Checked}
+        self.video_sources.blockSignals(False)
+        self._save_checked_video_sources()
+
+    def _SH_VideoSourceMenu(self, position):
+        """A network camera: the resolution it is sent at, renaming, forgetting."""
+        from blink.webrtc.extravideo import DEFAULT_RESOLUTION, RESOLUTIONS, set_source_resolution
+        item = self.video_sources.itemAt(position)
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if data is None or data['kind'] != 'rtsp':
+            return
+        menu = QMenu(self)
+        sizes = menu.addMenu(translate('conference_dialog', 'Send at'))
+        current = data.get('resolution') if data.get('resolution') in [name for name, width, height, bitrate in RESOLUTIONS] else DEFAULT_RESOLUTION
+        for name, width, height, bitrate in RESOLUTIONS:
+            action = sizes.addAction(f'{width}x{height}, about {bitrate} kbit/s')
+            action.setCheckable(True)
+            action.setChecked(name == current)
+            action.triggered.connect(lambda checked, name=name: (set_source_resolution(data['url'], name), self._load_video_sources()))
+        menu.addAction(translate('conference_dialog', 'Rename')).triggered.connect(lambda: self.video_sources.editItem(item))
+        menu.addAction(translate('conference_dialog', 'Forget')).triggered.connect(lambda: (self.video_sources.setCurrentItem(item), self._SH_VideoSourceRemoveClicked()))
+        menu.exec(self.video_sources.viewport().mapToGlobal(position))
+
+    def _SH_VideoSourceAddClicked(self):
+        from blink.webrtc.camerasetup import NetworkCameraDialog
+        number = sum(1 for item in self._video_source_items() if item.data(Qt.ItemDataRole.UserRole)['kind'] == 'rtsp') + 1
+        dialog = NetworkCameraDialog(f'Camera {number}', parent=self)
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        # cameras may have been renamed there, added cameras are checked: the list again, from what is saved
+        self._save_checked_video_sources()
+        if accepted:
+            self._checked_keys.add(self._video_source_key(dict(dialog.source())))
+        self._load_video_sources()
+
+    def _SH_VideoSourceRemoveClicked(self):
+        from blink.webrtc.extravideo import forget_source
+        item = self.video_sources.currentItem()
+        data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if data is None or data['kind'] != 'rtsp':
+            return
+        forget_source(data['url'])
+        self.video_sources.takeItem(self.video_sources.row(item))
+        self._save_checked_video_sources()
+
+    def _chosen_video_sources(self):
+        """(our camera: an SDK device or None for the camera off, the screen to share once joined or None,
+        [(source, label)] our other videos), from the checked lines."""
+        checked = [item.data(Qt.ItemDataRole.UserRole) for item in self._video_source_items() if item.checkState() == Qt.CheckState.Checked]
+        screen = next((data['name'] for data in checked if data['kind'] == 'screen'), None)
+        cameras = [data['name'] for data in checked if data['kind'] == 'camera']
+        if not self._multiple_feeds:
+            return (None if screen else (cameras[0] if cameras else None)), screen, []
+        # with a screen, our publisher sends it and every camera is an extra feed; else the first camera is ours
+        camera = None if screen or not cameras else cameras.pop(0)
+        extras, gst_cameras = [], None
+        for name in cameras:
+            # another camera of this computer: GStreamer opens it (blink.webrtc.extravideo), found by its name
+            if gst_cameras is None:
+                try:
+                    from blink.webrtc.extravideo import local_cameras
+                    gst_cameras = local_cameras()
+                except Exception:
+                    gst_cameras = []
+            device = next((device for gst_name, device in gst_cameras if gst_name == name), None) or \
+                     next((device for gst_name, device in gst_cameras if gst_name in name or name in gst_name), None)
+            if device is None:
+                ActivityLog().warning(f'[conference] Camera {name} not found by GStreamer: not published')
+                continue
+            extras.append((dict(kind='camera', name=name, device=device), None))
+        for data in checked:
+            if data['kind'] == 'rtsp':
+                extras.append((dict(kind='rtsp', url=data['url'], user=data['user'], password=data['password'], resolution=data.get('resolution') or None), data.get('label') or None))
+        extras = [(source, label or f'Camera {number}') for number, (source, label) in enumerate(extras, 1)]
+        return camera, screen, extras
+
     def join_conference(self):
         ui_settings().setValue("conference_dialog/geometry", self.saveGeometry())
         account = AccountManager().default_account
@@ -8096,27 +8561,37 @@ class ConferenceDialog(base_class, ui_class):
         conference_uri = self.conference_uri(current_text, account) if account is not None else None
         if conference_uri is None:
             return
-        index = self.room_button.findText(current_text)
-        if index != -1:
-            self.room_button.removeItem(index)      # to the top: most recent first
-        if self.room_button.count() == self.room_button.maxCount():
-            self.room_button.removeItem(self.room_button.count()-1)
-        self.room_button.insertItem(0, current_text)
-        from blink.webrtc import local_room_host, remember_room, resolve_room
-        remember_room(current_text)
-
+        # what is chosen first: moving the room to the top of the list changes the field's text for a
+        # moment, and a changed room unchecks the network cameras
         invitees = self._invitees()
         audio, video = self.audio_button.isChecked(), self.video_button.isChecked() and not self.video_button.isHidden()
+        sources = self._chosen_video_sources() if video else None
+        if video:
+            self._save_checked_video_sources()
+        self._applying_profile = True       # the same room: nothing to uncheck
+        try:
+            index = self.room_button.findText(current_text)
+            if index != -1:
+                self.room_button.removeItem(index)      # to the top: most recent first
+            if self.room_button.count() == self.room_button.maxCount():
+                self.room_button.removeItem(self.room_button.count()-1)
+            self.room_button.insertItem(0, current_text)
+            self.room_button.setCurrentIndex(0)
+        finally:
+            self._applying_profile = False
+        from blink.webrtc import local_room_host, remember_room, resolve_room
+        remember_room(current_text)
         user, _, host = conference_uri.partition('@')
         if local_room_host(host, account):
-            self._join_room(account, conference_uri, None, audio, video, invitees)
+            self._join_room(account, conference_uri, None, audio, video, invitees, sources)
         elif self._room_targets.get(host, 'pending') != 'pending':
-            self._join_room(account, conference_uri, self._room_targets[host], audio, video, invitees)     # looked up while it was typed
+            self._join_room(account, conference_uri, self._room_targets[host], audio, video, invitees, sources)     # looked up while it was typed
         else:
             # a room of another domain: where is its SylkServer (its configuration, looked up if not known yet)
-            resolve_room(user, host, account, lambda target: self._join_room(account, conference_uri, target, audio, video, invitees))
+            resolve_room(user, host, account, lambda target: self._join_room(account, conference_uri, target, audio, video, invitees, sources))
 
-    def _join_room(self, account, conference_uri, target, audio, video, invitees):
+    def _join_room(self, account, conference_uri, target, audio, video, invitees, sources=None):
+        """sources: (our camera or None for the camera off, the screen to share or None, [(source, label)] our other videos), chosen with Video."""
         from blink.contacts import URIUtils
         from blink.webrtc import conference_video_available, join_video_conference, media_available, raise_videoroom_window
         session_manager = SessionManager()
@@ -8136,7 +8611,16 @@ class ConferenceDialog(base_class, ui_class):
             # SIP way, to the room's bridge, as it always did
             ActivityLog().info(f'[conference] Join {video_uri} with audio and video over WebRTC' + ('' if audio else ' (microphone muted)') + f', chat over MSRP to {sip_uri}' +
                                (f', inviting {", ".join(invitees)}' if invitees else ''))
-            video_room = join_video_conference(account, video_uri, audio=audio, target=target)     # without audio: the microphone starts muted; removes SIP audio to the room
+            camera, screen, extras = sources or (str(SIPSimpleSettings().video.device or ''), None, [])
+            if camera and camera != str(SIPSimpleSettings().video.device or ''):
+                from blink.screen_share import _select_device
+                _select_device(camera)      # the camera checked first: ours, as the room's Camera menu chooses it
+            if screen:
+                ActivityLog().info(f'[conference] Sharing {screen} once joined')
+            if extras:
+                ActivityLog().info(f'[conference] Publishing also {", ".join(label for source, label in extras)}')
+            # without audio: the microphone starts muted; without a camera checked: the camera starts off (until the screen is shared); removes SIP audio to the room
+            video_room = join_video_conference(account, video_uri, audio=audio, video=bool(camera), target=target, extra_sources=extras, screen=screen)
             from blink.webrtc import room_chat_session
             existing = room_chat_session(video_room) if video_room is not None else None
             streams = [] if existing is not None else [StreamDescription('chat')]
@@ -8153,8 +8637,11 @@ class ConferenceDialog(base_class, ui_class):
         if session is None and video_room is not None:
             from blink.webrtc import room_chat_session
             session = room_chat_session(video_room)     # the room's MSRP session was there already: kept, without its audio
-        if invitees and session is None and video_room is not None:
-            video_room.invite(invitees)       # no MSRP session to REFER them from: the room invites them
+        if invitees and video_room is not None:
+            # with video the room invites them (videoroom-invite, once joined): a WebRTC client gets the video
+            # conference, a SIP one a call from the conference with audio and chat; each step is reported back
+            # (invite-status). A REFER over the MSRP chat would only bring them to the chat and audio of the room.
+            video_room.invite(invitees)
             invitees = []
         if video_room is not None and session is not None:
             # the MSRP window comes up with the chat: the room's window goes back in front of it
@@ -8176,12 +8663,42 @@ class ConferenceInviter(object):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=session, name='BlinkSessionDidConnect')
         notification_center.add_observer(self, sender=session, name='BlinkSessionDidEnd')
+        self.sip_session = None
+
+    def _watch_refers(self, sip_session):
+        """What the focus answers to each REFER, in the log (the invites themselves go on at the server)."""
+        if sip_session is None:
+            return
+        self.sip_session = sip_session
+        notification_center = NotificationCenter()
+        for name in ('SIPConferenceGotAddParticipantProgress', 'SIPConferenceDidAddParticipant', 'SIPConferenceDidNotAddParticipant'):
+            notification_center.add_observer(self, sender=sip_session, name=name)
+        QTimer.singleShot(120000, self._unwatch_refers)
+
+    def _unwatch_refers(self):
+        if self.sip_session is None:
+            return
+        notification_center = NotificationCenter()
+        for name in ('SIPConferenceGotAddParticipantProgress', 'SIPConferenceDidAddParticipant', 'SIPConferenceDidNotAddParticipant'):
+            notification_center.discard_observer(self, sender=self.sip_session, name=name)
+        self.sip_session = None
+        self.owner.discard(self)
+
+    def _NH_SIPConferenceGotAddParticipantProgress(self, notification):
+        ActivityLog().info(f'[conference] Invite of {notification.data.participant} to {self.session.uri}: {notification.data.code} {notification.data.reason}')
+
+    def _NH_SIPConferenceDidAddParticipant(self, notification):
+        ActivityLog().info(f'[conference] Invite of {notification.data.participant} to {self.session.uri}: the conference is calling them')
+
+    def _NH_SIPConferenceDidNotAddParticipant(self, notification):
+        ActivityLog().warning(f'[conference] Invite of {notification.data.participant} to {self.session.uri} failed: {notification.data.code} {notification.data.reason}')
 
     def _done(self):
         notification_center = NotificationCenter()
         notification_center.remove_observer(self, sender=self.session, name='BlinkSessionDidConnect')
         notification_center.remove_observer(self, sender=self.session, name='BlinkSessionDidEnd')
-        self.owner.discard(self)
+        if self.sip_session is None:
+            self.owner.discard(self)
 
     @run_in_gui_thread
     def handle_notification(self, notification):
@@ -8190,6 +8707,7 @@ class ConferenceInviter(object):
 
     def _NH_BlinkSessionDidConnect(self, notification):
         from blink.contacts import URIUtils
+        self._watch_refers(getattr(self.session, 'sip_session', None))
         self._done()
         domain = self.account.id.domain if self.account is not BonjourAccount() else None
         for key in self.keys:
@@ -8213,6 +8731,8 @@ class ConferenceInviter(object):
 
     def _NH_BlinkSessionDidEnd(self, notification):
         self._done()
+        self._unwatch_refers()
+        self.owner.discard(self)
 
 
 del ui_class, base_class

@@ -60,17 +60,19 @@ def conference_video_available(account=None):
     return available(account)
 
 
-def join_video_conference(account, room, audio=True, video=True, target=None):
+def join_video_conference(account, room, audio=True, video=True, target=None, extra_sources=None, screen=None):
     """Join room (user@host) over WebRTC from account, the microphone muted without audio and the
     camera off without video (both can be turned on in the room); None when that cannot be done.
-    target (a RoomTarget) is a room of another SylkServer: joined through its server."""
+    target (a RoomTarget) is a room of another SylkServer: joined through its server. extra_sources:
+    [(source, label)], more videos of ours published once joined (blink.webrtc.extravideo); screen: a screen
+    device shared once joined."""
     if target is not None and target.remote:
         if not media_available():
             return None
     elif not conference_video_available(account):
         return None
     from blink.webrtc.videoroom import VideoroomManager
-    video_room = VideoroomManager().join(account, room, audio=audio, video=video, target=target)
+    video_room = VideoroomManager().join(account, room, audio=audio, video=video, target=target, extra_sources=extra_sources, screen=screen)
     if video_room is not None:
         drop_sip_audio(video_room)
     return video_room
@@ -146,12 +148,33 @@ def recent_rooms():
     return [str(room) for room in value or [] if room]
 
 
-def remember_room(room):
+def _room_key(room):
+    """A room as it is compared: its name alone when it is on the default account's own conference server."""
+    room = room.strip().lower()
+    user, at, host = room.partition('@')
+    if at and '/' not in room:
+        try:
+            if local_room_host(host, AccountManager().default_account):
+                return user
+        except Exception:
+            pass
+        for prefix in ('conference.', 'videoconference.'):     # the MSRP switch and the video rooms of a domain: one room
+            if host.startswith(prefix):
+                return f'{user}@{host[len(prefix):]}'
+    return room
+
+
+def remember_room(room, keep_form=False):
+    """The room joined last, first: from Join Conference as typed, or a conference dialed anywhere else
+    (keep_form: when it is first already, in another form, that form stays: the one typed)."""
     from blink.resources import ui_settings
     room = room.strip()
     if not room:
         return
-    rooms = [room] + [other for other in recent_rooms() if other.lower() != room.lower()]
+    key = _room_key(room)
+    if keep_form and recent_rooms()[:1] and _room_key(recent_rooms()[0]) == key:
+        return
+    rooms = [room] + [other for other in recent_rooms() if _room_key(other) != key]
     settings = ui_settings()
     settings.setValue(RECENT_ROOMS_KEY, rooms[:MAX_RECENT_ROOMS])
     settings.sync()

@@ -526,11 +526,19 @@ class MainWindow(base_class, ui_class):
         anchor = self.logs_window_action
         position = actions.index(anchor) + 1 if anchor in actions else len(actions)
         before = actions[position] if position < len(actions) else None
+        info = sys.modules.get('blink.webrtc.infopanel')
+        panels = info.ConferenceInfoPanel.panels if info is not None else {}
         for window in windows:
             action = QAction(window.windowTitle() or window.title, self)
             action.triggered.connect(lambda checked=False, window=window: self._show_video_room_window(window))
             self.window_menu.insertAction(before, action)
             self._video_room_actions.append(action)
+            panel = panels.get(window)
+            if panel is not None:       # its Conference info, open: back in front when behind others
+                action = QAction(panel.windowTitle(), self)
+                action.triggered.connect(lambda checked=False, window=window: info.ConferenceInfoPanel.show_for(window))
+                self.window_menu.insertAction(before, action)
+                self._video_room_actions.append(action)
 
     @staticmethod
     def _show_video_room_window(window):

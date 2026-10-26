@@ -5,10 +5,10 @@ the MSRP chat it always had, and how it joins the rooms of other SylkServer doma
 
 | | |
 |---|---|
-| Code | `blink/webrtc/` (`__init__.py`, `sylkrtc.py`, `videoroom.py`, `videoroomwindow.py`, `sharedialog.py`, `speakerdialog.py`); hooks in `sessions.py`, `chatwindow.py`, `mainwindow.py`, `screen_share.py`, `videowindow.py`, `widgets/video.py`, `__init__.py`, `logging.py` |
+| Code | `blink/webrtc/` (`__init__.py`, `sylkrtc.py`, `videoroom.py`, `videoroomwindow.py`, `sharedialog.py`, `speakerdialog.py`, `infopanel.py`, `extravideo.py`, `camerafinder.py`, `camerasetup.py`); hooks in `sessions.py`, `chatwindow.py`, `mainwindow.py`, `screen_share.py`, `videowindow.py`, `widgets/video.py`, `__init__.py`, `logging.py` |
 | Server side | SylkServer webrtcgateway (sylkRTC protocol, Janus videoroom), conference application (MSRP switch) |
 | Related | `sylkserver` (`[MSRP] port`), `opensips-config-sylkserver` (`CONFERENCE_SERVER_PUBLIC`, Contact rewrite), `sylk-suite` (MSRP port, TLS certificate, source mode) |
-| State | 2026-10-24, first working version: own domain and a foreign domain (`domain.sylk.link`) tested. 2026-10-25: layouts, carousel, speaker selection, moderation, screen sharing, video loss; §10 lists every change since the first version, for the Cocoa port |
+| State | 2026-10-24, first working version: own domain and a foreign domain (`domain.sylk.link`) tested. 2026-10-25: layouts, carousel, speaker selection, moderation, screen sharing, video loss; §10 lists every change since the first version, for the Cocoa port. 2026-10-26: several video feeds per participant (cameras, screen, RTSP cameras), Join panel video sources and profiles, Conference info window; §11 lists them |
 
 ---
 
@@ -97,6 +97,14 @@ in the GUI thread, sub-protocol `sylkRTC-2`.
   registration would fork calls and messages to the gateway.
 - TLS certificate errors are ignored when SIP TLS verification is off (`tls.verify_server`).
 - A connection nobody uses is closed one second after its last room ends.
+- **Gateway features**: the `ready-event` carries `features` (a list of strings) since
+  2026-10-26: `sip-instance` (the `sip_instance` join field is understood) and
+  `multiple-video-feeds` (child publishers, §4.8). An older gateway sends none and ignores
+  request fields it does not know. Each connection keeps them (`connection.features`) and
+  they are remembered per `wsServer` URL (`ui.conf` `webrtc/gateway_features`).
+  `known_features(url)` answers from a live connection or what was seen last;
+  `probe_features(url, callback)` opens a short connection of its own, reads the
+  `ready-event` and closes it (the Join panel asks every time it opens).
 
 ## 4. Media: `videoroom.py`
 
@@ -205,6 +213,7 @@ As Sylk Mobile's `react-native-sylkrtc` (sylk-desktop's bundled sylkrtc is older
 | `videoroom-session-update` (on a feed) | `options`: {`video`: false/true} | — (the server stops/resumes that feed's video) |
 | — | — | `conference-audio-levels` {`levels`: [{`participant_id`, `rx`, `rx_peak`, …}]}: SIP participants' levels, the mixer's 0–255 scale |
 | `videoroom-join` | + `sip_instance`: our SIP stack's instance-id (optional) | — |
+| `videoroom-join` (an extra feed) | + `parent`: our publisher's session id, `label`: its name; `audio` false | the feed is a publisher shown under us (§4.8) |
 
 ### 4.6 Speaking, video loss, pausing
 
@@ -231,25 +240,109 @@ As Sylk Mobile's `react-native-sylkrtc` (sylk-desktop's bundled sylkrtc is older
 | `VideoroomSessionGotMessage` | type, content, content_type, sender_uri, sender_name, timestamp |
 | `VideoroomSessionDidDeliverMessage` | message_id, delivered, code, reason |
 
+### 4.8 Several video feeds per participant (`extravideo.py`)
+
+A participant publishes one audio and any number of videos (at most 4 extra, server limit).
+Each extra video is a publisher of its own, joined over the room's existing sylkRTC
+connection with `videoroom-join` + `parent` (our publisher's session id) + `label` ("Living",
+"Camera 2"), audio false. The gateway (feature `multiple-video-feeds`):
+
+- names it "<owner's display name> <label>", gives it no MSRP chat leg (so it is not another
+  participant of the conference), lists it in `publishers` with `parent` and `label`;
+- refuses a `parent` that is not a publisher of the same room, or a fifth extra video;
+- ends the children with their parent.
+
+Sources: a camera of the computer (GStreamer device monitor, v4l2 preferred), or an RTSP
+camera (`rtspsrc`, TCP, user/password; video stream only: `select-stream` drops audio and
+metadata, any other pad goes to a `fakesink`, an unlinked pad stops `rtspsrc`). Pipeline,
+complete before the offer so the offer carries the SSRC:
+
+```
+source ─► decodebin ─► convert/scale(add borders)/rate(10 fps) ─► capsfilter WxH ─► tee ─┬─► queue ─► encoder ─► payloader(ssrc) ─► webrtcbin (sendonly)
+                                                                                    └─► queue ─► convert ─► appsink (its tile here)
+```
+
+- The codec is the one the answer chose for our own publisher (H264 here).
+- **Codec preferences narrowed** after the offer (and again after the answer) to
+  encoding-name, payload, clock-rate and SSRC: the offer's fmtp (`profile-level-id=42e01f`)
+  does not match what x264's constrained baseline produces (42c0..) and webrtcbin refuses the
+  packets (`not-negotiated`, seen as rtspsrc's "Internal data stream error" ~1 s in). Our own
+  publisher already did this.
+- Resolutions (16:9, 10 fps): **640×360 / 500 kbit/s (default)**, 1280×720 / 1200 kbit/s,
+  320×180 / 200 kbit/s; changed while sending by setting the capsfilter caps and the
+  encoder's bitrate (no renegotiation).
+- Our own extra videos are tiles here from their own appsink; the room's `publishers` event
+  for them is skipped (their id is ours, or their `parent` is our session).
+- Statistics: `request_stats()` asks every extra video's webrtcbin too.
+- RTSP cameras that worked are remembered with name, address, user, password and resolution
+  (`ui.conf` `videoroom/video_sources`, JSON, newest first, 20).
+- Speakers: an extra video can be a speaker (`videoroom-configure` takes its id); our own are
+  looked up in `session.extra_videos`, not among the participants.
+
+Network cameras (`camerafinder.py`): ONVIF WS-Discovery (a `Probe` for
+`dn:NetworkVideoTransmitter` to 239.255.255.250:3702, 3 s; name and hardware from the
+`onvif://www.onvif.org/name|hardware/` scopes), the RTSP address with ONVIF SOAP
+`GetCapabilities` → `GetProfiles` → `GetStreamUri` (WS-Security UsernameToken digest), and
+Bonjour `_rtsp._tcp` when python3-zeroconf is installed. `test_stream()` pulls the first
+picture (rtspsrc → decodebin → appsink, 12 s).
+
 ## 5. User interface
 
 ### 5.1 Join Conference panel (`sessions.ConferenceDialog`)
 
 - Media line: **Chat** (always checked, not changeable), **Audio**, **Video**.
   Video is shown only when the account's domain runs SylkServer and the media can be
-  done here.
+  done here. **Video starts unchecked** every time the panel opens.
 - **Video** checked: audio and video over WebRTC (Audio unchecked: the microphone starts
   muted), chat over MSRP. **Audio** only: SIP audio and chat to the bridge, as before.
 - The room field takes a room name, `room@host` or a link `https://host/conference/room`.
   Rooms of another domain are looked up while typing, and **Join waits for the answer**
-  (§6.2).
+  (§6.2). It opens with **the room joined last**; a new random room only when no conference
+  was joined yet.
+- History: the rooms joined, most recent first (`ui.conf` `conference_dialog/recent_rooms`,
+  20), rebuilt each time the panel opens. Every outgoing session to a conference address
+  (this panel, a call or chat from elsewhere, an escalation) puts its room first; a room of
+  the account's own conference server is kept by its name alone, and `1234`,
+  `1234@conference.<domain>` and `1234@videoconference.<domain>` are one room.
+- **Publish** (shown with Video checked): the videos we send, one line each, checkable.
+  With a gateway that announces `multiple-video-feeds` (asked when the panel opens, §3),
+  three groups with a gap above each title:
+  - *Local cameras*: the first checked one is our publisher's camera (Blink's video device is
+    set to it), the others go as extra feeds;
+  - *Screens*: one entry per monitor ("My screen 2: DP-1, 2560x1440"), at most one checked:
+    shared as soon as the room is joined (we join with the camera off until then); every
+    checked camera is then an extra feed, started once the screen has taken the camera's
+    place (the device is free then), at most 30 s later;
+  - *RTSP cameras*: the remembered ones; **Add network camera…**, Forget; right click: Send
+    at (resolution), Rename, Forget; double click renames.
+
+  Without that feature: cameras and screens only, one choice. On opening: an **external
+  (plugged in) camera** is checked (Linux: the USB port's `removable` attribute in sysfs,
+  else built-in names such as "Integrated", "FaceTime"), else the camera in use; no screen, no
+  RTSP camera. **One camera or screen always stays checked** with Video. **Changing the room
+  unchecks the RTSP cameras** (a profile's room keeps its own). Extra feeds are named by
+  their label, else "Camera N".
+- **Add network camera** (`camerasetup.py`): the cameras found on the network (ONVIF, Bonjour)
+  and those tested before (bold, ✓, under the name given, first; "not found now" when they do
+  not answer), filter and sort (name/address); picking one fills name, address and the user
+  and password used before with that host; **Test** pulls a picture (an ONVIF camera's RTSP
+  address is asked first) and shows it; **Add** only after a test of what is in the fields;
+  Send at; renaming a tested camera saves and refreshes the list. 520–720 px wide.
+- **Profiles** (left of Join): a saved composition: room, Audio, Video, the checked video lines
+  (keys `camera:<device>`, `screen:<device>`, `rtsp:<url>`) and the invitees (address and
+  name), in `ui.conf` `conference_dialog/profiles` (JSON, by name). Picking one fills the
+  panel; Save… (a new name, or the chosen one to change it; replacing another asks); Delete
+  asks. The panel opens with no profile chosen.
+- Heights: the video lines get twice the stretch of the invitees; without Video the invitees
+  take it all.
 - Bottom line: "Conferencing provided by SylkServer at <conference domain>"; without
   SylkServer the original MSRP switch (RFC 7701) note; with missing packages, the
   `sudo apt install …` line.
-- History: the rooms joined, most recent first, kept in `ui.conf`
-  (`conference_dialog/recent_rooms`, 20).
-- Invitees: REFERred through the MSRP session, or through the video room
-  (`videoroom-invite`) when there is none.
+- Invitees: **with Video, invited through the video room** (`videoroom-invite` once joined:
+  a WebRTC client gets the video conference, a SIP address a call with audio and chat, and
+  `invite-status` reports each step); without, REFERred through the MSRP session, its
+  outcome logged (`SIPConferenceGotAddParticipantProgress` / `DidAddParticipant` /
+  `DidNotAddParticipant`).
 
 A Video Call to a room contact joins the same way (WebRTC + MSRP chat). An audio call to a
 room whose video room is open joins with chat only.
@@ -277,7 +370,7 @@ the initial with "no video" while its video is lost.
 | Speakers | speaker selection (§5.6); with two or more others with video, or speakers set |
 | Chat | the room's MSRP chat in front (started if there is none) |
 | Raise/Lower hand | with more than two of us (or our hand still up); yellow while up |
-| More (menu) | Share screen / Stop sharing screen (connected only), Hide myself / Show myself, Show me as a thumbnail / Put me back in the grid, Invite participants…, Share conference address…, Mute everyone, Lower all hands |
+| More (menu) | Share screen / Stop sharing screen (connected only), Hide myself / Show myself, Show me as a thumbnail / Put me back in the grid, Add video… (with `multiple-video-feeds`), Invite participants…, Conference info…, Share conference address…, Mute everyone, Lower all hands |
 | Full screen / Window | |
 | Leave | |
 
@@ -295,7 +388,9 @@ second click or a click elsewhere cancels; not with speakers set.
 
 **Right-click on a tile**: Mute/Unmute, Lower hand, Show as the speaker / as second speaker /
 Stop showing as speaker, Remove from the conference (SIP participants). On our own: Show me as
-a thumbnail / Put me back in the grid, Hide myself, Raise/Lower hand, the speaker items.
+a thumbnail / Put me back in the grid, Hide myself, Raise/Lower hand, the speaker items. On one
+of our extra videos: Send at (resolution, live), Stop this video, the speaker items; someone
+else's extra video has no Mute nor hand.
 
 **Our own tile**: a small round button at its top right, under the mouse, moves it between the
 grid and the thumbnail; it takes the first corner clear of the name pill and the hand badge.
@@ -305,7 +400,9 @@ window only; it comes back by itself when nobody else's video is left.
 
 **Screen sharing**: More → Share screen or the Camera menu asks the desktop which screen
 (`blink.screen_share`, the screen is a video device); then our tile is hidden, the window
-minimizes, and, with no speakers chosen, we become the room's single speaker. When it stops
+minimizes, and, with no speakers chosen, the speakers follow our videos: the screen alone,
+or the screen and our one other video (both speakers); with more than two videos of ours,
+nobody. Updated as our extra videos connect and end, until someone chooses speakers. When it stops
 (Stop sharing, or the desktop's own indicator) the camera comes back, the speakers go back to
 the grid if we set them, our tile comes back and the window is restored as it was.
 
@@ -328,7 +425,7 @@ window's **Window** menu while open.
 | Hang up | ends the chat and leaves the video room (its window closes) |
 | Tile × | in a room: hangs up (video room too), the tile stays; disconnected: closes the tile |
 | Input bar | enabled when the MSRP chat is connected, or when the video room is (the chat then goes over WebRTC) |
-| Participants list | dropping contacts invites them: REFER over MSRP, else through the video room; the audio bridge is not listed; our own row shows audio and video while the video room is up |
+| Participants list | dropping contacts invites them: through the video room while we are in it, else REFER over MSRP; the audio bridge is not listed; our own row shows audio and video while the video room is up |
 | Header Audio | hidden while the video room is up: only Chat and Video |
 | Session tile | shows the audio and video icons while the video room is up |
 | Opening | joining with video opens the MSRP window minimized (or leaves it as it is when in use); the video window's Chat button brings it to the front |
@@ -369,6 +466,28 @@ the participants with video, ours as "Me", sorted by name; a click picks, a clic
 one clears it, one person in one slot only. Apply sends `videoroom-configure`; the window
 changes when the room's `configure` event comes (whoever set it). One speaker fills the window,
 two side by side, everyone else in the carousel.
+
+### 5.7 Add video (in the room)
+
+More → Add video…: name, a camera of this computer or an RTSP camera (used before, or **Find on
+network…**, which opens Add network camera), address, user, password, Send at. The used-before
+list shows "name (host)", the address as tooltip, and does not widen the dialog.
+
+### 5.8 Conference info (`infopanel.py`)
+
+More → Conference info…: an ordinary top-level window (not a dialog: window managers keep a
+parentless dialog above every window of the application), 420 px wide, as tall as the room's
+window, placed beside it on the side the screen has room for (at the screen's edge when
+neither side has). Listed in the main window's Window menu under its room while open; closes
+with the room's window. Refreshed every 2 s, rates from the difference of the byte counters.
+
+- Top: Room, State, Sending (codec, encoder, SSRC), Server (our video's loss and RTT from
+  remote-inbound-rtp), **Upload ↑** and **Download ↓** totals (sum of every rate: our audio,
+  video and extra videos up; every feed and the SIP mix down).
+- A tree: Me, then our extra videos ("Living (mine)": source, size, fps, kbit/s sent, loss),
+  then the others, then "SIP callers, mixed". Each entry: a status (state, ↑/↓ kbit/s), and
+  under it Address, Audio, Video, Video received/sent, Jitter, Shown (grid, carousel, hidden,
+  speaker, hand up, video lost, placed). Entries are updated in place, keeping their expansion.
 
 ## 6. Connecting to foreign domains
 
@@ -484,6 +603,10 @@ resuming the feeds, `sending the screen at …` / `sending the camera at …`.
 - SylkServer's shared MSRP port keeps one stale entry when an outgoing actpass session is
   switched to a connector by sipsimple.
 - After a certbot renewal SylkServer takes the new certificate only when restarted.
+- Extra videos: 10 fps fixed; a local camera opened by GStreamer for an extra video must not be
+  the SDK's (the one our publisher sends); one screen at a time (the SDK's video device).
+- ONVIF discovery sends one multicast probe on the default interface only; Bonjour needs
+  python3-zeroconf.
 
 ## 10. Changes since the first version (2026-10-24), for the Cocoa port
 
@@ -567,3 +690,65 @@ once and serve both clients.
     calls whose incoming RTP stops for `rtp.timeout` now end.
 33. Linux screen capture (patch 52): the portal session's `Closed` signal ends the capture, as
     the desktop's sharing indicator does it. macOS has its own capture (patch 32).
+
+## 11. Changes of 2026-10-26, for the Cocoa port
+
+Numbered on from §10. The gateway, its protocol and the behaviour are the same for both
+clients; *Qt only* marks GStreamer details.
+
+### 11.1 Server (sylkserver webrtcgateway)
+
+34. **`ready-event` `features`**: `["sip-instance", "multiple-video-feeds"]` (`GATEWAY_FEATURES`,
+    `sylkrtc.ReadyEvent.features`, optional). Old clients ignore it (sylkrtc.js only checks
+    `sylkrtc`). Cocoa: read it; offer extra feeds only with `multiple-video-feeds`.
+35. **Child publishers**: `videoroom-join` `parent` + `label` (§4.8): video only, no chat leg,
+    named "<owner> <label>", validated (same room, a top-level publisher, at most 4), ended
+    with the parent, listed in `publishers` with `parent`/`label`. Old clients show them as
+    separate video-only participants with that name. Against an old gateway the fields are
+    ignored: each extra feed would be another participant with its own chat leg; hence the
+    feature check.
+36. Speakers (`videoroom-configure` `active_participants`) accept a child's id.
+
+### 11.2 Publishing several videos
+
+37. **Extra video feeds** (§4.8): a second local camera, the screen together with cameras, RTSP
+    cameras. Each is a sendonly peer connection of its own joined with `parent`/`label`; its
+    tile here is drawn from the local source. Cocoa: an `RTCPeerConnection` per extra feed with
+    an `RTCVideoSource` fed from AVFoundation (second camera) or an RTSP decoder; join with
+    `parent` = our publisher's session id.
+38. **Resolutions** 640×360 (default, 500 kbit/s), 1280×720 (1200), 320×180 (200), 10 fps;
+    changeable while sending; remembered per RTSP camera.
+39. *Qt only*: narrow codec preferences to codec + SSRC after the offer (fmtp mismatch →
+    `not-negotiated`); `rtspsrc` `select-stream` video only (Hikvision sends audio: an unlinked
+    pad stops it); GStreamer errors logged in full.
+40. **Auto speakers while sharing the screen**: screen alone → us; screen + one more video of
+    ours → both; more than two → none. Follows our feeds until someone chooses speakers.
+41. Our own extra videos can be **speakers** here too (looked up in our extra videos).
+
+### 11.3 Join Conference panel (§5.1)
+
+42. **Video sources** list with Local cameras / Screens / RTSP cameras groups (with
+    `multiple-video-feeds`; one choice without); spacing above group titles.
+43. Defaults on opening: Video unchecked; external camera checked; no screen; no RTSP camera;
+    always one camera or screen checked; a room change unchecks RTSP cameras.
+44. **Add network camera** window: ONVIF WS-Discovery + GetStreamUri (WS-Security digest),
+    Bonjour `_rtsp._tcp`; tested cameras first under their names; filter, sort; Test before
+    Add with a preview; credentials remembered per camera.
+45. **Profiles**: room, media, video lines, invitees; save/load/delete; none chosen on opening.
+46. **Last room** in the field on opening, random only with no history; any dialed
+    conference recorded; room forms deduplicated.
+47. **Invitees through the video room** when joining with video (`videoroom-invite`, status
+    reported); dropping contacts on a room's participants does the same while in its video
+    room; REFER outcomes logged otherwise.
+48. The checked videos are read before the room moves to the top of the history (moving it
+    changed the field and unchecked the RTSP cameras: a bug of the room-change rule).
+49. Heights: video lines twice the invitees; invitees take the space without Video.
+
+### 11.4 Room window and Conference info
+
+50. **Conference info** window (§5.8): narrow tree beside the room's window, totals up/down,
+    our extra videos under us, an ordinary window listed in the Window menu.
+51. **Add video…** (More, with the feature) and the tile menu's **Send at** / **Stop this video**
+    for our extra videos (§5.7).
+52. Statistics of our extra videos (outbound-rtp, remote-inbound-rtp) in Conference info.
+
