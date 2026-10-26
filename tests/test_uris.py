@@ -116,6 +116,22 @@ class PlaceholderTests(unittest.TestCase):
             self.assertFalse(uris.is_placeholder_uri(value), value)
 
 
+class LanAddressTests(unittest.TestCase):
+    def test_lan(self):
+        for uri in ('53164208@192.168.1.5', 'sip:alice@10.0.0.7:5060', 'x@172.16.3.4;transport=tcp', 'x@127.0.0.1',
+                    'x@[fe80::1]', 'x@169.254.10.1', 'mac@mymac.local', 'x@local',
+                    '3f2504e0-4f89-11d3-9a0c-0305e82c3301', 'urn:uuid:3f2504e0-4f89-11d3-9a0c-0305e82c3301',
+                    'sip:3f2504e0-4f89-11d3-9a0c-0305e82c3301@bonjour.local'):
+            self.assertTrue(uris.is_lan_address(uri), uri)
+
+    def test_not_lan(self):
+        for uri in ('alice@example.com', 'x@8.8.8.8', 'x@[2a00:1450:4001::1]', '+31201234567', 'room@conference.sip2sip.info', '', None):
+            self.assertFalse(uris.is_lan_address(uri), uri)
+
+    def test_not_fileable(self):
+        self.assertFalse(uris.is_fileable_address('53164208@192.168.1.5'))
+
+
 class IllegalUriTests(unittest.TestCase):
     def test_illegal(self):
         for value in ('338318@videoconference.sylk.link', 'x7f3@guest.sip2sip.info', 'X@Guest.example.com', '', None, '@example.com', 'alice @example.com'):

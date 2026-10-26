@@ -62,7 +62,7 @@ from sipsimple.threading.green import Command
 from blink.configuration.datatypes import IconDescriptor, FileURL
 from blink.configuration.settings import BlinkSettings
 from blink import addressbook_notify, addressbook_origin
-from blink.contact_repair import merge_plan, repair_plan, server_conference_uri
+from blink.contact_repair import membership_plan, merge_plan, repair_plan, server_conference_uri
 from blink.group_kinds import BLOCKED, CALLS, CONFERENCE, STAMPED_KINDS, TEL, duplicate_plan, find_group, group_kind, is_group, stamp_plan
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
@@ -74,7 +74,7 @@ from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
 from blink.pgp_keyids import address_keys
 from blink.messages import MessageManager
-from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, placeholder_instance_id
+from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, is_lan_address, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
 from blink.webrtc import conference_video_available
 from blink.widgets.buttons import SwitchViewButton
@@ -166,17 +166,46 @@ def is_bonjour_address(uri):
     id, the placeholder standing in for it (sip:<id>@bonjour.local), or an address a
     neighbour is announced at on this network. Never written to the addressbook: the
     XCAP document is shared by every device of the account, a neighbour exists only
-    here and its link-local address means something else on any other network."""
+    here and its link-local address means something else on any other network.
+    Any address on a LAN host counts, the neighbour visible now or not (is_lan_address)."""
     text = str(uri or '').strip()
     if not text:
         return False
-    if is_instance_id(text) or placeholder_instance_id(text):
+    if is_instance_id(text) or placeholder_instance_id(text) or is_lan_address(text):
         return True
     try:
         contact_model = QApplication.instance().main_window.contact_model
     except AttributeError:
         return False
     return URIUtils._bonjour_neighbour_at(contact_model, text) is not None
+
+
+def live_contacts(manager):
+    """The contacts of the addressbook, without those deleted in this run: a deleted contact
+    leaves AddressbookManager only once its deletion has been processed, and the repairs run
+    one after another."""
+    return [contact for contact in manager.get_contacts() if getattr(contact, '__state__', None) != 'deleted']
+
+
+# What an address type is called on screen; stored lowercase (every client's rule), shown capitalised
+URI_TYPE_LABELS = {'sip': QT_TRANSLATE_NOOP('contact_editor', "SIP"), 'xmpp': QT_TRANSLATE_NOOP('contact_editor', "XMPP"),
+                   'url': QT_TRANSLATE_NOOP('contact_editor', "URL"), 'tel': QT_TRANSLATE_NOOP('contact_editor', "Tel"),
+                   'mobile': QT_TRANSLATE_NOOP('contact_editor', "Mobile"), 'home': QT_TRANSLATE_NOOP('contact_editor', "Home"),
+                   'work': QT_TRANSLATE_NOOP('contact_editor', "Work"), 'other': QT_TRANSLATE_NOOP('contact_editor', "Other")}
+
+
+def uri_type_label(kind):
+    kind = str(kind or '').strip()
+    if not kind:
+        return ''
+    label = URI_TYPE_LABELS.get(kind.lower())
+    return translate('contact_editor', label) if label else kind[:1].upper() + kind[1:]
+
+
+def uri_label(uri):
+    """An address for a menu: with its type, unless that says nothing (sip, other, none)."""
+    kind = str(uri.type or '').strip().lower()
+    return str(uri.uri) if kind in ('', 'sip', 'other') else '%s (%s)' % (uri.uri, uri_type_label(kind))
 
 
 # Groups the software keeps by itself: their membership is not the user's to
@@ -310,9 +339,12 @@ def _heal_presence_blocks(to_create, to_restrict, to_fix):
     account = AccountManager().default_account
     created = []
     for address, name in to_create:
+        if is_lan_address(address):
+            ActivityLog().info(f'[presence] Not creating a blocked contact for {address}: an address on one network only is not written to the addressbook')
+            continue
         contact = addressbook.Contact()
         contact.name = name or address
-        contact.uris = [addressbook.ContactURI(uri=address, type='tel' if pstn_e164(address, account) else 'SIP')]
+        contact.uris = [addressbook.ContactURI(uri=address, type='tel' if pstn_e164(address, account) else 'sip')]
         contact.presence.policy = 'block'
         contact.presence.subscribe = False
         contact.save()
@@ -1219,7 +1251,7 @@ class CallsGroupFiler(object, metaclass=Singleton):
             if created:
                 contact = addressbook.Contact()
                 contact.name = address.partition('@')[0] if conference else (display_name or address)
-                contact.uris = [addressbook.ContactURI(uri=address, type='tel' if e164 else 'SIP')]
+                contact.uris = [addressbook.ContactURI(uri=address, type='tel' if e164 else 'sip')]
                 contact.preferred_media = 'messages'
                 contact.save()
                 publish_contact_for_groups(contact)
@@ -1247,17 +1279,23 @@ class CallsGroupFiler(object, metaclass=Singleton):
 class ContactRepair(object, metaclass=Singleton):
     """Repair the addressbook once per run, after it has loaded, as Blink for macOS does.
 
+    In this order:
+    - addresses on one network only (a Bonjour neighbour, a private, loopback or
+      link-local IP, .local) removed, a contact left without one deleted (lan-address)
     - addresses: a conference room back on its bridge domain (conference-domain),
-      a phone number in E.164 by the default account's dial rules (e164)
+      a phone number in E.164 by the default account's dial rules (e164), a SIP
+      address and every address type lowercase (lowercase)
     - names that are only an old spelling of the contact's address (echoed-name)
     - duplicate addresses within a contact (dup-uri)
+    - contacts sharing an address merged into the lowest id, which takes over
+      their addresses and groups (merge)
     - every phone number filed in Tel and every conference room in Conference
       (file-into-kind-group)
     - the test numbers the accounts' SylkServer publishes (testNumbers) in Test,
       as Sylk Mobile does (test-numbers); again whenever that configuration changes
-    Nothing is created or deleted but groups and duplicate addresses; a real
-    name is never touched. Each action is logged with its reason and stamped
-    with it (modified_reason). Sylk Mobile does the same from its side.
+    A real name is never touched. Each action is logged with its reason and
+    stamped with it (modified_reason). The rules are the ones every client
+    applies (python3-sylkrtc: sylk-addressbook --check shows where they differ).
     """
 
     settle_delay = 15  # seconds after the first XCAP reload
@@ -1320,15 +1358,18 @@ class ContactRepair(object, metaclass=Singleton):
         activity = ActivityLog()
         try:
             # healing what the server handed us: every device does it on its own, nothing to announce
+            # in this order: what may not be stored goes first, duplicates are found on repaired addresses,
+            # and the kind groups are filed with the merged contacts
             with AddressbookNotifier().quiet():
+                purged = self.purge_lan_addresses()
                 repaired = self.repair_contacts()
+                merged = self.merge_duplicates()
                 filed = self.file_into_kind_groups()
-                merged = self.merge_messages_duplicates()
                 self.file_test_numbers()
         except Exception as e:
             activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
         else:
-            activity.info(f'[addressbook] Repair done: {repaired} contacts repaired, {filed} contacts filed into Tel or Conference, {merged} duplicates merged')
+            activity.info(f'[addressbook] Repair done: {purged} LAN addresses purged, {repaired} contacts repaired, {merged} duplicates merged, {filed} contacts filed into Tel or Conference')
         # the addressbook has loaded and been healed: what adds contacts of its own (the server's
         # call history) waits for this, not to make contacts the addressbook was still bringing
         NotificationCenter().post_notification('BlinkAddressbookDidSettle', sender=self, data=NotificationData(accounts=set(self.settled)))
@@ -1426,7 +1467,7 @@ class ContactRepair(object, metaclass=Singleton):
                 if contact is None:
                     contact = addressbook.Contact()
                     contact.name = name or uri
-                    contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
+                    contact.uris = [addressbook.ContactURI(uri=uri, type='sip')]
                     contact.preferred_media = 'messages'
                     contact.save()
                     existing.append(contact)
@@ -1454,7 +1495,7 @@ class ContactRepair(object, metaclass=Singleton):
         manager = addressbook.AddressbookManager()
         account = AccountManager().default_account
         repaired = 0
-        for contact in list(manager.get_contacts()):
+        for contact in live_contacts(manager):
             try:
                 plan = repair_plan(contact, account)
             except Exception as e:
@@ -1468,6 +1509,10 @@ class ContactRepair(object, metaclass=Singleton):
                     uri.uri = wanted
                     reasons.append(reason)
                     activity.info(f"[addressbook] Repair ({reason}): address of {contact.name} ({contact.id}) {current} -> {wanted}")
+                for uri, current, wanted in plan.get('types', ()):
+                    uri.type = wanted
+                    reasons.append('lowercase')
+                    activity.info(f"[addressbook] Repair (lowercase): type of {uri.uri} in {contact.name} ({contact.id}) {current} -> {wanted}")
                 if 'name' in plan:
                     was, wanted = plan['name']
                     contact.name = wanted
@@ -1485,18 +1530,65 @@ class ContactRepair(object, metaclass=Singleton):
             repaired += 1
         return repaired
 
-    def merge_messages_duplicates(self):
-        """Merge contacts of the Messages group that share a canonical address, keeping the
-        lowest id, the rule every client uses so they all keep the same copy (blink.contact_repair.merge_plan)."""
+    def purge_lan_addresses(self):
+        """Remove what belongs to one network only (is_lan_address: a Bonjour neighbour, a private,
+        loopback or link-local IP, a .local host): the XCAP addressbook is shared by every device of
+        the account, on any network, and the Bonjour account has none. A contact left without an
+        address is deleted. Public IP addresses stay."""
         activity = ActivityLog()
         manager = addressbook.AddressbookManager()
-        try:
-            group = manager.get_group(MESSAGES_GROUP_ID)
-        except KeyError:
-            return 0
+        purged = 0
+        groups = list(manager.get_groups())
+        changed = {}            # group id -> group a deleted contact was taken out of, saved once at the end
+        with addressbook_origin.reason('lan-address'), addressbook.AddressbookManager.transaction():
+            for contact in live_contacts(manager):
+                local = [uri for uri in contact.uris if is_lan_address(uri.uri)]
+                if not local:
+                    continue
+                purged += len(local)
+                addresses = ', '.join(str(uri.uri) for uri in local)
+                if len(local) == len(contact.uris):
+                    for group in groups:
+                        if contact.id in group.contacts:
+                            group.contacts.remove(contact)
+                            changed[group.id] = group
+                    try:
+                        contact.delete()
+                    except Exception as e:
+                        activity.error(f'[addressbook] Cannot delete {contact.name} ({contact.id}), on one network only ({addresses}): {e!r}')
+                    else:
+                        activity.info(f'[addressbook] Repair (lan-address): deleted {contact.name} ({contact.id}), its addresses are on one network only: {addresses}')
+                    continue
+                default = contact.uris.default
+                for uri in local:
+                    contact.uris.remove(uri)
+                if default is not None and any(getattr(default, 'id', None) == getattr(uri, 'id', None) for uri in local):
+                    contact.uris.default = next(iter(contact.uris), None)
+                try:
+                    contact.save()
+                except Exception as e:
+                    activity.error(f'[addressbook] Cannot remove {addresses} from {contact.name} ({contact.id}): {e!r}')
+                else:
+                    activity.info(f'[addressbook] Repair (lan-address): removed {addresses} from {contact.name} ({contact.id}), on one network only')
+            for group in changed.values():
+                group.save()
+        return purged
+
+    def merge_duplicates(self):
+        """Contacts sharing a canonical address are one contact (the rule of every client): merged
+        into the lowest id (blink.contact_repair.merge_plan), with every address and every group of
+        the copies (membership_plan: not Deleted unless all of them were, not Messages for a room,
+        Blocked is asked, not merged). The whole addressbook, not only Messages."""
+        activity = ActivityLog()
+        manager = addressbook.AddressbookManager()
         account = AccountManager().default_account
-        plan = merge_plan(list(group.contacts), lambda uri: canonical_uri(uri, account))
+        plan = merge_plan(live_contacts(manager), lambda uri: canonical_uri(uri, account))
+        if not plan:
+            return 0
+        groups = list(manager.get_groups())
+        blocked = blocked_group()
         deleted = 0
+        changed = {}            # group id -> group, saved once at the end
         with addressbook_origin.reason('merge'), addressbook.AddressbookManager.transaction():
             for cluster in plan:
                 survivor, losers, donor = cluster['survivor'], cluster['losers'], cluster['name']
@@ -1505,20 +1597,32 @@ class ContactRepair(object, metaclass=Singleton):
                     changes.append(f'name {survivor.name!r} -> {donor.name!r} (from {donor.id})')
                     survivor.name = donor.name
                 for uri, owner in cluster['uris']:
-                    survivor.uris.add(addressbook.ContactURI(uri=uri.uri, type=uri.type))
+                    survivor.uris.add(addressbook.ContactURI(uri=uri.uri, type=(uri.type or '').lower() or None))
                     changes.append(f'+uri {uri.uri} (from {owner.id})')
+                room = any(is_conference_uri(str(uri.uri), account) for uri in survivor.uris)
+                membership = membership_plan(survivor, losers, groups, DELETED_GROUP_ID, MESSAGES_GROUP_ID,
+                                             blocked.id if blocked is not None else None, room)
+                changes += [f'+group {group.name}' for group in membership['join']] + [f'-group {group.name}' for group in membership['leave']]
                 activity.info(f"[addressbook] MERGE keep id={survivor.id} name={survivor.name!r} drop={','.join(loser.id for loser in losers)}" + (' -- ' + '; '.join(changes) if changes else ''))
+                for group in membership['ask']:
+                    activity.warning(f"[addressbook]   {', '.join(loser.id for loser in losers if loser.id in group.contacts)} in '{group.name}', {survivor.id} is not: not merged, block it by hand if it should be")
                 if changes:
                     try:
                         survivor.save()
                     except Exception as e:
                         activity.error(f'[addressbook]   cannot save {survivor.id}, leaving this cluster alone: {e!r}')
                         continue
+                for group in membership['join']:
+                    group.contacts.add(survivor)
+                    changed[group.id] = group
+                for group in membership['leave']:
+                    group.contacts.remove(survivor)
+                    changed[group.id] = group
                 for loser in losers:
-                    try:
-                        group.contacts.remove(loser)
-                    except Exception:
-                        pass
+                    for group in groups:
+                        if loser.id in group.contacts:
+                            group.contacts.remove(loser)
+                            changed[group.id] = group
                     try:
                         loser.delete()
                     except Exception as e:
@@ -1526,7 +1630,7 @@ class ContactRepair(object, metaclass=Singleton):
                     else:
                         deleted += 1
                         activity.info(f'[addressbook]   deleted id={loser.id} name={loser.name!r}')
-            if deleted:
+            for group in changed.values():
                 group.save()
         return deleted
 
@@ -1539,7 +1643,7 @@ class ContactRepair(object, metaclass=Singleton):
         in_trash = {member.id for member in deleted.contacts} if deleted is not None else set()
         blocked = blocked_group()
         in_trash |= {member.id for member in blocked.contacts} if blocked is not None else set()               # so does a blocked one
-        contacts = [contact for contact in manager.get_contacts() if contact.id not in in_trash]      # a deleted contact stays out
+        contacts = [contact for contact in live_contacts(manager) if contact.id not in in_trash]      # a deleted contact stays out
 
         def addresses(contact):
             return [str(uri.uri) for uri in contact.uris]
@@ -1734,7 +1838,7 @@ class MessagesGroupFiler(object, metaclass=Singleton):
         new_contact = addressbook.Contact()
         # a conference room is named after itself: the room, not the whole address
         new_contact.name = key.partition('@')[0] if is_conference_uri(key) else (display_name or key)
-        new_contact.uris = [addressbook.ContactURI(uri=key, type='SIP' if '@' in key else 'tel')]
+        new_contact.uris = [addressbook.ContactURI(uri=key, type='sip' if '@' in key else 'tel')]
         new_contact.preferred_media = 'messages'
         new_contact.save()
         publish_contact_for_groups(new_contact)    # several new members are added before the group saves
@@ -4664,7 +4768,7 @@ class ContactURI(object):
         self.__dict__.update(state)
 
     def __unicode__(self):
-        return '%s (%s)' % (self.uri.uri, self.uri.type) if self.uri.type else str(self.uri.uri)
+        return '%s (%s)' % (self.uri.uri, uri_type_label(self.uri.type)) if self.uri.type else str(self.uri.uri)
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -5301,7 +5405,7 @@ class ContactDetailDelegate(QStyledItemDelegate, ColorHelperMixin):
         if contact_uri.uri.uri:
             instance_id = neighbour_instance_id(contact_uri.contact, contact_uri.uri.uri)
             uri_text = instance_id or contact_uri.uri.uri
-            type_text = None if instance_id else contact_uri.uri.type
+            type_text = None if instance_id else uri_type_label(contact_uri.uri.type)
             color_group = QPalette.ColorGroup.Disabled if not option.state & QStyle.StateFlag.State_Enabled else QPalette.ColorGroup.Normal if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
             text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, option, widget)
             text_rect.setRight(option.rect.right() - 5)
@@ -6241,7 +6345,7 @@ class ContactModel(QAbstractListModel):
         contact = addressbook.Contact(id)
         contact.name = name
         contact.preferred_media = preferred_media
-        contact.uris = [addressbook.ContactURI(uri=uri, type='SIP')]
+        contact.uris = [addressbook.ContactURI(uri=uri, type='sip')]
         contact.icon = IconDescriptor(FileURL(icon), str(int(os.stat(icon).st_mtime)))
         icon_manager = IconManager()
         icon_manager.store_file(id, icon)
@@ -6256,7 +6360,7 @@ class ContactModel(QAbstractListModel):
             contact.preferred_media = data['preferred_media']
             modified = True
         if 'uri' in data and data['uri'] not in {uri.uri for uri in contact.uris}:
-            uri = addressbook.ContactURI(uri=data['uri'], type='SIP')
+            uri = addressbook.ContactURI(uri=data['uri'], type='sip')
             contact.uris.add(uri)
             if len(contact.uris) > 1:
                 contact.uris.default = uri
@@ -6887,14 +6991,14 @@ class ContactListView(QListView):
                 call_submenu = menu.addMenu(translate('contact_list', 'Send Messages'))
                 call_submenu.setEnabled(not conference)    # a room is joined (MSRP, RTP), it has no messages
                 for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    uri_text = uri_label(uri)
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_SendSMS, uri))
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Start Audio Call'))
                 for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    uri_text = uri_label(uri)
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartAudioCall, uri))
                     call_submenu.addAction(call_item)
@@ -6902,14 +7006,14 @@ class ContactListView(QListView):
                 call_submenu = menu.addMenu(translate('contact_list', 'Start Video Call'))
                 call_submenu.setEnabled(not conference or conference_video_available())    # a room's video is WebRTC (blink.webrtc.videoroom)
                 for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    uri_text = uri_label(uri)
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartVideoCall, uri))
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Send File(s)...'))
                 for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    uri_text = uri_label(uri)
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_SendFiles, uri))
                     call_submenu.addAction(call_item)
@@ -6918,7 +7022,7 @@ class ContactListView(QListView):
                     call_submenu = menu.addMenu(translate('contact_list', 'Request Screen'))
                     call_submenu.setEnabled(not conference and can_view_screens())
                     for uri in contact.uris:
-                        uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                        uri_text = uri_label(uri)
                         call_item = QAction(uri_text, self)
                         call_item.triggered.connect(partial(self._AH_RequestScreen, uri))
                         call_submenu.addAction(call_item)
@@ -6926,14 +7030,14 @@ class ContactListView(QListView):
                     call_submenu = menu.addMenu(translate('contact_list', 'Share My Screen'))
                     call_submenu.setEnabled(not conference and can_share_my_screen())
                     for uri in contact.uris:
-                        uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                        uri_text = uri_label(uri)
                         call_item = QAction(uri_text, self)
                         call_item.triggered.connect(partial(self._AH_ShareMyScreen, uri))
                         call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Start MSRP Chat'))
                 for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    uri_text = uri_label(uri)
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(partial(self._AH_StartChatSession, uri))
                     call_submenu.addAction(call_item)
@@ -6959,7 +7063,7 @@ class ContactListView(QListView):
             if many_uris and can_transfer:
                 call_submenu = menu.addMenu(translate('contact_list', 'Transfer Call'))
                 for uri in contact.uris:
-                    uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
+                    uri_text = uri_label(uri)
                     call_item = QAction(uri_text, self)
                     call_item.triggered.connect(lambda: self._AH_TransferCall(uri))
                     call_submenu.addAction(call_item)
@@ -8151,19 +8255,33 @@ class ContactURIItem(object):
 
 
 class URITypeComboBox(QComboBox):
-    builtin_types = (None,
-                     QT_TRANSLATE_NOOP('contact_editor', "Mobile"),
-                     QT_TRANSLATE_NOOP('contact_editor', "Home"),
-                     QT_TRANSLATE_NOOP('contact_editor', "Work"),
-                     QT_TRANSLATE_NOOP('contact_editor', "SIP"),
-                     QT_TRANSLATE_NOOP('contact_editor', "XMPP"),
-                     QT_TRANSLATE_NOOP('contact_editor', "Other"))
+    """The type of an address. Shown capitalised and translated, stored lowercase (the
+    rule of every client): each item carries the stored type as its data."""
+    builtin_types = (None, 'mobile', 'home', 'work', 'sip', 'xmpp', 'other')
 
     def __init__(self, parent=None, types=()):
         super(URITypeComboBox, self).__init__(parent)
         self.setEditable(True)
-        self.addItems((translate('contact_editor', item) for item in self.builtin_types))
-        self.addItems(sorted(set(types) - set(self.builtin_types)))
+        for kind in self.builtin_types:
+            self.addItem(uri_type_label(kind) if kind else '', kind)
+        for kind in sorted({str(kind).strip().lower() for kind in types if kind and str(kind).strip()} - set(self.builtin_types)):
+            self.addItem(uri_type_label(kind), kind)
+
+    def setType(self, kind):
+        kind = str(kind or '').strip().lower() or None
+        index = self.findData(kind)
+        if index < 0:
+            self.addItem(uri_type_label(kind), kind)
+            index = self.count() - 1
+        self.setCurrentIndex(index)
+
+    def uri_type(self):
+        """The stored type: the item's when its label is shown, else what was typed, lowercase."""
+        text = self.currentText().strip()
+        index = self.findText(text)
+        if index >= 0:
+            return self.itemData(index)
+        return text.lower() or None
 
 
 class EmbeddedRadioButton(QRadioButton):
@@ -8216,7 +8334,7 @@ class ContactURIDelegate(QItemDelegate):
     def setEditorData(self, widget, index):
         column = index.column()
         if column == ContactURIModel.TypeColumn:
-            widget.setCurrentIndex(widget.findText(index.data(Qt.ItemDataRole.EditRole)))
+            widget.setType(index.data(Qt.ItemDataRole.EditRole))
         elif column == ContactURIModel.DefaultColumn:
             widget.setChecked(index.data(Qt.ItemDataRole.EditRole))
         else:
@@ -8225,7 +8343,7 @@ class ContactURIDelegate(QItemDelegate):
     def setModelData(self, widget, model, index):
         column = index.column()
         if column == ContactURIModel.TypeColumn:
-            model.setData(index, widget.currentText(), Qt.ItemDataRole.EditRole)
+            model.setData(index, widget.uri_type(), Qt.ItemDataRole.EditRole)
         elif column == ContactURIModel.DefaultColumn:
             model.setData(index, widget.isChecked(), Qt.ItemDataRole.EditRole)
         else:
@@ -8263,7 +8381,7 @@ class ContactURIModel(QAbstractTableModel):
     TypeColumn    = 1
     DefaultColumn = 2
 
-    default_uri_type = 'SIP'
+    default_uri_type = 'sip'
 
     def __init__(self, parent=None):
         super(ContactURIModel, self).__init__(parent)
@@ -8317,7 +8435,7 @@ class ContactURIModel(QAbstractTableModel):
                 item.ghost = False
                 self._add_item(ContactURIItem(None, None, self.default_uri_type, False, ghost=True))
         elif column == ContactURIModel.TypeColumn:
-            self.items[row].type = value or None
+            self.items[row].type = str(value or '').strip().lower() or None     # types are stored lowercase
         elif column == ContactURIModel.DefaultColumn:
             if value:
                 for position, item in enumerate(self.items):
@@ -8735,13 +8853,13 @@ class ContactEditorDialog(base_class, ui_class):
         else:
             contact = self.edited_contact
 
-        # A Bonjour neighbour's address is never added to the addressbook (is_bonjour_address);
+        # A Bonjour neighbour's address, or one on a LAN host, is never added to the addressbook (is_bonjour_address);
         # one the contact already carries is left as it is.
         refused = [item.uri for item in self.contact_uri_model.items if item.uri and item.id not in contact.uris.ids() and is_bonjour_address(item.uri)]
         if refused:
             ActivityLog().info(f"[contacts] Not adding {', '.join(str(uri) for uri in refused)} to {self.name_editor.text() or 'a contact'}: a Bonjour neighbour is not written to the addressbook")
-            QMessageBox.information(self, translate('contact_editor', 'Bonjour Neighbour'),
-                                    translate('contact_editor', 'A Bonjour neighbour is reached on this network only, so it is not saved in the address book: %s') % ', '.join(str(uri) for uri in refused))
+            QMessageBox.information(self, translate('contact_editor', 'Address on This Network Only'),
+                                    translate('contact_editor', 'A Bonjour neighbour or an address on a local network is reached from this network only, so it is not saved in the address book every device shares: %s') % ', '.join(str(uri) for uri in refused))
         if self.edited_contact is None and not any(item.uri and item.uri not in refused for item in self.contact_uri_model.items):
             self.contact_uri_model.reset()
             self._reset_groups()
@@ -8758,7 +8876,7 @@ class ContactEditorDialog(base_class, ui_class):
                 contact_uri = addressbook.ContactURI()
                 contact.uris.add(contact_uri)
             contact_uri.uri = item.uri
-            contact_uri.type = item.type
+            contact_uri.type = (item.type or '').lower() or None
             if item.default:
                 contact.uris.default = contact_uri
 

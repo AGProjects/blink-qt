@@ -10,7 +10,7 @@ No Qt and no sipsimple: a contact is anything with name and uris (each with
 uri, and id).
 """
 
-__all__ = ['server_conference_uri', 'echoed_name_replacement', 'repair_plan', 'is_user_named', 'merge_plan']
+__all__ = ['server_conference_uri', 'echoed_name_replacement', 'repair_plan', 'is_user_named', 'merge_plan', 'membership_plan', 'is_url']
 
 from types import SimpleNamespace
 
@@ -163,35 +163,84 @@ def merge_plan(contacts, key_of):
     return sorted(plan, key=lambda cluster: cluster['survivor'].id)
 
 
+def is_url(uri, kind=None):
+    """A web address (type url, or http: or https:): it keeps its case."""
+    return str(kind or '').lower() == 'url' or str(uri or '').strip().lower().startswith(('http:', 'https:'))
+
+
+def membership_plan(survivor, losers, groups, deleted_id, messages_id, blocked_id=None, is_room=False):
+    """Which groups the survivor of a merge joins and leaves (a contact folded into another is in its groups).
+
+    groups are objects with id and contacts (members with id). Not merged:
+      - Deleted, unless every copy was deleted; a survivor in Deleted whose copies were not leaves it
+      - Messages, for a conference room (no room is in Messages)
+      - Blocked, unless the survivor is blocked too: asked, not decided (returned in 'ask')
+    Returns {'join': [group], 'leave': [group], 'ask': [group]}.
+    """
+    ids = {survivor.id} | {loser.id for loser in losers}
+
+    def members(group):
+        return {getattr(member, 'id', member) for member in group.contacts}
+
+    deleted = next((group for group in groups if group.id == deleted_id), None)
+    all_deleted = deleted is not None and ids <= members(deleted)
+    join, leave, ask = [], [], []
+    for group in groups:
+        inside = members(group)
+        if survivor.id in inside:
+            if group is deleted and not all_deleted:
+                leave.append(group)
+            continue
+        if not inside & ids:
+            continue
+        if group is deleted:
+            continue                    # all deleted: the survivor already is
+        if group.id == messages_id and is_room:
+            continue
+        if blocked_id is not None and group.id == blocked_id:
+            ask.append(group)
+            continue
+        join.append(group)
+    return {'join': join, 'leave': leave, 'ask': ask}
+
+
 def repair_plan(contact, account=None):
     """What repairing one contact would change, without changing it.
 
     Returns a dict, empty when nothing is to be done:
-      'addresses':  [(uri, current, wanted, reason)]   reason 'conference-domain' or 'e164'
+      'addresses':  [(uri, current, wanted, reason)]   reason 'conference-domain', 'e164' or 'lowercase'
+      'types':      [(uri, current, wanted)]           reason 'lowercase'
       'name':       (current, wanted)                  reason 'echoed-name'
       'duplicates': [(uri, kept_uri)]                  reason 'dup-uri'
     The name and the duplicates are judged on the addresses as they will be,
     so two spellings of one number become one, and a name echoing the old
-    spelling follows it, in the same pass. Only a number pstn_e164 resolves
-    is rewritten: anything else would be rewritten just to change its case.
+    spelling follows it, in the same pass. A SIP address and every type are
+    stored lowercase, the rule of all the clients (a URL keeps its case).
     """
-    addresses = []
+    addresses, types = [], []
     for uri in list(contact.uris):
         current = str(uri.uri)
+        kind = str(getattr(uri, 'type', None) or '')
         wanted = server_conference_uri(current)
         reason = 'conference-domain'
         if wanted == current:
             e164 = pstn_e164(current, account)
             if e164:
                 wanted, reason = e164, 'e164'
+        if wanted == current and not is_url(current, kind) and current != current.lower():
+            wanted, reason = current.lower(), 'lowercase'
         if wanted != current:
             addresses.append((uri, current, wanted, reason))
+        if kind != kind.lower():
+            types.append((uri, kind, kind.lower()))
     wanted_by_uri = {id(uri): wanted for uri, current, wanted, reason in addresses}
     future = [SimpleNamespace(uri=wanted_by_uri.get(id(uri), str(uri.uri)), id=getattr(uri, 'id', None), original=uri) for uri in contact.uris]
 
     plan = {}
     if addresses:
         plan['addresses'] = addresses
+    if types:
+        plan['types'] = types
     renamed = echoed_name_replacement(SimpleNamespace(name=getattr(contact, 'name', ''), uris=future))
     if renamed:
         plan['name'] = (str(getattr(contact, 'name', '') or ''), renamed)

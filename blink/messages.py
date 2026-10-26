@@ -4108,7 +4108,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         from blink import addressbook_origin
         contact = addressbook.Contact()
         contact.name = account.display_name or str(account.id)
-        contact.uris = [addressbook.ContactURI(uri=str(account.id), type='SIP')]
+        contact.uris = [addressbook.ContactURI(uri=str(account.id), type='sip')]
         with addressbook_origin.reason('key-escrow'):
             contact.save()
         ActivityLog().info(f'[pgp] Key escrow: no contact carries {account.id}, created one ({contact.id}) to keep the key on')

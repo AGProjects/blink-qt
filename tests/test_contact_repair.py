@@ -16,10 +16,14 @@ def _load(name, filename):
     return module
 
 
-_saved = {name: sys.modules.get(name) for name in ('blink', 'blink.pstn_normalize', 'blink.contact_repair')}
+_saved = {name: sys.modules.get(name) for name in ('blink', 'blink.pstn_normalize', 'blink.contact_repair', 'blink.conference')}
 _package = types.ModuleType('blink')
 _package.__path__ = []
 sys.modules['blink'] = _package
+# blink.conference reads the accounts (sipsimple): a bridge at the sip2sip conference server stands in
+_conference = types.ModuleType('blink.conference')
+_conference.is_conference_uri = lambda uri, account=None: str(uri or '').lower().rpartition('@')[2] in ('conference.sip2sip.info', 'videoconference.sip2sip.info')
+sys.modules['blink.conference'] = _conference
 _load('blink.pstn_normalize', 'pstn_normalize.py')
 repair = _load('blink.contact_repair', 'contact_repair.py')
 
@@ -45,8 +49,9 @@ class _Account(object):
 NL = _Account()
 
 
-def contact(name, *uris):
-    return types.SimpleNamespace(name=name, uris=[types.SimpleNamespace(uri=uri, id='u%d' % index) for index, uri in enumerate(uris)])
+def contact(name, *uris, types_=()):
+    kinds = list(types_) + [None] * (len(uris) - len(types_))
+    return types.SimpleNamespace(name=name, uris=[types.SimpleNamespace(uri=uri, id='u%d' % index, type=kind) for index, (uri, kind) in enumerate(zip(uris, kinds))])
 
 
 class ConferenceTests(unittest.TestCase):
@@ -88,6 +93,46 @@ class PlanTests(unittest.TestCase):
     def test_duplicate_spelling_case(self):
         plan = repair.repair_plan(contact('Echo', 'echo@conference.sip2sip.info', 'Echo@conference.sip2sip.info'), NL)
         self.assertEqual(len(plan['duplicates']), 1)
+
+
+class LowercaseTests(unittest.TestCase):
+    def test_addresses_and_types(self):
+        plan = repair.repair_plan(contact('Joe', 'Joe@Sylk.Link', '+31201234567', 'https://Example.com/Joe', types_=('SIP', 'Tel', 'URL')), NL)
+        self.assertEqual([(current, wanted, reason) for uri, current, wanted, reason in plan['addresses']],
+                         [('Joe@Sylk.Link', 'joe@sylk.link', 'lowercase')])
+        self.assertEqual([(current, wanted) for uri, current, wanted in plan['types']], [('SIP', 'sip'), ('Tel', 'tel'), ('URL', 'url')])
+
+    def test_already_lowercase(self):
+        self.assertEqual(repair.repair_plan(contact('Joe', 'joe@sylk.link', types_=('sip',)), NL), {})
+
+
+class MembershipTests(unittest.TestCase):
+    def group(self, id, *members):
+        return types.SimpleNamespace(id=id, name=id, contacts=[types.SimpleNamespace(id=member) for member in members])
+
+    def setUp(self):
+        self.survivor, self.loser = types.SimpleNamespace(id='a'), types.SimpleNamespace(id='b')
+
+    def plan(self, *groups, room=False):
+        result = repair.membership_plan(self.survivor, [self.loser], list(groups), '_deleted', '_messages', '_blocked', room)
+        return {key: [group.id for group in value] for key, value in result.items()}
+
+    def test_losers_groups_are_joined(self):
+        self.assertEqual(self.plan(self.group('work', 'b'), self.group('family', 'a', 'b'), self.group('other', 'c')),
+                         {'join': ['work'], 'leave': [], 'ask': []})
+
+    def test_deleted(self):
+        self.assertEqual(self.plan(self.group('_deleted', 'b')), {'join': [], 'leave': [], 'ask': []})           # only the copy was deleted
+        self.assertEqual(self.plan(self.group('_deleted', 'a')), {'join': [], 'leave': ['_deleted'], 'ask': []})  # the copy was not
+        self.assertEqual(self.plan(self.group('_deleted', 'a', 'b')), {'join': [], 'leave': [], 'ask': []})       # both were
+
+    def test_room_not_in_messages(self):
+        self.assertEqual(self.plan(self.group('_messages', 'b'), room=True), {'join': [], 'leave': [], 'ask': []})
+        self.assertEqual(self.plan(self.group('_messages', 'b')), {'join': ['_messages'], 'leave': [], 'ask': []})
+
+    def test_blocked_is_asked(self):
+        self.assertEqual(self.plan(self.group('_blocked', 'b')), {'join': [], 'leave': [], 'ask': ['_blocked']})
+        self.assertEqual(self.plan(self.group('_blocked', 'a', 'b')), {'join': [], 'leave': [], 'ask': []})
 
 
 class MergeTests(unittest.TestCase):

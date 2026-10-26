@@ -398,9 +398,10 @@ class ConversationHeader(QWidget):
     def _fill_address_menu(self):
         menu = self.address_menu
         menu.clear()
+        from blink.contacts import uri_type_label       # types are stored lowercase, shown capitalised
         current = str(self.uri.uri) if self.uri is not None else ''
         for uri in self._addresses():
-            label = str(mangled_uri(str(uri.uri))) + (f'   ({uri.type})' if getattr(uri, 'type', None) else '')
+            label = str(mangled_uri(str(uri.uri))) + (f'   ({uri_type_label(uri.type)})' if getattr(uri, 'type', None) else '')
             action = menu.addAction(label, lambda uri=uri: self.addressChosen.emit(uri))
             action.setCheckable(True)
             action.setChecked(str(uri.uri) == current)

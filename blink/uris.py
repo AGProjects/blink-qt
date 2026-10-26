@@ -14,8 +14,9 @@ bare_instance_id, illegal_uri, isFileableAddress) and SMSViewController
 """
 
 __all__ = ['canonical_uri', 'bare_instance_id', 'is_instance_id', 'bonjour_placeholder_uri', 'placeholder_instance_id',
-           'is_placeholder_uri', 'illegal_uri', 'is_fileable_address', 'BONJOUR_ACCOUNT_ID']
+           'is_placeholder_uri', 'illegal_uri', 'is_fileable_address', 'is_lan_address', 'BONJOUR_ACCOUNT_ID']
 
+import ipaddress
 import re
 
 from blink.pstn_normalize import canonical_pstn_uri, pstn_e164
@@ -156,6 +157,33 @@ def illegal_uri(uri):
     return not host or any(c.isspace() for c in text) or (at and not user)
 
 
+def is_lan_address(uri):
+    """Whether this address belongs to one network only: a Bonjour instance id or its
+    placeholder, or a host that is a private, loopback or link-local IP or a .local name.
+
+    The XCAP addressbook is shared by every device of the account, on any network, and the
+    Bonjour account has none: such an address is never written to it, and one found there
+    is removed (ContactRepair.purge_lan_addresses). Public IP addresses are not LAN addresses.
+    """
+    text = _strip_scheme(str(uri or '').strip()).split(';')[0]
+    if not text:
+        return False
+    if is_instance_id(text) or placeholder_instance_id(text):
+        return True
+    host = text.rpartition('@')[2].strip().lower()
+    if host.startswith('['):
+        address = host[1:].partition(']')[0]
+    elif host.count(':') == 1:
+        address = host.partition(':')[0]          # host:port
+    else:
+        address = host
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return address == 'local' or address.endswith('.local')
+    return ip.is_private or ip.is_loopback or ip.is_link_local
+
+
 def is_fileable_address(uri, account=None, bonjour_keys=()):
     """Whether this conversation key may become an address book contact.
 
@@ -165,6 +193,7 @@ def is_fileable_address(uri, account=None, bonjour_keys=()):
       id, for one); a bare phone number IS an address, it is how the
       addressbook stores one
     - a placeholder address
+    - an address on one network only (is_lan_address)
     - a key belonging to a Bonjour neighbour (bonjour_keys are canonical keys)
     """
     key = str(uri or '').strip()
@@ -174,7 +203,7 @@ def is_fileable_address(uri, account=None, bonjour_keys=()):
         account = _default_account()
     if '@' not in key and not pstn_e164(key, account):
         return False
-    if is_placeholder_uri(key):
+    if is_placeholder_uri(key) or is_lan_address(key):
         return False
     if bonjour_keys and canonical_uri(key, account) in bonjour_keys:
         return False
