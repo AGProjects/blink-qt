@@ -5725,6 +5725,31 @@ class ContactModel(QAbstractListModel):
                 index = self.index(self.items.index(contact))
                 self.dataChanged.emit(index, index)
         self.update_own_contact_rows(changed)     # our own contact shows up with its first message
+        if moving:
+            self._promote_newest_group()
+
+    def _promote_newest_group(self):
+        """The group whose contact had the most recent message or call goes to the top of the list:
+        a call puts Calls (or Tel, Conference) above Messages, a message puts Messages back."""
+        if self.state != 'started':
+            return
+        groups = self.items[GroupList]
+        if not groups:
+            return
+        newest_group, newest = None, None
+        for item in self.items:
+            if not isinstance(item, Contact) or row_time_kind(getattr(item.group, 'settings', None)) is None:
+                continue
+            if own_contact_hidden(item):
+                continue        # a collapsed group still counts, a hidden own contact does not
+            when = item.row_time
+            when = when.timestamp() if when is not None else None     # message and call times may differ in tz-awareness
+            if when is not None and (newest is None or when > newest):
+                newest_group, newest = item.group, when
+        if newest_group is None or newest_group not in groups or groups[0] is newest_group:
+            return
+        self.moveGroup(newest_group, groups[0])
+        ActivityLog().info(f'[contacts] Moved the {newest_group.name!r} group to the top of the contact list: it has the most recent activity')
 
     def _reposition_contacts(self, contacts):
         """Move several contacts to their places in one layout change (each move done on its own makes
@@ -6201,6 +6226,8 @@ class ContactModel(QAbstractListModel):
             if deleted or not is_deleted_contact(contact):     # a deleted contact is shown in Deleted only
                 self.addContact(Contact(contact, group))
         self._update_deleted_group_visibility()
+        if notification.data.modified['contacts'].added and row_time_kind(notification.sender) is not None:
+            self._promote_newest_group()      # filed after its call or message: its group may now be the newest
         if deleted:
             self._hide_elsewhere(list(notification.data.modified['contacts'].added))
             self._show_elsewhere(list(notification.data.modified['contacts'].removed))
