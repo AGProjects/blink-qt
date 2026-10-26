@@ -9,7 +9,6 @@ import sys
 import threading
 import time
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCurve, QModelIndex, QPropertyAnimation, QSortFilterProxyModel
 from PyQt6.QtCore import QByteArray, QEvent, QLocale, QMimeData, QPoint, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
@@ -68,7 +67,7 @@ from blink.group_kinds import BLOCKED, CALLS, CONFERENCE, STAMPED_KINDS, TEL, du
 from blink.pstn_normalize import canonical_pstn_uri, is_conference_uri, pstn_e164
 from blink.logging import ActivityLog
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
-from blink.resources import ApplicationData, Resources, IconManager, themed_icon
+from blink.resources import ApplicationData, Resources, IconManager, themed_icon, load_ui_type
 from blink.account_storage import AccountStorage, contact_picture, storage_account, valid_name
 from blink.avatars import avatar_icon, circular_icon
 from blink.sessions import SessionManager, StreamDescription
@@ -4678,7 +4677,7 @@ class ContactURI(object):
             notification.center.post_notification('BlinkContactURIDidChange', sender=self)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('contact.ui'))
+ui_class, base_class = load_ui_type('contact.ui')
 
 
 _mangled_pixmaps = {}
@@ -4828,7 +4827,7 @@ class ContactWidget(base_class, ui_class):
 del ui_class, base_class
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('contact_group.ui'))
+ui_class, base_class = load_ui_type('contact_group.ui')
 
 
 class GroupWidget(base_class, ui_class):
@@ -8516,7 +8515,7 @@ class GroupSelectionMenu(QMenu):
         super(GroupSelectionMenu, self).keyPressEvent(event)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('contact_editor.ui'))
+ui_class, base_class = load_ui_type('contact_editor.ui')
 
 
 @implementer(IObserver)

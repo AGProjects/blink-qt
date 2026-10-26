@@ -1,7 +1,7 @@
 
 import re
 
-from PyQt6.QtCore import Qt, QEvent, pyqtSignal
+from PyQt6.QtCore import Qt, QEvent, QPointF, QSize, pyqtSignal
 from PyQt6.QtGui import QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import QAbstractButton, QToolButton, QLineEdit, QBoxLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QSpacerItem, QStyle, QStyleOptionFrame, QWidget
 
@@ -136,7 +136,9 @@ class ValidatingLineEdit(LineEdit):
         super(ValidatingLineEdit, self).__init__(parent)
         self.invalid_entry_label = QLabel(self)
         self.invalid_entry_label.setFixedSize(18, 16)
-        self.invalid_entry_label.setPixmap(QPixmap(Resources.get('icons/invalid16.png')))
+        # the 128 px picture drawn at 16 px for the screen's pixel ratio (the 16 px one is blurred on a scaled screen)
+        from blink.resources import device_pixel_ratio
+        self.invalid_entry_label.setPixmap(QIcon(Resources.get('icons/invalid.png')).pixmap(QSize(16, 16), device_pixel_ratio()))
         self.invalid_entry_label.setScaledContents(False)
         self.invalid_entry_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.invalid_entry_label.setObjectName('invalid_entry_label')
@@ -222,41 +224,64 @@ def add_password_reveal(line_edit):
     return button
 
 
+class _SvgIcon(object):
+    """An SVG icon drawn sharp: rendered for the device pixel ratio of the screen it is painted on
+    (a 16 px pixmap scaled up on a 2x screen looks pixelated), optionally tinted, cached per ratio and colour."""
+
+    def __init__(self, name, size):
+        self.icon = QIcon(Resources.get(name))
+        self.size = size
+        self.available = not self.icon.isNull()
+        self._cache = {}
+
+    def pixmap(self, widget, color=None):
+        if not self.available:
+            return None
+        ratio = widget.devicePixelRatioF()
+        key = (ratio, color.rgba() if color is not None else None)
+        pixmap = self._cache.get(key)
+        if pixmap is None:
+            pixmap = self.icon.pixmap(QSize(self.size, self.size), ratio)
+            if color is not None:
+                pixmap = QPixmap(pixmap)
+                painter = QPainter(pixmap)
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+                painter.fillRect(pixmap.rect(), color)
+                painter.end()
+            self._cache[key] = pixmap
+        return pixmap
+
+    @staticmethod
+    def draw(painter, widget, pixmap):
+        """pixmap centred in widget, at its logical size."""
+        size = pixmap.deviceIndependentSize()
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.drawPixmap(QPointF((widget.width() - size.width()) / 2, (widget.height() - size.height()) / 2), pixmap)
+
+
 class SearchIcon(QWidget):
     def __init__(self, parent=None, size=16):
         super(SearchIcon, self).__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setVisible(True)
         self.setMinimumSize(size+2, size+2)
-        pixmap = QPixmap()
-        if pixmap.load(Resources.get("icons/search.svg")):
-            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        else:
-            self.icon = None
+        self._icon = _SvgIcon("icons/search.svg", size)
 
-        self._tinted_icon = None  # (color, pixmap): the loupe recoloured for a dark theme
+    @property
+    def icon(self):
+        return self._icon.pixmap(self) if self._icon.available else None
 
     def _themed_icon(self):
         # the loupe is drawn dark for a light background; under a dark theme it takes the placeholder text colour
-        if self.icon is None or not is_dark_theme():
-            return self.icon
-        color = self.palette().color(QPalette.ColorRole.PlaceholderText)
-        if self._tinted_icon is None or self._tinted_icon[0] != color:
-            pixmap = QPixmap(self.icon)
-            painter = QPainter(pixmap)
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-            painter.fillRect(pixmap.rect(), color)
-            painter.end()
-            self._tinted_icon = color, pixmap
-        return self._tinted_icon[1]
+        if not is_dark_theme():
+            return self._icon.pixmap(self)
+        return self._icon.pixmap(self, self.palette().color(QPalette.ColorRole.PlaceholderText))
 
     def paintEvent(self, event):
         painter = QPainter(self)
         icon = self._themed_icon()
         if icon is not None:
-            x = int((self.width() - icon.width()) / 2)
-            y = int((self.height() - icon.height()) / 2)
-            painter.drawPixmap(x, y, icon)
+            _SvgIcon.draw(painter, self, icon)
 
 
 class ClearButton(QAbstractButton):
@@ -267,27 +292,29 @@ class ClearButton(QAbstractButton):
         self.setToolTip("Clear")
         self.setVisible(False)
         self.setMinimumSize(size+2, size+2)
-        pixmap = QPixmap()
-        if pixmap.load(Resources.get("icons/delete.svg")):
-            self.icon = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self._icon = _SvgIcon("icons/delete.svg", size)
+        self._pressed = {}      # device pixel ratio -> the icon darkened (multiplied by itself)
+
+    def _pressed_icon(self, icon):
+        ratio = icon.devicePixelRatio()
+        if ratio not in self._pressed:
             # Use QImage because QPainter using a QPixmap does not support CompositionMode_Multiply -Dan
-            image = self.icon.toImage()
+            image = icon.toImage()
             painter = QPainter(image)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
-            painter.drawPixmap(0, 0, self.icon)
+            painter.drawPixmap(0, 0, icon)
             painter.end()
-            self.icon_pressed = QPixmap(image)
-        else:
-            self.icon = self.icon_pressed = None
+            pressed = QPixmap(image)
+            pressed.setDevicePixelRatio(ratio)
+            self._pressed[ratio] = pressed
+        return self._pressed[ratio]
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        icon = self.icon_pressed if self.isDown() else self.icon
+        icon = self._icon.pixmap(self)
         if icon is not None:
-            x = int((self.width() - icon.width()) / 2)
-            y = int((self.height() - icon.height()) / 2)
-            painter.drawPixmap(x, y, icon)
+            _SvgIcon.draw(painter, self, self._pressed_icon(icon) if self.isDown() else icon)
         else:
             width = self.width()
             height = self.height()
@@ -321,11 +348,7 @@ class SearchModeButton(QAbstractButton):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCheckable(True)
         self.setMinimumSize(size+2, size+2)
-        self.icons = {}
-        for checked, name in ((False, 'icons/user.svg'), (True, 'icons/chat.svg')):
-            pixmap = QPixmap()
-            self.icons[checked] = pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation) if pixmap.load(Resources.get(name)) else None
-        self._tinted = {}
+        self.icons = {False: _SvgIcon('icons/user.svg', size), True: _SvgIcon('icons/chat.svg', size)}
         self.toggled.connect(self._update_tooltip)
         self._update_tooltip(False)
 
@@ -336,25 +359,13 @@ class SearchModeButton(QAbstractButton):
             self.setToolTip(translate('search_box', 'Searching contacts. Click to search messages'))
 
     def _icon(self):
-        icon = self.icons.get(self.isChecked())
-        if icon is None:
-            return None
+        icon = self.icons[self.isChecked()]
         # drawn dark for a light background; tinted like the loupe under a dark theme, and in the highlight colour while searching messages
         if self.isChecked():
-            color = self.palette().color(QPalette.ColorRole.Highlight)
+            return icon.pixmap(self, self.palette().color(QPalette.ColorRole.Highlight))
         elif is_dark_theme():
-            color = self.palette().color(QPalette.ColorRole.PlaceholderText)
-        else:
-            return icon
-        key = (self.isChecked(), color.rgba())
-        if key not in self._tinted:
-            pixmap = QPixmap(icon)
-            painter = QPainter(pixmap)
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-            painter.fillRect(pixmap.rect(), color)
-            painter.end()
-            self._tinted[key] = pixmap
-        return self._tinted[key]
+            return icon.pixmap(self, self.palette().color(QPalette.ColorRole.PlaceholderText))
+        return icon.pixmap(self)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -362,9 +373,7 @@ class SearchModeButton(QAbstractButton):
             painter.setOpacity(0.6)
         icon = self._icon()
         if icon is not None:
-            x = int((self.width() - icon.width()) / 2)
-            y = int((self.height() - icon.height()) / 2)
-            painter.drawPixmap(x, y, icon)
+            _SvgIcon.draw(painter, self, icon)
 
 
 class SearchBox(LineEdit):

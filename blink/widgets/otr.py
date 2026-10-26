@@ -1,11 +1,10 @@
 
 import re
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QStyle, QStyleOption, QStylePainter
 
-from blink.resources import Resources
+from blink.resources import Resources, load_ui_type
 from blink.util import translate
 from blink.sessions import SMPVerification
 
@@ -13,7 +12,7 @@ from blink.sessions import SMPVerification
 __all__ = ['OTRWidget']
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('otr_widget.ui'))
+ui_class, base_class = load_ui_type('otr_widget.ui')
 
 
 class OTRWidget(base_class, ui_class):

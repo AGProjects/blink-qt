@@ -2,19 +2,18 @@ import threading
 
 from collections import deque
 
-from PyQt6 import uic
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from application.python import Null
 from application.notification import IObserver, NotificationCenter
 from blink.logging import ActivityLog
-from blink.resources import ApplicationData, Resources, ui_settings
+from blink.resources import ApplicationData, Resources, ui_settings, load_ui_type
 from blink.util import run_in_gui_thread
 from sipsimple.configuration.settings import SIPSimpleSettings
 from zope.interface import implementer
 from datetime import datetime
 
-ui_class, base_class = uic.loadUiType(Resources.get('logs_window.ui'))
+ui_class, base_class = load_ui_type('logs_window.ui')
 
 @implementer(IObserver)
 class LogsWindow(base_class, ui_class):

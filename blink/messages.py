@@ -14,7 +14,6 @@ import pgpy
 
 from collections import Counter, OrderedDict, deque
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QDialog, QMessageBox
 
@@ -52,7 +51,7 @@ from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
 from blink.journal import FIRST_SYNC_MARKER, KNOWN_INERT_CONTENT_TYPES, is_file_transfer_notice, JournalCache, JournalStats, OwnMarkers, SeenMessageIds, journal_action, parse_payload
 from blink.logging import ActivityLog, JournalLog, MessagingTrace as log
-from blink.resources import ApplicationData, Resources
+from blink.resources import ApplicationData, Resources, load_ui_type
 from blink.sessions import SessionManager, StreamDescription, IncomingDialogBase
 from blink.uris import bare_instance_id, canonical_uri, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
@@ -64,7 +63,7 @@ dns_error_map = {dns.resolver.NXDOMAIN: 'Domain not found in DNS',
                  dns.resolver.NoNameservers: 'no DNS name servers could be reached',
                  dns.resolver.Timeout: 'no DNS response received, the query has timed out'}
 
-ui_class, base_class = uic.loadUiType(Resources.get('generate_pgp_key_dialog.ui'))
+ui_class, base_class = load_ui_type('generate_pgp_key_dialog.ui')
 
 
 class GeneratePGPKeyDialog(IncomingDialogBase, ui_class):
@@ -148,7 +147,7 @@ class GeneratePGPKeyRequest(QObject):
 
 
 del ui_class, base_class
-ui_class, base_class = uic.loadUiType(Resources.get('import_private_key_dialog.ui'))
+ui_class, base_class = load_ui_type('import_private_key_dialog.ui')
 
 
 class ImportDialog(IncomingDialogBase, ui_class):
@@ -244,7 +243,7 @@ class ImportPrivateKeyRequest(QObject):
 
 
 del ui_class, base_class
-ui_class, base_class = uic.loadUiType(Resources.get('export_private_key_dialog.ui'))
+ui_class, base_class = load_ui_type('export_private_key_dialog.ui')
 
 
 class ExportDialog(IncomingDialogBase, ui_class):

@@ -1,7 +1,6 @@
 
 import os
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QAction, QDesktopServices
 from PyQt6.QtWidgets import QMenu
@@ -12,7 +11,7 @@ from application.system import makedirs
 from zope.interface import implementer
 
 from blink.configuration.settings import BlinkSettings
-from blink.resources import Resources
+from blink.resources import Resources, load_ui_type
 from blink.sessions import FileTransferDelegate, FileTransferModel
 from blink.util import translate
 from blink.widgets.util import ContextMenuActions
@@ -21,7 +20,7 @@ from blink.widgets.util import ContextMenuActions
 __all__ = ['FileTransferWindow']
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_window.ui'))
+ui_class, base_class = load_ui_type('filetransfer_window.ui')
 
 
 @implementer(IObserver)

@@ -7,7 +7,6 @@ import urllib.parse
 from datetime import timezone
 from dateutil.tz import tzlocal
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QEvent, QRegularExpression
 from PyQt6.QtGui import QRegularExpressionValidator, QValidator, QActionGroup
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QDialog, QDialogButtonBox, QFileDialog, QTextBrowser, QVBoxLayout, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
@@ -34,7 +33,7 @@ from blink.configuration.settings import H264_LEVELS, BlinkSettings
 from blink.sip_domain_check import DomainInspector, HtmlReport, RelayInspector, system_ca_file
 from blink.screen_pointer import is_screen_device, screen_index
 from blink.screen_share import ScreenShareManager
-from blink.resources import ApplicationData, Resources
+from blink.resources import ApplicationData, Resources, load_ui_type
 from blink.logging import LogManager
 from blink.pstn_normalize import pstn_apply_leading_zero_rule
 from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread, translate
@@ -343,7 +342,7 @@ class UnspecifiedMSRPRelay(object):
     transport = 'TLS'
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('preferences.ui'))
+ui_class, base_class = load_ui_type('preferences.ui')
 
 
 @implementer(IObserver)

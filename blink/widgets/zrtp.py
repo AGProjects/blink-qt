@@ -1,16 +1,15 @@
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QStyle, QStyleOption, QStylePainter
 
-from blink.resources import Resources
+from blink.resources import Resources, load_ui_type
 from blink.util import translate
 
 
 __all__ = ['ZRTPWidget']
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('zrtp_widget.ui'))
+ui_class, base_class = load_ui_type('zrtp_widget.ui')
 
 
 class ZRTPWidget(base_class, ui_class):

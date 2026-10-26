@@ -5,7 +5,6 @@ import re
 import sys
 import urllib.request, urllib.parse, urllib.error
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QModelIndex, QSortFilterProxyModel
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import QButtonGroup, QComboBox
@@ -24,7 +23,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 from sipsimple.util import user_info
 
-from blink.resources import ApplicationData, Resources
+from blink.resources import ApplicationData, Resources, load_ui_type
 from blink.widgets.color import is_dark_theme
 from blink.widgets.labels import Status
 from blink.util import QSingleton, call_in_gui_thread, run_in_gui_thread, translate
@@ -364,7 +363,7 @@ class ChatAccountSelector(QComboBox):
             self.setCurrentIndex(model.mapFromSource(source_model.index(account_index)).row())
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('add_account.ui'))
+ui_class, base_class = load_ui_type('add_account.ui')
 
 
 @implementer(IObserver)

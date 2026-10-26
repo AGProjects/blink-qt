@@ -6,7 +6,6 @@ import socket
 import uuid
 import urllib
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QTimer
 
 from application.notification import IObserver, NotificationCenter, NotificationData
@@ -31,7 +30,7 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.logging import ActivityLog
-from blink.resources import IconManager, Resources
+from blink.resources import IconManager, Resources, load_ui_type
 from blink.screensharing.support import can_share_my_screen, can_view_screens
 from blink.util import run_in_gui_thread
 
@@ -549,7 +548,7 @@ class PresenceManager(object):
         self.subscription_handler.stop()
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('pending_watcher.ui'))
+ui_class, base_class = load_ui_type('pending_watcher.ui')
 
 
 class PendingWatcherDialog(base_class, ui_class):

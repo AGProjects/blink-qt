@@ -5,7 +5,6 @@ import uuid
 import json
 import platform
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QFont, QAction, QBrush, QColor, QIcon, QLinearGradient, QPainter, QPalette, QPen, QPixmap, QPolygonF, QTextDocument
 from PyQt6.QtGui import QDesktopServices
@@ -54,7 +53,7 @@ from blink.messagepane.header import contact_photo, draw_avatar
 from blink.messagepane.view import TranscriptView
 from blink.messages import MessageManager, BlinkMessage, msrp_message_id, send_msrp_message
 from blink import radio_ptt
-from blink.resources import IconManager, Resources, ui_settings
+from blink.resources import IconManager, Resources, ui_settings, load_ui_type
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand
 from blink.util import run_in_gui_thread, call_later, translate
@@ -142,7 +141,7 @@ class ChatSender(object):
         return not (self == other)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('chat_input_lock.ui'))
+ui_class, base_class = load_ui_type('chat_input_lock.ui')
 
 
 class ChatInputLock(base_class, ui_class):
@@ -1304,7 +1303,7 @@ class NoSessionsLabel(QLabel):
         return False
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('chat_window.ui'))
+ui_class, base_class = load_ui_type('chat_window.ui')
 
 
 @implementer(IObserver)

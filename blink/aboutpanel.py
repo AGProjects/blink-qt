@@ -1,9 +1,8 @@
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt
 
 from blink import __date__, __version__
-from blink.resources import Resources
+from blink.resources import Resources, load_ui_type
 from blink.util import QSingleton, translate
 
 
@@ -37,7 +36,7 @@ Software authors:
 </html>
 """
 
-ui_class, base_class = uic.loadUiType(Resources.get('about_panel.ui'))
+ui_class, base_class = load_ui_type('about_panel.ui')
 
 
 class AboutPanel(base_class, ui_class, metaclass=QSingleton):

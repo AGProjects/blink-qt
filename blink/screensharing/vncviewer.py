@@ -4,7 +4,6 @@
 import os
 import platform
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QEasingCurve, QEvent, QPoint, QPropertyAnimation, QRect, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QIcon, QImage, QPainter, QTransform, qRgb
 from PyQt6.QtWidgets import QApplication, QFrame, QMenu, QStyle, QStyleOption, QStylePainter, QWidget
@@ -22,7 +21,7 @@ from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.threading import run_in_thread
 
 from blink.configuration.settings import BlinkSettings
-from blink.resources import Resources
+from blink.resources import Resources, load_ui_type
 from blink.screensharing.vncclient import ServerDefault, TrueColor, HighColor, LowColor
 from blink.util import translate
 
@@ -386,7 +385,7 @@ class VNCViewer(QWidget):
         self.client.password = password
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('screensharing_dialog.ui'))
+ui_class, base_class = load_ui_type('screensharing_dialog.ui')
 
 
 class ScreensharingDialog(base_class, ui_class):
@@ -429,7 +428,7 @@ class ScreensharingDialog(base_class, ui_class):
 del ui_class, base_class
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('screensharing_toolbox.ui'))
+ui_class, base_class = load_ui_type('screensharing_toolbox.ui')
 
 
 class ScreensharingToolbox(base_class, ui_class):
@@ -542,7 +541,7 @@ class ScreensharingToolbox(base_class, ui_class):
 del ui_class, base_class
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('screensharing_window.ui'))
+ui_class, base_class = load_ui_type('screensharing_window.ui')
 
 
 class ScreensharingWindow(base_class, ui_class):

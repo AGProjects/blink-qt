@@ -1,6 +1,5 @@
 """The session info panel shown in the main window under the audio call it describes."""
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtGui import QColor, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import QLabel, QSizePolicy
@@ -11,7 +10,7 @@ from zope.interface import implementer
 
 from blink.configuration.datatypes import GraphTimeScale
 from blink.configuration.settings import BlinkSettings
-from blink.resources import Resources
+from blink.resources import Resources, load_ui_type, sharp_pixmap
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.color import follow_theme, is_dark_theme, readable_text_color
 from blink.widgets.graph import Graph
@@ -25,7 +24,7 @@ class Container(object):
     pass
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('session_info_panel.ui'))
+ui_class, base_class = load_ui_type('session_info_panel.ui')
 
 
 @implementer(IObserver)
@@ -39,9 +38,9 @@ class SessionInfoPanel(base_class, ui_class):
             self.setupUi(self)
 
         self.pixmaps = Container()
-        self.pixmaps.direct_connection = QPixmap(Resources.get('icons/connection-direct.svg'))
-        self.pixmaps.relay_connection = QPixmap(Resources.get('icons/connection-relay.svg'))
-        self.pixmaps.unknown_connection = QPixmap(Resources.get('icons/connection-unknown.svg'))
+        self.pixmaps.direct_connection = sharp_pixmap(Resources.get('icons/connection-direct.svg'))
+        self.pixmaps.relay_connection = sharp_pixmap(Resources.get('icons/connection-relay.svg'))
+        self.pixmaps.unknown_connection = sharp_pixmap(Resources.get('icons/connection-unknown.svg'))
 
         self.audio_latency_graph = Graph([], color=QColor(0, 100, 215), over_boundary_color=QColor(255, 0, 100))
         self.video_latency_graph = Graph([], color=QColor(0, 215, 100), over_boundary_color=QColor(255, 100, 0), enabled=False)

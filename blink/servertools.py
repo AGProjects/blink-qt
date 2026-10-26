@@ -5,7 +5,7 @@ without it (Windows) have no server tools."""
 import os
 import sys
 
-from PyQt6 import uic, sip
+from PyQt6 import sip
 from PyQt6.QtCore import Qt, QUrl, QUrlQuery
 from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QAuthenticator
@@ -19,7 +19,7 @@ from zope.interface import implementer
 
 from blink.configuration.settings import BlinkSettings
 from blink.contacts import URIUtils
-from blink.resources import IconManager, Resources
+from blink.resources import IconManager, Resources, load_ui_type
 from blink.sessions import SessionManager, StreamDescription
 from blink.util import QSingleton, run_in_gui_thread, translate
 
@@ -153,7 +153,7 @@ class ServerToolsWebView(QWebEngineView):
         self.load(self.homepage or self.history().itemAt(0).url())
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('server_tools.ui'))
+ui_class, base_class = load_ui_type('server_tools.ui')
 
 
 @implementer(IObserver)

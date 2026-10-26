@@ -239,3 +239,91 @@ class IconManager(object, metaclass=Singleton):
         unlink(ApplicationData.get(os.path.join('images', id + '.png')))
 
 
+
+
+# Sharp pictures on scaled screens
+#
+# A QPixmap loaded from a file has the file's pixels at a device pixel ratio of 1: on a screen
+# scaled 2x it is stretched, blurred or blocky. An SVG is drawn instead at the size it is shown
+# times the largest ratio of the screens (scaled down where the ratio is lower).
+
+def device_pixel_ratio():
+    """The largest device pixel ratio of the screens."""
+    from PyQt6.QtGui import QGuiApplication
+    screens = QGuiApplication.screens() if QGuiApplication.instance() is not None else []
+    return max([screen.devicePixelRatio() for screen in screens] or [1.0])
+
+
+def sharp_pixmap(filename, width=None, height=None):
+    """The picture of filename (an SVG drawn at the device pixel ratio) at width x height logical
+    pixels, by default the size it is drawn at. Other formats are loaded as they are."""
+    from PyQt6.QtCore import QSize
+    if not filename.endswith('.svg'):
+        return QPixmap(filename)
+    icon = QIcon(filename)
+    if width is None or height is None:
+        from PyQt6.QtGui import QImageReader
+        size = QImageReader(filename).size()            # the SVG's own size
+        if not size.isValid():
+            return QPixmap(filename)
+        width, height = width or size.width(), height or size.height()
+    return icon.pixmap(QSize(width, height), device_pixel_ratio())
+
+
+_ui_pixmaps = {}
+
+
+def _label_pixmaps(ui_file):
+    """{widget name: the pixmap file} of the labels of a .ui file that show an SVG."""
+    if ui_file not in _ui_pixmaps:
+        from xml.etree import ElementTree
+        found = {}
+        try:
+            root = ElementTree.parse(ui_file).getroot()
+        except (OSError, ElementTree.ParseError):
+            root = None
+        for widget in (root.iter('widget') if root is not None else ()):
+            for prop in widget.findall('property'):
+                pixmap = prop.find('pixmap')
+                if prop.get('name') == 'pixmap' and pixmap is not None and (pixmap.text or '').strip().endswith('.svg'):
+                    found[widget.get('name')] = pixmap.text.strip()
+        _ui_pixmaps[ui_file] = found
+    return _ui_pixmaps[ui_file]
+
+
+def sharpen_ui_pixmaps(ui, ui_file):
+    """The SVG pictures of a form's labels drawn again at the device pixel ratio, at the size uic gave them."""
+    from PyQt6.QtWidgets import QLabel
+    ratio = device_pixel_ratio()
+    if ratio <= 1.0:
+        return
+    for name, filename in _label_pixmaps(ui_file).items():
+        label = getattr(ui, name, None)
+        if not isinstance(label, QLabel):
+            continue
+        current = label.pixmap()
+        if current is None or current.isNull() or current.devicePixelRatio() >= ratio:
+            continue
+        size = current.deviceIndependentSize()
+        pixmap = sharp_pixmap(Resources.get(filename), round(size.width()), round(size.height()))
+        if not pixmap.isNull():
+            label.setPixmap(pixmap)
+
+
+def load_ui_type(name):
+    """uic.loadUiType() of a resource .ui file, its setupUi() also drawing the labels' SVG pictures sharp."""
+    from PyQt6 import uic
+    ui_file = Resources.get(name)
+    ui_class, base_class = uic.loadUiType(ui_file)
+    setup = ui_class.setupUi
+
+    def setupUi(self, *args, **kw):
+        setup(self, *args, **kw)
+        try:
+            sharpen_ui_pixmaps(self, ui_file)
+        except Exception as e:
+            from blink.logging import ActivityLog
+            ActivityLog().warning(f'[ui] Cannot redraw the pictures of {name}: {e}')
+
+    ui_class.setupUi = setupUi
+    return ui_class, base_class

@@ -21,7 +21,6 @@ from itertools import chain
 from operator import attrgetter
 from dateutil.tz import tzlocal
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
 from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl, QFileInfo, QSettings
 from PyQt6.QtGui import QAction, QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QScreen, QShortcut
@@ -54,7 +53,7 @@ from sipsimple.util import ISOTimestamp
 from blink.logging import ActivityLog, MessagingTrace as message_log
 from blink.configuration.datatypes import File
 from blink.configuration.settings import BlinkSettings
-from blink.resources import ApplicationData, Resources, ui_settings
+from blink.resources import ApplicationData, Resources, ui_settings, load_ui_type, sharp_pixmap
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessioninfo import SessionInfoPanel
 from blink.util import call_later, call_in_gui_thread, run_in_gui_thread, translate, copy_transfer_file
@@ -1967,7 +1966,7 @@ class Middle(metaclass=MarkerType): pass
 class Bottom(metaclass=MarkerType): pass
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('audio_session.ui'))
+ui_class, base_class = load_ui_type('audio_session.ui')
 
 
 def audio_tile_colors():
@@ -2264,7 +2263,7 @@ class AudioSessionWidget(base_class, ui_class):
         super(AudioSessionWidget, self).paintEvent(event)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('audio_session_drag.ui'))
+ui_class, base_class = load_ui_type('audio_session_drag.ui')
 
 
 class DraggedAudioSessionWidget(base_class, ui_class):
@@ -3889,7 +3888,7 @@ class ListItemThemeMixin(object):
             self.display_mode = mode
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('chat_session.ui'))
+ui_class, base_class = load_ui_type('chat_session.ui')
 
 
 class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
@@ -5558,7 +5557,7 @@ class TransferStateLabel(QLabel, ColorHelperMixin):
         return QSize(20+2*margin, 20+2*margin)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('filetransfer_item.ui'))
+ui_class, base_class = load_ui_type('filetransfer_item.ui')
 
 
 class FileTransferItemWidget(ListItemThemeMixin, base_class, ui_class):
@@ -5996,7 +5995,7 @@ class FileTransferModel(QAbstractListModel):
         self.endResetModel()
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('filelist_item.ui'))
+ui_class, base_class = load_ui_type('filelist_item.ui')
 
 
 # Chat file list
@@ -6014,7 +6013,7 @@ class FileListItemWidget(ListItemThemeMixin, base_class, ui_class):
         follow_theme(self)
 
         self.pixmaps = Container()
-        self.pixmaps.encrypted_transfer = QPixmap(Resources.get('icons/lock-green-18.svg'))
+        self.pixmaps.encrypted_transfer = sharp_pixmap(Resources.get('icons/lock-green-18.svg'))
 
         self.display_mode = self.StandardDisplayMode
 
@@ -7285,7 +7284,7 @@ class IncomingDialogBase(QDialog):
             self.slot = None
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('incoming_dialog.ui'))
+ui_class, base_class = load_ui_type('incoming_dialog.ui')
 
 
 class IncomingDialog(IncomingDialogBase, ui_class):
@@ -7594,7 +7593,7 @@ class IncomingRequest(QObject):
             self.rejected.emit(self, self.dialog.reject_mode)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('incoming_filetransfer_dialog.ui'))
+ui_class, base_class = load_ui_type('incoming_filetransfer_dialog.ui')
 
 
 class IncomingFileTransferDialog(IncomingDialogBase, ui_class):
@@ -7680,7 +7679,7 @@ class IncomingFileTransferRequest(QObject):
             self.rejected.emit(self, self.dialog.reject_mode)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('incoming_calltransfer_dialog.ui'))
+ui_class, base_class = load_ui_type('incoming_calltransfer_dialog.ui')
 
 
 class IncomingCallTransferDialog(IncomingDialogBase, ui_class):
@@ -7755,7 +7754,7 @@ class IncomingCallTransferRequest(QObject):
             self.rejected.emit(self, self.dialog.reject_mode)
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('conference_dialog.ui'))
+ui_class, base_class = load_ui_type('conference_dialog.ui')
 
 
 from PyQt6.QtWidgets import QListWidget as _QListWidget

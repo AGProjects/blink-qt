@@ -5,7 +5,6 @@ import os
 
 from functools import partial
 
-from PyQt6 import uic
 from PyQt6.QtCore import Qt, QRectF, QSettings, QSize, QTimer, QUrl, QTranslator
 from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
@@ -37,7 +36,7 @@ from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, 
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
-from blink.resources import ApplicationData, IconManager, Resources, themed_icon, ui_settings
+from blink.resources import ApplicationData, IconManager, Resources, themed_icon, ui_settings, load_ui_type
 from blink.util import run_in_gui_thread, translate
 from blink.widgets.buttons import AccountState, SwitchViewButton
 from blink.widgets.color import follow_theme
@@ -55,7 +54,7 @@ else:
 __all__ = ['MainWindow']
 
 
-ui_class, base_class = uic.loadUiType(Resources.get('blink.ui'))
+ui_class, base_class = load_ui_type('blink.ui')
 
 
 class ProgressLine(QWidget):
