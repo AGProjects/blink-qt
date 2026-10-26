@@ -2591,7 +2591,7 @@ class AudioSessionItem(object):
 
     def _setup_type(self):
         """What the tile says the call is while it is set up: the media asked for."""
-        return translate('sessions', 'Audio and video') if 'video' in self.blink_session.streams else translate('sessions', 'Audio')
+        return translate('sessions', 'Audio and video...') if 'video' in self.blink_session.streams else translate('sessions', 'Audio...')
 
     def _NH_BlinkSessionConnectionProgress(self, notification):
         stage = notification.data.stage
@@ -3329,7 +3329,7 @@ class AudioSessionListView(QListView):
             return 0
         return self.video_panel.height_for_width(self.viewport().width())
 
-    def show_video(self, session, remote, local, undock):
+    def show_video(self, session, remote, local, undock, preview=False):
         """Show a call's video under its tile (the video window is hidden); undock is called to
         give it back to the window. Another call's docked video goes back to its window first."""
         model = self.model()
@@ -3346,7 +3346,10 @@ class AudioSessionListView(QListView):
             self.video_panel.hide()
         self.video_session = session
         self._video_undock = undock
-        self.video_panel.set_producers(remote, local)
+        if preview:
+            self.video_panel.show_preview(local)     # the call is being set up: just our camera
+        else:
+            self.video_panel.set_producers(remote, local)
         self.itemDelegate().sizeHintChanged.emit(model.index(model.sessions.index(session)))
         self.video_panel.show()
         self.video_panel.raise_()

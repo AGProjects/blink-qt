@@ -1037,7 +1037,16 @@ class DockedVideoPanel(QWidget):
         aspect = size[0] / size[1] if size is not None else 16 / 9
         return int(max(DOCKED_MIN_HEIGHT, min(DOCKED_MAX_HEIGHT, width / aspect)))
 
+    def show_preview(self, local):
+        """While the call is set up: the camera fills the panel, nothing in the corner."""
+        self.my_video_view.producer = None
+        self.my_video_view.hide()
+        self.video_view.mirror = not local_is_screen()
+        self.video_view.producer = local
+        self.undock_button.raise_()
+
     def set_producers(self, remote, local):
+        self.video_view.mirror = False
         self.video_view.producer = remote
         self.my_video_view.mirror = not local_is_screen()
         self.my_video_view.producer = local
@@ -1140,6 +1149,7 @@ SCREEN_SHARE_NOTIFICATIONS = ('BlinkScreenPointerDidChange', 'BlinkScreenPointer
 @implementer(IObserver)
 class VideoWindow(QWidget):
     closed = pyqtSignal(object)
+    openRequested = pyqtSignal(object)          # the window, when the user asks for it from the camera preview in the drawer
     remoteVideoArrived = pyqtSignal(object)     # the window, once a remote frame shows something (not black)
 
     def __init__(self, blink_session):
@@ -1159,6 +1169,7 @@ class VideoWindow(QWidget):
         self.received_video = False
         self.remote_picture = False       # a remote frame that is not black arrived: the other party's camera is on
         self.docked = False               # hidden, its video shown under the call in the main window
+        self.preview_in_drawer = False    # hidden until the remote picture arrives, the camera shown under the call
         self._remote_producer = None
         self.pointer_mode = False         # clicks on the picture point at the other party's shared screen
 
@@ -1585,6 +1596,29 @@ class VideoWindow(QWidget):
     def _main_session_list(self):
         main_window = QApplication.instance().main_window
         return main_window, main_window.session_list
+
+    def show_preview_in_drawer(self):
+        """While the window waits for the remote picture: our camera under the call's tile."""
+        session = self.blink_session
+        item = session.items.audio if session is not None else None
+        if item is None or self.docked:
+            return
+        session_list = self._main_session_list()[1]
+        session_list.show_video(item, None, self.local_producer, lambda: self.openRequested.emit(self), preview=True)
+        self.preview_in_drawer = True
+        self.log('Camera preview under the call in the main window')
+
+    def hide_preview_in_drawer(self):
+        if not self.preview_in_drawer:
+            return
+        self.preview_in_drawer = False
+        item = self.blink_session.items.audio if self.blink_session is not None else None
+        if item is None:     # gone with the call: the list has already removed its video
+            return
+        try:
+            self._main_session_list()[1].hide_video(item)
+        except Exception:
+            pass
 
     def dock(self):
         """Hide the window and show the video under the call's tile in the audio sessions list."""
@@ -2093,6 +2127,7 @@ class VideoWindow(QWidget):
         if self.blink_session is None:
             return
         self._stop_watching_message_pane()
+        self.hide_preview_in_drawer()
         if self.docked:
             self.docked = False
             item = self.blink_session.items.audio
@@ -2234,6 +2269,10 @@ class VideoWindow(QWidget):
     def _NH_VideoDeviceDidChangeCamera(self, notification):
         new_camera = notification.data.new_camera
         self.log('Camera changed: %s' % describe_producer(new_camera))
+        if self.preview_in_drawer:
+            panel = self._main_session_list()[1].video_panel
+            if panel is not None:
+                panel.show_preview(new_camera)
         if self.docked:
             self._main_session_list()[1].video_camera_changed(new_camera)
             return
@@ -2334,11 +2373,13 @@ class VideoWindowManager(object):
         window = VideoWindow(blink_session)
         window.closed.connect(self._SH_WindowClosed)
         window.remoteVideoArrived.connect(self._SH_RemoteVideoArrived)
+        window.openRequested.connect(self._SH_OpenRequested)
         self.windows[blink_session] = window
         if connected_stream is not None:
             window.show_connected_layout(connected_stream)
         else:
             window.show_preview_layout()
+        window.show_preview_in_drawer()
 
     def _reveal(self, window):
         window._center_on_screen()
@@ -2346,6 +2387,14 @@ class VideoWindowManager(object):
         window.raise_()
         window.activateWindow()
         window.show_controls()
+        # the window has the camera now (it takes several renderers): the drawer lets it go
+        window.hide_preview_in_drawer()
+
+    def _SH_OpenRequested(self, window):
+        if window.ending or window.docked or window.isVisible() or self.windows.get(window.blink_session) is not window:
+            return
+        window.log('Video window opened from the camera preview')
+        self._reveal(window)
 
     def _SH_RemoteVideoArrived(self, window):
         if window.ending or window.docked or window.isVisible() or window.blink_session is None:
