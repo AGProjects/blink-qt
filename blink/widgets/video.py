@@ -129,7 +129,10 @@ class VideoSurface(QWidget):
     @property
     def aspect(self):
         producer = self._producer
-        return truediv(*producer.framesize) if producer is not None else 16/9
+        if producer is not None:
+            return truediv(*producer.framesize)
+        image = self._image
+        return image.width() / image.height() if image is not None and image.height() else 16/9
 
     def width_for_height(self, height):
         return int(ceil(height * self.aspect))
@@ -175,6 +178,16 @@ class VideoSurface(QWidget):
         self._image = QImage(data, frame.width, frame.height, frame.width * 4, QImage.Format.Format_ARGB32).copy()
         if self._clock is None:
             QMetaObject.invokeMethod(self, 'update', Qt.ConnectionType.QueuedConnection)
+
+    def set_frame(self, data, width, height):
+        """A picture made elsewhere (BGRA bytes, from any thread), shown with no producer."""
+        self._image = QImage(data, width, height, width * 4, QImage.Format.Format_ARGB32).copy()
+        if self._clock is None:
+            QMetaObject.invokeMethod(self, 'update', Qt.ConnectionType.QueuedConnection)
+
+    def clear_frame(self):
+        self._image = None
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)

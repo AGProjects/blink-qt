@@ -531,6 +531,7 @@ class LocalTile(QWidget):
         self.label_corner = ('bottom', 'left')
         self.hand = False
         self.speaking = False
+        self.blurred = False        # the picture comes from blink.webrtc.background_blur
         self.surface = VideoSurface(self, framerate=None)
         self.surface.mirror = True
         self.surface.crop = True
@@ -550,14 +551,31 @@ class LocalTile(QWidget):
         screen = VideoroomSession.sending_screen_device()
         self.surface.mirror = not screen        # a shared screen shows as others see it, whole
         self.surface.crop = not screen
+        from blink.webrtc.background_blur import BlurredCamera, blur_enabled
+        blurred = blur_enabled() and not screen and not self.camera_off and producer is not None
+        if blurred != self.blurred:
+            self.blurred = blurred
+            if blurred:
+                self.surface.producer = None
+                BlurredCamera().add_listener(self, self.surface.set_frame)     # as the others see us
+            else:
+                BlurredCamera().remove_listener(self)
+                self.surface.clear_frame()
+        elif blurred:
+            BlurredCamera().refresh()       # the camera was switched
         try:
-            self.surface.producer = None if self.camera_off else producer
+            if not blurred:
+                self.surface.producer = None if self.camera_off else producer
         except Exception as e:
             ActivityLog().warning(f'[videoroom] Cannot show the camera: {e}')
         self.surface.setVisible(not self.camera_off and producer is not None)
         self.overlay.update()
 
     def release(self):
+        if self.blurred:
+            from blink.webrtc.background_blur import BlurredCamera
+            self.blurred = False
+            BlurredCamera().remove_listener(self)
         self.surface.stop()
 
     def set_camera_off(self, off):
@@ -1353,9 +1371,25 @@ class VideoroomWindow(QWidget):
                 action.setChecked(not off and sharing and (len(screens) == 1 or current == device))
                 action.triggered.connect(lambda checked, device=device: self._share_screen(device))
         menu.addSeparator()
+        from blink.webrtc.background_blur import blur_available
+        blur = menu.addAction('Blur background')
+        blur.setCheckable(True)
+        blur.setChecked(blur_available() and SIPSimpleSettings().video.background_blur)
+        blur.setEnabled(blur_available() and not sharing)
+        blur.setToolTip('Only you are seen, the room behind you is blurred' if blur_available() else 'Needs python3-opencv')
+        blur.triggered.connect(self._set_background_blur)
+        menu.setToolTipsVisible(True)
         toggle = menu.addAction('Turn camera on' if off else 'Turn camera off')
         toggle.triggered.connect(self._SH_CameraButtonClicked)
         menu.exec(self.camera_button.mapToGlobal(QPoint(0, -menu.sizeHint().height())))
+
+    def _set_background_blur(self, enabled):
+        from blink.webrtc.background_blur import set_blur_enabled
+        set_blur_enabled(enabled)
+        ActivityLog().info(f'[videoroom] Background blur {"on" if enabled else "off"}')
+        for session, window in list(VideoroomWindow.windows.items()):     # every room sends the same camera
+            session.blur_changed()
+            window.local_tile.attach_camera()
 
     def _use_camera(self, device):
         from blink.screen_share import ScreenShareManager, _select_device

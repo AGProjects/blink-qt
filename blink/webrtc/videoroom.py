@@ -521,6 +521,7 @@ class VideoroomSession(QObject):
         self._camera_src = None
         self._camera_caps = None
         self._camera_renderer = None
+        self._blurring = False      # the camera comes from blink.webrtc.background_blur
         self._video_pad = None
         self._black_timer = QTimer(self)
         self._black_timer.setInterval(200)
@@ -846,6 +847,12 @@ class VideoroomSession(QObject):
             self.log('no camera: sending black', 'warning')
             self._black_timer.start()
             return
+        from blink.webrtc.background_blur import BlurredCamera, blur_enabled
+        if blur_enabled() and not self.sending_screen_device():
+            self._blurring = True
+            BlurredCamera().add_listener(self, self._on_blurred_frame)
+            self.log('sending the camera with its background blurred')
+            return
         try:
             self._camera_renderer = FrameBufferVideoRenderer(self._on_camera_frame)
             self._camera_renderer.producer = producer
@@ -855,6 +862,10 @@ class VideoroomSession(QObject):
             self._black_timer.start()
 
     def _stop_camera(self):
+        if self._blurring:
+            from blink.webrtc.background_blur import BlurredCamera
+            self._blurring = False
+            BlurredCamera().remove_listener(self)
         renderer, self._camera_renderer = self._camera_renderer, None
         if renderer is not None:
             try:
@@ -869,6 +880,13 @@ class VideoroomSession(QObject):
             return
         self._apply_video_profile()
         if self.video_muted:
+            return
+        self._stop_camera()
+        self._attach_camera()
+
+    def blur_changed(self):
+        """The background blur was turned on or off: the camera is read again, through it or not."""
+        if self.pipeline is None or self._camera_src is None or self.video_muted:
             return
         self._stop_camera()
         self._attach_camera()
@@ -913,6 +931,12 @@ class VideoroomSession(QObject):
         if source is None or self.video_muted:
             return
         self._push_frame(bytes(frame.data), frame.width, frame.height)
+
+    def _on_blurred_frame(self, data, width, height):
+        # the blur thread
+        if self._camera_src is None or self.video_muted or not self._blurring:
+            return
+        self._push_frame(data, width, height)
 
     def _push_frame(self, data, width, height):
         # frames come in the producer's format: BGRA from the cameras, I420 from the screen device

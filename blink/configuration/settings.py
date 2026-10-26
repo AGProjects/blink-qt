@@ -60,6 +60,7 @@ class VideoSettingsExtension(VideoSettings):
     resolution = Setting(type=VideoResolution, default=VideoResolution('640x480'))
     framerate = Setting(type=int, default=24)
     max_bitrate = Setting(type=float, default=0.8, nillable=True)   # Mbps; None is automatic
+    background_blur = Setting(type=bool, default=False)     # our camera in the video rooms (blink.webrtc.background_blur)
     h264 = H264SettingsExtension
 
 
