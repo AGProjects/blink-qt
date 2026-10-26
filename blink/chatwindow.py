@@ -58,7 +58,8 @@ from blink.resources import IconManager, Resources, ui_settings
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
 from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand
 from blink.util import run_in_gui_thread, call_later, translate
-from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme
+from blink.webrtc import active_videoroom
+from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, secondary_text_color
 from blink.widgets.graph import Graph
 from blink.widgets.otr import OTRWidget
 from blink.widgets.util import ContextMenuActions, QtDynamicProperty
@@ -406,6 +407,26 @@ class ChatWidget(QWidget):
             button.hide()
         header.audio_button.clicked.disconnect()
         header.audio_button.clicked.connect(self._SH_HeaderAudioClicked)
+        # a room's video is its video room (WebRTC): shown for rooms where it can be had (update_header)
+        header.video_button.clicked.disconnect()
+        header.video_button.clicked.connect(self._SH_HeaderVideoClicked)
+        header.video_button.setCheckable(True)
+        header.video_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # a room's addresses, to share (blink.webrtc.sharedialog); shown for rooms of a SylkServer
+        from blink.webrtc.sharedialog import share_icon
+        self.header_share_button = header._tool_button(translate('chat_window', 'Share the conference: the addresses others can join it at'))
+        self.header_share_button.setIcon(share_icon())
+        self.header_share_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.header_share_button.clicked.connect(self._SH_HeaderShareClicked)
+        self.header_share_button.hide()
+        for row in header.findChildren(QHBoxLayout):
+            if row.indexOf(header.video_button) >= 0:
+                group, outer = row, row.parent()
+                if isinstance(outer, QHBoxLayout) and outer.indexOf(group) >= 0:
+                    outer.insertWidget(outer.indexOf(group) + 1, self.header_share_button)
+                else:
+                    group.addWidget(self.header_share_button)
+                break
         self.header_chat_button = header._tool_button(translate('chat_window', 'Chat'))
         from blink.resources import themed_icon
         self.header_chat_button.setIcon(themed_icon(Resources.get('icons/chat.svg'), '#d0d0d0'))     # as the handset beside it
@@ -464,23 +485,78 @@ class ChatWidget(QWidget):
         audio_button.setChecked(not idle and has_audio)
         chat_button.setEnabled(not busy)
         audio_button.setEnabled(not busy and blink_session.account is not None)
+        video_room = session_videoroom(blink_session)
+        audio_button.setChecked(not idle and has_audio)
+        audio_button.setVisible(video_room is None)     # with the video room up the room's audio is there: chat and video only
+        video_button = self.header.video_button
+        # a room of another SylkServer counts as one even before (or without) its focus saying so
+        room_video = self._room_video(blink_session) if video_room is None else None
+        video_possible = video_room is not None or (room_video is not None and (room_video[1] is not None or blink_session.is_conference))
+        video_button.setVisible(video_possible)
+        from blink.webrtc.sharedialog import share_available, share_icon
+        self.header_share_button.setIcon(share_icon())      # follows the theme, as the other buttons
+        room_uri = str(blink_session.contact_uri.uri).replace('sip:', '', 1) if blink_session.contact_uri is not None else None
+        self.header_share_button.setVisible(bool(room_uri) and (blink_session.is_conference or video_possible) and
+                                            share_available(room_uri, blink_session.account, video_room.target if video_room is not None else None))
+        video_button.setChecked(video_room is not None)
+        video_button.setEnabled(blink_session.account is not None)
+        video_button.setToolTip(translate('chat_window', 'Show the video conference') if video_room is not None else
+                                translate('chat_window', 'Join with audio and video (WebRTC); the audio of this session ends'))
         if idle:
             chat_button.setToolTip(translate('chat_window', 'Connect with chat'))
             audio_button.setToolTip(translate('chat_window', 'Connect with audio and chat'))
         elif state.startswith('connecting'):
-            chat_button.setToolTip(translate('chat_window', 'Cancel'))
-            audio_button.setToolTip(translate('chat_window', 'Cancel'))
+            chat_button.setToolTip(translate('chat_window', 'Connecting...'))
+            audio_button.setToolTip(translate('chat_window', 'Connecting...'))
         else:
-            chat_button.setToolTip(translate('chat_window', 'Hang up'))
-            if has_audio:
-                audio_button.setToolTip(translate('chat_window', 'Hang up') if not streams - {'audio'} else translate('chat_window', 'Remove audio'))
-            else:
-                audio_button.setToolTip(translate('chat_window', 'Add audio'))
+            chat_button.setToolTip(translate('chat_window', 'Chat connected (Hang up ends it)') if has_chat else translate('chat_window', 'Add chat'))
+            audio_button.setToolTip(translate('chat_window', 'Audio connected (Hang up ends it)') if has_audio else translate('chat_window', 'Add audio'))
+
+    @staticmethod
+    def _room_video(blink_session):
+        from blink.webrtc import room_video
+        contact_uri = blink_session.contact_uri
+        return room_video(contact_uri.uri, blink_session.account) if contact_uri is not None and blink_session.account is not None else None
+
+    def _SH_HeaderShareClicked(self):
+        if self.session is None:
+            return
+        blink_session = self.session.blink_session
+        from blink.webrtc.sharedialog import ShareConferenceDialog
+        video_room = session_videoroom(blink_session)
+        room_uri = str(blink_session.contact_uri.uri).replace('sip:', '', 1)
+        ShareConferenceDialog(room_uri, blink_session.account, target=video_room.target if video_room is not None else None,
+                              title=blink_session.conference_title, parent=self.window()).exec()
+
+    def _SH_HeaderVideoClicked(self):
+        if self.session is None:
+            return
+        blink_session = self.session.blink_session
+        video_room = session_videoroom(blink_session)
+        from blink.webrtc import join_video_conference, raise_videoroom_window
+        if video_room is not None:
+            raise_videoroom_window(video_room)      # already there: bring it up
+            self.update_header()
+            return
+        video = self._room_video(blink_session)
+        if video is None:
+            self.update_header()
+            return
+        video_uri, target = video
+        self._log_header_action(f'Add video ({video_uri}) to')
+        video_room = join_video_conference(blink_session.account, video_uri, target=target)     # removes the SIP audio here: it would loop through the room
+        if video_room is None:
+            ActivityLog().warning(f'[chat window] Cannot join {video_uri} with video')
+        self.update_header()
 
     def _log_header_action(self, action):
         blink_session = self.session.blink_session
         uri = blink_session.contact_uri.uri if blink_session.contact_uri is not None else '?'
         ActivityLog().info(f'[chat window] {action} {uri} (account {getattr(blink_session.account, "id", "?")}, state {blink_session.state or "new"})')
+
+    # The Chat, Audio and Video buttons only start what is not there yet, or bring up what is:
+    # they stay pressed while it lasts. Ending is the Hang up button's (chat, audio and video) and
+    # the video conference window's own (video only).
 
     def _SH_HeaderChatClicked(self):
         if self.session is None:
@@ -491,9 +567,9 @@ class ChatWidget(QWidget):
             self._log_header_action('Connect with chat:')
             blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri, stream_descriptions=[StreamDescription('chat')], reinitialize=True)
             blink_session.connect()
-        elif state.startswith(('connecting', 'connected')):
-            self._log_header_action('Hang up')
-            self.session.end()
+        elif state == 'connected' and 'chat' not in blink_session.streams.types:
+            self._log_header_action('Add chat to')
+            blink_session.add_stream(StreamDescription('chat'))
         self.update_header()
 
     def _SH_HeaderAudioClicked(self):
@@ -501,29 +577,21 @@ class ChatWidget(QWidget):
             return
         blink_session = self.session.blink_session
         state = str(blink_session.state or '')
-        if state in ('', 'initialized', 'ended', 'deleted'):
+        video_room = session_videoroom(blink_session)
+        if video_room is not None:
+            from blink.webrtc import raise_videoroom_window
+            raise_videoroom_window(video_room)      # the room's audio is in its video conference window
+        elif state in ('', 'initialized', 'ended', 'deleted'):
             self._log_header_action('Connect with audio and chat:')
             blink_session.init_outgoing(blink_session.account, blink_session.contact, blink_session.contact_uri,
                                         stream_descriptions=[StreamDescription('audio'), StreamDescription('chat')], reinitialize=True)
             blink_session.connect()
-        elif state.startswith('connecting'):
-            self._log_header_action('Cancel')
-            self.session.end()
-        elif state == 'connected':
-            streams = blink_session.streams.types
-            if 'audio' in streams:
-                if streams - {'audio'}:
-                    self._log_header_action('Remove audio from')
-                    blink_session.remove_stream(blink_session.streams.get('audio'))
-                else:
-                    self._log_header_action('Hang up')
-                    self.session.end()
+        elif state == 'connected' and 'audio' not in blink_session.streams.types:
+            self._log_header_action('Add audio to')
+            if 'chat' in blink_session.streams.types:
+                blink_session.add_stream(StreamDescription('audio'))
             else:
-                self._log_header_action('Add audio to')
-                if 'chat' in streams:
-                    blink_session.add_stream(StreamDescription('audio'))
-                else:
-                    blink_session.add_streams([StreamDescription('audio'), StreamDescription('chat')])     # audio here always comes with MSRP chat
+                blink_session.add_streams([StreamDescription('audio'), StreamDescription('chat')])     # audio here always comes with MSRP chat
         self.update_header()
 
     def _SH_FontStep(self, step):
@@ -568,6 +636,8 @@ class ChatWidget(QWidget):
         blink_session = session.blink_session if session is not None else None
         connected = blink_session is not None and str(blink_session.state or '').startswith('connected')
         ready = connected and session.chat_stream is not None
+        if not ready and blink_session is not None and videoroom_chat(blink_session) is not None:
+            ready = True        # the room's chat goes over its video room (WebRTC) meanwhile
         was_ready = self.chat_input.connected
         reason = translate('chat_window', 'Connected without chat, add MSRP chat from the wheel to send messages') if connected and not ready else None
         self.chat_input.set_connected(ready, reason)
@@ -839,6 +909,14 @@ class ChatWidget(QWidget):
 
     def send_message(self, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None):
         blink_session = self.session.blink_session
+
+        video_room = videoroom_chat(blink_session)
+        if video_room is not None:
+            # the room's chat over the video room's WebRTC connection (no MSRP session to the room)
+            message_id = video_room.send_chat_message(content, content_type)
+            timestamp = timestamp if timestamp is not None else ISOTimestamp.now()
+            NotificationCenter().post_notification('ChatStreamWillSendMessage', blink_session, data=BlinkMessage(content, content_type, blink_session.account, recipients, timestamp=timestamp, id=message_id))
+            return message_id
 
         if blink_session.chat_type is None:
             self.send_sip_message(content, content_type, recipients, courtesy_recipients, subject, timestamp, required, additional_headers, id)
@@ -1175,6 +1253,33 @@ class ChatWidget(QWidget):
             self._delete_message(item)
 
 
+def session_videoroom(blink_session):
+    """The video room (WebRTC) joined to this session's room, or None: while it is there the
+    room's audio is in the video conference window, never added to the MSRP session."""
+    contact_uri = getattr(blink_session, 'contact_uri', None)
+    return active_videoroom(contact_uri.uri) if contact_uri is not None else None
+
+
+def videoroom_chat(blink_session):
+    """The video room whose WebRTC connection carries this session's chat: there is one and the
+    session's own MSRP chat is not connected (it could not be: a proxy refused it, ...); else None."""
+    video_room = session_videoroom(blink_session)
+    if video_room is None or video_room.state != 'established':
+        return None
+    if str(blink_session.state or '').startswith('connected') and 'chat' in blink_session.streams.types:
+        return None
+    return video_room
+
+
+class VideoroomChatStream(object):
+    """Stands in for the MSRP chat stream of a session whose chat goes over its video room, as the
+    sender of the ChatStream* notifications: the MSRP window and history take them as they come."""
+
+    def __init__(self, blink_session):
+        self.blink_session = blink_session
+        self.session = None
+
+
 class NoSessionsLabel(QLabel):
     def apply_theme(self):
         background, color = ('palette(base)', '#9a9a9a') if is_dark_theme() else ('white', '#545454')
@@ -1210,7 +1315,15 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     __streamtypes__ = {'chat', 'screen-sharing'}  # the stream types for which we show the chat window (video has a window of its own, see videowindow)
 
     def apply_theme(self):
-        self.session_widget.setPalette(QPalette() if is_dark_theme() else self._session_widget_palette)
+        if is_dark_theme():
+            # the .ui's white Base/Window give way to the theme's; Dark (the info line) becomes a
+            # readable grey, the theme's own being near black
+            palette = QPalette(QApplication.palette())
+            for color_group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
+                palette.setColor(color_group, QPalette.ColorRole.Dark, secondary_text_color(palette, color_group))
+            self.session_widget.setPalette(palette)
+        else:
+            self.session_widget.setPalette(self._session_widget_palette)
         self._tint_panel_buttons()
 
     def _tint_panel_buttons(self):
@@ -1753,6 +1866,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         state = blink_session.state
         messages_info = blink_session.info.streams.messages
         idle = str(state or '') in ('', 'initialized', 'ended', 'deleted')
+        video_room = session_videoroom(blink_session)     # audio there: none here, or the room would loop
+        self._sync_mute_button()
         # connecting and hanging up are the chat and audio buttons of the bar on top of the session (ChatWidget.header)
         self.connect_audio_button.hide()
         self.connect_chat_button.hide()
@@ -1768,7 +1883,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             self.control_button.setIcon(self.control_icon)
             menu.clear()
             menu.addAction(self.control_button.actions.connect_with_msrp)
-            menu.addAction(self.control_button.actions.connect_with_audio)
+            if video_room is None:
+                menu.addAction(self.control_button.actions.connect_with_audio)
             if conference_has_files(self.selected_session):     # a conference where files were exchanged
                 menu.addSeparator()
                 menu.addAction(self.control_button.actions.show_transferred_files)
@@ -1811,7 +1927,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                         else:
                             menu.addAction(self.control_button.actions.enable_chat_otr)
                     if 'audio' not in stream_types:
-                        menu.addAction(self.control_button.actions.add_audio)
+                        if video_room is None:
+                            menu.addAction(self.control_button.actions.add_audio)
                     elif stream_types != {'audio'} and not stream_types.intersection({'screen-sharing', 'video'}):
                         menu.addAction(self.control_button.actions.remove_audio)
                     if 'video' not in stream_types:
@@ -2087,6 +2204,33 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.activateWindow()
         self.showNormal()
 
+    def _select_session(self, blink_session):
+        model = self.session_model
+        try:
+            position = model.sessions.index(blink_session.items.chat)
+        except (AttributeError, ValueError):
+            return False
+        selection_model = self.session_list.selectionModel()
+        selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
+        self._sync_selection()
+        self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)
+        return True
+
+    def show_session(self, blink_session):
+        """This session's tile selected and the window in front (the video room's Chat button)."""
+        self._select_session(blink_session)
+        self.show()
+
+    def show_in_background(self, blink_session):
+        """A video room's MSRP chat: the video window is in front, this one comes up minimized.
+        In use already, it is neither raised nor switched to the room."""
+        self._hide_message_only_sessions()
+        if self.isVisible() and not self.isMinimized():
+            return
+        self._select_session(blink_session)
+        if not self.isVisible():
+            self.showMinimized()
+
     def _hide_message_only_sessions(self):
         """SIP message conversations are the message pane's: their rows are hidden here (the
         window still routes their messages: unread counts, receipts), and one selected is left."""
@@ -2311,6 +2455,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_SIPApplicationDidStart(self, notification):
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
+        notification.center.add_observer(self, name='VideoroomSessionDidChangeState')
+        notification.center.add_observer(self, name='VideoroomSessionAudioMutedDidChange')
+        notification.center.add_observer(self, name='VideoroomSessionGotMessage')
+        notification.center.add_observer(self, name='VideoroomSessionDidDeliverMessage')
 
         blink_settings = BlinkSettings()
         self.latency_graph.horizontalPixelsPerUnit = blink_settings.chat_window.session_info.graph_time_scale
@@ -2412,12 +2560,70 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if missing:
             ActivityLog().warning(f'[ui] Chat window: {len(missing)} tiles did not come up, kept for the next start: {", ".join(tile["uri"] for tile in missing)}')
 
+    def _NH_VideoroomSessionDidChangeState(self, notification):
+        # a video room came or went: the audio controls of the MSRP sessions to that room change with it,
+        # and their tiles show its audio and video
+        for session in self.session_model.sessions:
+            widget = getattr(session, 'widget', None)
+            if widget is not None:
+                widget.update_content(session)
+            conference = getattr(session.blink_session, 'server_conference', None)
+            for participant in list(getattr(conference, 'participants', {}).values()):
+                notification.center.post_notification('ConferenceParticipantDidChange', sender=participant)     # ours shows the room's WebRTC media
+            chat_widget = getattr(session, 'chat_widget', None)
+            if chat_widget is not None and chat_widget.session is not None:
+                chat_widget.update_header()
+                chat_widget.update_input_state()     # the room's chat may go over the video room
+        self._update_control_menu()
+
+    def _NH_VideoroomSessionAudioMutedDidChange(self, notification):
+        self._sync_mute_button()
+
+    def _videoroom_chat_sessions(self, video_room):
+        return [session for session in self.session_model.sessions if videoroom_chat(session.blink_session) is video_room]
+
+    def _NH_VideoroomSessionGotMessage(self, notification):
+        # a message of the room's chat, over WebRTC: in the MSRP window of the room as one over MSRP
+        # (and kept in history the same way), unless its MSRP chat is connected and brings it itself
+        from sipsimple.core import SIPURI, SIPCoreError
+        from sipsimple.streams.msrp.chat import ChatIdentity
+        from sipsimple.streams.msrp.chat import CPIMHeader, CPIMNamespace
+        data = notification.data
+        if not data.sender_uri or data.sender_uri.lower() == notification.sender.identity.lower():
+            return      # nobody, or our own message played back by the room
+        for session in self._videoroom_chat_sessions(notification.sender):
+            blink_session = session.blink_session
+            try:
+                sender = ChatIdentity(SIPURI.parse('sip:%s' % data.sender_uri), display_name=data.sender_name or None) if data.sender_uri else None
+            except SIPCoreError:
+                ActivityLog().warning(f'[videoroom] Chat message from an unreadable address: {data.sender_uri!r}')
+                return
+            try:
+                timestamp = ISOTimestamp(data.timestamp) if data.timestamp else ISOTimestamp.now()
+            except (TypeError, ValueError):
+                timestamp = ISOTimestamp.now()
+            headers = [CPIMHeader('Message-Type', CPIMNamespace('urn:ag-projects:xml:ns:cpim', 'agp'), 'status')] if data.type == 'status' else []
+            content = data.content.encode('latin1') if not data.content_type.startswith('text/') else data.content
+            message = BlinkMessage(content, data.content_type, sender, timestamp=timestamp, additional_headers=headers)
+            message.id = msrp_message_id(message)     # what a replay of the same message gets again
+            message.additional_headers = list(headers) + [CPIMHeader('Message-ID', CPIMNamespace('urn:ietf:params:imdn', 'imdn'), message.id)]
+            NotificationCenter().post_notification('ChatStreamGotMessage', sender=VideoroomChatStream(blink_session), data=NotificationData(message=message))
+
+    def _NH_VideoroomSessionDidDeliverMessage(self, notification):
+        data = notification.data
+        for session in self._videoroom_chat_sessions(notification.sender):
+            stream = VideoroomChatStream(session.blink_session)
+            if data.delivered:
+                NotificationCenter().post_notification('ChatStreamDidDeliverMessage', sender=stream, data=NotificationData(message=NotificationData(message_id=data.message_id)))
+            else:
+                NotificationCenter().post_notification('ChatStreamDidNotDeliverMessage', sender=stream, data=NotificationData(message_id=data.message_id, code=data.code, reason=data.reason))
+
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
         blink_settings = BlinkSettings()
         if notification.sender is settings:
             if 'audio.muted' in notification.data.modified:
-                self.mute_button.setChecked(settings.audio.muted)
+                self._sync_mute_button()
         elif notification.sender is blink_settings:
             if 'chat_window.session_info.bytes_per_second' in notification.data.modified:
                 self.traffic_graph.update()
@@ -2440,7 +2646,9 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if getattr(self, '_restoring_tiles', False):
             return      # the remembered tiles come back without opening the window
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
-            if self.session_model.rowCount():
+            if session_videoroom(notification.sender) is not None:
+                call_later(.5, self.show_in_background, notification.sender)     # joined with video: its window is in front
+            elif self.session_model.rowCount():
                 call_later(.5, self._NH_BlinkSessionIsSelected, notification)
             else:
                 self.show()
@@ -2461,7 +2669,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         selection_model.select(model.index(position), selection_model.SelectionFlag.ClearAndSelect)
         self.session_list.scrollTo(model.index(position), QListView.ScrollHint.EnsureVisible)  # or PositionAtCenter
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
-            self.show()
+            if session_videoroom(notification.sender) is not None:
+                self.show_in_background(notification.sender)
+            else:
+                self.show()
 
     # use BlinkSessionNewIncoming/Outgoing to show the chat window if there is a chat stream available (like with reinitialize) instead of using the sessionAdded signal from the model -Dan
     # or maybe not. sessionAdded means it was added to the model, while during NewIncoming/Outgoing we do not know that yet. but then we have a problem with the DidReinitialize since
@@ -2470,7 +2681,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkSessionWillAddStream(self, notification):
         if notification.data.stream.type in self.__streamtypes__:
-            self.show()
+            if session_videoroom(notification.sender) is not None:
+                self.show_in_background(notification.sender)
+            else:
+                self.show()
 
     def _shows_session(self, session):
         """Whether this window is where a session is shown: a conference (connected or not, so its
@@ -2867,6 +3081,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkMessageDidSucceed(self, notification):
         blink_session = notification.sender
+        if blink_session is None:
+            return      # a message sent outside a session (no tile to show it in)
         session = blink_session.items.chat
         if session is None:
             return
@@ -2876,6 +3092,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def _NH_BlinkMessageDidFail(self, notification):
         blink_session = notification.sender
+        if blink_session is None:
+            return      # a message sent outside a session (no tile to show it in)
         session = blink_session.items.chat
         if session is None:
             return
@@ -3633,7 +3851,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             outgoing_traffic = TrafficNormalizer.normalize(self.outgoing_traffic_graph.last_value * 8, bits_per_second=True)
         self.traffic_label.setText(translate('chat_window', """<p>Traffic: <span style="font-family: sans-serif; color: #d70000;">%s</span> %s <span style="font-family: sans-serif; color: #0064d7;">%s</span> %s</p>""") % ("\u2193", incoming_traffic, "\u2191", outgoing_traffic))
 
+    def _sync_mute_button(self):
+        video_room = session_videoroom(self.selected_session.blink_session) if self.selected_session is not None else None
+        muted = video_room.audio_muted if video_room is not None else SIPSimpleSettings().audio.muted
+        if self.mute_button.isChecked() != muted:
+            self.mute_button.blockSignals(True)
+            self.mute_button.setChecked(muted)
+            self.mute_button.blockSignals(False)
+        self.mute_button.setToolTip(translate('chat_window', 'Mute the microphone in the video conference') if video_room is not None else '')
+
     def _SH_MuteButtonClicked(self, checked):
+        video_room = session_videoroom(self.selected_session.blink_session) if self.selected_session is not None else None
+        if video_room is not None:
+            video_room.set_audio_muted(checked)     # the audio of this room is the video room's
+            return
         settings = SIPSimpleSettings()
         settings.audio.muted = checked
         settings.save()
@@ -3844,7 +4075,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         blink_session.connect()
 
     def _AH_Disconnect(self):
-        self._log_action('Hang up', self.selected_session.blink_session)
+        blink_session = self.selected_session.blink_session
+        self._log_action('Hang up', blink_session)
+        video_room = session_videoroom(blink_session)
+        if video_room is not None:
+            video_room.leave()      # the room's audio and video go with its chat; its window closes
         self.selected_session.end()
 
     def _AH_AddAudio(self):

@@ -181,6 +181,15 @@ def _select_device(device):
         settings.save()
 
 
+def _videoroom_video():
+    """A WebRTC video room is up with our camera on: it sends the video device as a call's video does."""
+    import sys
+    module = sys.modules.get('blink.webrtc.videoroom')
+    if module is None:
+        return False
+    return any(session.state not in ('idle', 'terminated') and not session.video_muted for session in module.VideoroomManager().sessions)
+
+
 def _video_streams(session):
     return [stream for stream in (session.streams or []) if stream.type == 'video'
             and getattr(stream, 'state', None) == 'ESTABLISHED' and hasattr(stream, 'set_encoder_size')]
@@ -467,6 +476,11 @@ class ScreenShareManager(object, metaclass=Singleton):
         self.poll_timer.start()
         return True
 
+    def videoroom_ended(self):
+        """A video room ended: the screen it was sending goes back to the camera unless a call still sends it."""
+        if self.sharing and not self._any_video_call():
+            self.stop_sharing()
+
     def stop_sharing(self, camera=None):
         """Back to the camera that was on before (or to the one given)."""
         self.capture_wanted = False
@@ -534,7 +548,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         return any(state.sharing_signalled for state in self.calls.values())
 
     def _any_video_call(self):
-        return any(_video_established(session) for session in self.calls)
+        return any(_video_established(session) for session in self.calls) or _videoroom_video()
 
     def _call_video_over(self):
         """A call or its video ended: the screen is not shared with nobody."""
@@ -551,6 +565,8 @@ class ScreenShareManager(object, metaclass=Singleton):
     def _calls_over(self):
         """The last call ended: the screen is remembered as the video device
         only when the call started with it, otherwise the camera comes back."""
+        if _videoroom_video():
+            return      # the room's video goes on: a call (its MSRP chat, say) ending changes nothing
         start_device, self.device_at_call_start = self.device_at_call_start, None
         if SP.is_screen_device(start_device):
             return

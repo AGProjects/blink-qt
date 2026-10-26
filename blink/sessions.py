@@ -1178,7 +1178,15 @@ class BlinkSession(BlinkSessionBase):
                 self.state = 'connection/dns_lookup_succeeded'
                 self.info.update(self)
                 self.sip_session = Session(self.account)
-                self.sip_session.connect(ToHeader(self.uri), routes, list(self.streams))
+                contact_parameters = None
+                if self.is_conference and getattr(self.account, 'id', None) is not None:
+                    # our device id (RFC 5626 +sip.instance, as on REGISTER): the focus uses it as this
+                    # endpoint's participant_id, and the video room's gateway, told the same on join, knows
+                    # this chat leg is us and does not show us twice (blink.webrtc.videoroom)
+                    instance_id = SIPSimpleSettings().instance_id
+                    if instance_id:
+                        contact_parameters = {'+sip.instance': '"<%s>"' % instance_id}
+                self.sip_session.connect(ToHeader(self.uri), routes, list(self.streams), contact_parameters=contact_parameters)
             else:
                 self.routes = None
                 self._terminate(reason='Domain not found in DNS', error=True)
@@ -1628,6 +1636,7 @@ class ConferenceParticipant(object):
 
         self.active_media = set()
         self.display_name = None
+        self.blink_session = None   # the room's session: ours has the room's WebRTC media too (ConferenceParticipantItem)
         self.on_hold = False
         self.is_composing = False    # TODO: set this from the chat stream -Saul
         self.request_status = None
@@ -1803,6 +1812,8 @@ class ServerConference(object):
         from blink.contacts import URIUtils
         conference_info = notification.data.conference_info
         users = dict((self.sip_prefix_re.sub('', str(user.entity)), user) for user in notification.data.conference_info.users)
+        # the room's audio bridge (sylk-janus-audio-bridge: the WebRTC side of the room) is plumbing, not a participant
+        users = {uri: user for uri, user in users.items() if not re.search(r';app=[^;]*bridge', uri)}
 
         removed_participants = [participant for participant in self.participants.values() if participant.uri not in users and participant not in self.pending_additions]
         confirmed_participants = [participant for participant in self.participants.values() if participant in self.pending_additions and participant.uri in users]
@@ -1839,6 +1850,7 @@ class ServerConference(object):
         for uri in added_users:
             contact, contact_uri = URIUtils.find_contact(uri)
             participant = ConferenceParticipant(contact, contact_uri, uri=uri)
+            participant.blink_session = self.session
             participant.update(users[uri])
             self.participants[participant.uri] = participant
             notification.center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
@@ -3967,8 +3979,12 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
         self.hold_icon.setVisible(session.blink_session.on_hold)
         self.composing_icon.setVisible(session.remote_composing)
         self.chat_icon.setVisible('chat' in session.blink_session.streams)
-        self.audio_icon.setVisible('audio' in session.blink_session.streams)
-        self.video_icon.setVisible('video' in session.blink_session.streams)
+        # a room whose video room is up has its audio and video there, over WebRTC
+        contact_uri = getattr(session.blink_session, 'contact_uri', None)
+        from blink.webrtc import active_videoroom
+        webrtc = contact_uri is not None and active_videoroom(contact_uri.uri) is not None
+        self.audio_icon.setVisible(webrtc or 'audio' in session.blink_session.streams)
+        self.video_icon.setVisible(webrtc or 'video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
         self.unread_label.setVisible(bool(session.blink_session.contact.unread_messages))
         self.unread_label.setText(str(session.blink_session.contact.unread_messages))
@@ -6767,7 +6783,15 @@ class ConferenceParticipantItem(object):
 
     @property
     def active_media(self):
-        return self.participant.active_media
+        media = set(self.participant.active_media)
+        session = self.participant.blink_session
+        if session is not None and session.account is not None and session.contact_uri is not None:
+            ours = self.participant.uri.replace('sip:', '', 1).lower() == str(session.account.id).lower()
+            if ours:
+                from blink.webrtc import active_videoroom
+                if active_videoroom(session.contact_uri.uri) is not None:
+                    media |= {'audio', 'video'}     # our audio and video are in the room's video room, over WebRTC
+        return media
 
     @property
     def radio_state(self):
@@ -7810,6 +7834,28 @@ class ConferenceDialog(base_class, ui_class):
         from PyQt6.QtWidgets import QHBoxLayout, QListWidget, QPushButton, QVBoxLayout
         from blink.messagepane.forward import ConversationRowDelegate
         self.room_button.lineEdit().setPlaceholderText(translate('conference_dialog', 'Room or user@domain'))
+        from blink.webrtc import recent_rooms
+        self.room_button.addItems(recent_rooms()[:self.room_button.maxCount()])     # the rooms joined before
+        self._audio_text = self.audio_button.text()
+        self._requirements_text = None
+        # rooms of other domains: their SylkServer is looked up as the room is typed or pasted,
+        # and Join waits for the answer (host: 'pending', a RoomTarget, or None for none found)
+        self._room_targets = {}
+        self._lookup_timer = QTimer(self)
+        self._lookup_timer.setSingleShot(True)
+        self._lookup_timer.setInterval(400)
+        self._lookup_timer.timeout.connect(self._lookup_room)
+        # the media: audio and video; the room's chat is always joined, there is nothing to choose
+        from PyQt6.QtWidgets import QCheckBox
+        self.video_button = QCheckBox(translate('conference_dialog', 'Video'), self)
+        self.video_button.setChecked(True)
+        # Chat first, always on (checked, not changeable), then Audio and Video
+        self.media_layout.removeWidget(self.chat_button)
+        self.media_layout.insertWidget(0, self.chat_button)
+        self.media_layout.insertWidget(self.media_layout.indexOf(self.audio_button) + 1, self.video_button)
+        self.chat_button.setChecked(True)
+        self.chat_button.setEnabled(False)
+        self.chat_button.setToolTip(translate('conference_dialog', 'The room\'s chat is always joined'))
         # the people to invite, where the spacer was
         spacer = self.grid_layout.itemAtPosition(2, 0)     # uic does not keep spacers as attributes
         if spacer is not None and spacer.spacerItem() is not None:
@@ -7849,6 +7895,8 @@ class ConferenceDialog(base_class, ui_class):
         if font.pointSizeF() > 0:
             font.setPointSizeF(font.pointSizeF() * 0.9)
         self.requirements_label.setFont(font)
+        self.requirements_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        self._requirements_text = self.requirements_label.text()
         self.grid_layout.addWidget(self.requirements_label, 4, 0, 1, 2)
         self.invite_add_button.clicked.connect(self._SH_InviteAddButtonClicked)
         self.invite_remove_button.clicked.connect(self._SH_InviteRemoveButtonClicked)
@@ -7871,7 +7919,12 @@ class ConferenceDialog(base_class, ui_class):
 
     @staticmethod
     def conference_uri(room, account):
-        """The conference address for what was typed: a full address as is, a bare room at the account's Conference server."""
+        """The conference address for what was typed: a full address as is, a bare room at the account's
+        Conference server, a room link (https://host/conference/room, as the Sylk web app shares them) as room@host."""
+        from blink.webrtc import parse_room
+        if re.match(r'^https?://', room.strip(), re.IGNORECASE):
+            parsed = parse_room(room)
+            room = '%s@%s' % parsed if parsed is not None and parsed[0] and parsed[1] else ''
         room = re.sub('^sips?:', '', room.strip(), flags=re.IGNORECASE)
         if not room:
             return None
@@ -7889,12 +7942,42 @@ class ConferenceDialog(base_class, ui_class):
     def _update_accept_button(self):
         media = any(button.isChecked() for button in (self.audio_button, self.chat_button))
         account = AccountManager().default_account
-        self.accept_button.setEnabled(media and account is not None and self.conference_uri(self.room_button.currentText(), account) is not None)
+        room = self._foreign_room()
+        looking_up = room is not None and self._room_targets.get(room[1], 'pending') == 'pending'
+        self.accept_button.setEnabled(media and account is not None and not looking_up and self.conference_uri(self.room_button.currentText(), account) is not None)
 
     def _SH_MediaButtonClicked(self, checked):
         self._update_accept_button()
 
     def _SH_RoomButtonEditTextChanged(self, text):
+        self._lookup_timer.start()      # once the typing pauses
+        self._update_media_labels()
+        self._update_accept_button()
+
+    def _foreign_room(self):
+        """(room, host) of the room in the field when its host is not the account's own conference server, else None."""
+        from blink.webrtc import local_room_host
+        account = AccountManager().default_account
+        uri = self.conference_uri(self.room_button.currentText(), account) if account is not None else None
+        if uri is None:
+            return None
+        user, _, host = uri.partition('@')
+        return None if local_room_host(host, account) else (user, host)
+
+    def _lookup_room(self):
+        from blink.webrtc import resolve_room
+        room = self._foreign_room()
+        if room is None or room[1] in self._room_targets:
+            return
+        user, host = room
+        self._room_targets[host] = 'pending'
+        self._update_media_labels()
+        self._update_accept_button()
+        resolve_room(user, host, AccountManager().default_account, lambda target, host=host: self._room_resolved(host, target))
+
+    def _room_resolved(self, host, target):
+        self._room_targets[host] = target
+        self._update_media_labels()
         self._update_accept_button()
 
     def _invitees(self):
@@ -7948,38 +8031,134 @@ class ConferenceDialog(base_class, ui_class):
         self.room_button.setEditText(self.random_room())
         self.invite_list.clear()
         self.audio_button.setChecked(True)
+        self.video_button.setChecked(True)
         self.chat_button.setChecked(True)
+        self._update_media_labels()
         self._update_accept_button()
         self.raise_()
         super(ConferenceDialog, self).show()
         # the room is not focused (typing would replace the random one): Join takes the focus
         (self.accept_button if self.accept_button.isEnabled() else self.invite_list).setFocus()
 
+    def _update_media_labels(self):
+        """With a SylkServer domain audio and video go over WebRTC (blink.webrtc) and the MSRP
+        switch is joined with chat only; elsewhere there is no video and audio is SIP, as it always was."""
+        from blink.webrtc import ws_server
+        account = AccountManager().default_account
+        server = ws_server(account)
+        self.audio_button.setText(self._audio_text)
+        room = self._foreign_room()
+        if room is not None:
+            state = self._room_targets.get(room[1], 'pending')
+            if state == 'pending':
+                self.requirements_label.setText(translate('conference_dialog', 'Looking up the SylkServer of %s...') % room[1])
+                return
+            if state is None:
+                self.video_button.hide()
+                self.audio_button.setToolTip('')
+                self.requirements_label.setText(translate('conference_dialog', 'No SylkServer found for %s: the room is joined over SIP') % room[1])
+                return
+            if state.remote:
+                self._show_provided(state.sip_uri.partition('@')[2])
+                return
+        if server is None:
+            self.video_button.hide()
+            self.audio_button.setToolTip('')
+            self.requirements_label.setText(self._requirements_text)
+            return
+        # the conference domain the SylkServer configuration names (conference.sipBridge), else its WebSocket server
+        from blink.sylk_discovery import conference_server
+        self._show_provided(conference_server(account) or QUrl(server).host())
+
+    def _show_provided(self, domain):
+        """The SylkServer that provides the room, and whether video can be done here."""
+        provided = translate('conference_dialog', 'Conferencing provided by SylkServer at %s') % domain
+        from blink.webrtc.videoroom import media_missing
+        missing = media_missing()
+        if missing:
+            packages = ' '.join(sorted({package for what, package in missing}))
+            self.video_button.hide()
+            self.audio_button.setToolTip(translate('conference_dialog', 'Audio over SIP: video needs %s') % ', '.join(what for what, package in missing))
+            if sys.platform == 'win32':
+                self.requirements_label.setText(provided + '<br>' + translate('conference_dialog', 'Video conferences are not available, this Blink installation lacks: %s') % ', '.join(what for what, package in missing))
+            else:
+                self.requirements_label.setText(provided + '<br>' + translate('conference_dialog', 'Video conferences need software that is not installed. Install it with:<br><b>sudo apt install %s</b><br>then restart Blink.') % packages)
+        else:
+            self.video_button.show()
+            self.audio_button.setToolTip(translate('conference_dialog', 'Audio alone: over SIP. With video and Audio unchecked, the microphone starts muted'))
+            self.video_button.setToolTip(translate('conference_dialog', 'Audio and video in the video conference window (WebRTC), the chat over MSRP'))
+            self.requirements_label.setText(provided)
+
     def join_conference(self):
         ui_settings().setValue("conference_dialog/geometry", self.saveGeometry())
-        from blink.contacts import URIUtils
-
-        account_manager = AccountManager()
-        session_manager = SessionManager()
-        account = account_manager.default_account
+        account = AccountManager().default_account
         current_text = self.room_button.currentText().strip()
         conference_uri = self.conference_uri(current_text, account) if account is not None else None
         if conference_uri is None:
             return
-        if self.room_button.findText(current_text) == -1:
-            if self.room_button.count() == self.room_button.maxCount():
-                self.room_button.removeItem(self.room_button.count()-1)
-            self.room_button.insertItem(0, current_text)
+        index = self.room_button.findText(current_text)
+        if index != -1:
+            self.room_button.removeItem(index)      # to the top: most recent first
+        if self.room_button.count() == self.room_button.maxCount():
+            self.room_button.removeItem(self.room_button.count()-1)
+        self.room_button.insertItem(0, current_text)
+        from blink.webrtc import local_room_host, remember_room, resolve_room
+        remember_room(current_text)
 
-        contact, contact_uri = URIUtils.find_contact(conference_uri, display_name='Conference')
-        streams = []
-        if self.audio_button.isChecked():
-            streams.append(StreamDescription('audio'))
-        if self.chat_button.isChecked():
-            streams.append(StreamDescription('chat'))
         invitees = self._invitees()
-        ActivityLog().info(f'[conference] Join {conference_uri}' + (f', inviting {", ".join(invitees)}' if invitees else ''))
-        session = session_manager.create_session(contact, contact_uri, streams, account=account)
+        audio, video = self.audio_button.isChecked(), self.video_button.isChecked() and not self.video_button.isHidden()
+        user, _, host = conference_uri.partition('@')
+        if local_room_host(host, account):
+            self._join_room(account, conference_uri, None, audio, video, invitees)
+        elif self._room_targets.get(host, 'pending') != 'pending':
+            self._join_room(account, conference_uri, self._room_targets[host], audio, video, invitees)     # looked up while it was typed
+        else:
+            # a room of another domain: where is its SylkServer (its configuration, looked up if not known yet)
+            resolve_room(user, host, account, lambda target: self._join_room(account, conference_uri, target, audio, video, invitees))
+
+    def _join_room(self, account, conference_uri, target, audio, video, invitees):
+        from blink.contacts import URIUtils
+        from blink.webrtc import conference_video_available, join_video_conference, media_available, raise_videoroom_window
+        session_manager = SessionManager()
+        if target is not None and target.remote:
+            # another SylkServer: its video room and, for the same room, its MSRP switch at conference.<domain>
+            sip_uri, video_uri, can_video = target.sip_uri, target.video_uri, media_available()
+            ActivityLog().info(f'[conference] {conference_uri} is a room of the SylkServer of {target.domain} ({target.ws_server}): '
+                               f'video room {video_uri}, MSRP switch {sip_uri}')
+        else:
+            target = None
+            sip_uri, video_uri, can_video = conference_uri, conference_uri, conference_video_available(account)
+        contact, contact_uri = URIUtils.find_contact(sip_uri, display_name='Conference')
+        video_room = None
+        if video and can_video:
+            # video: audio and video in the room over WebRTC, the MSRP switch with chat only (with audio
+            # there too, the room would hear us twice and we would hear it twice); audio alone goes the
+            # SIP way, to the room's bridge, as it always did
+            ActivityLog().info(f'[conference] Join {video_uri} with audio and video over WebRTC' + ('' if audio else ' (microphone muted)') + f', chat over MSRP to {sip_uri}' +
+                               (f', inviting {", ".join(invitees)}' if invitees else ''))
+            video_room = join_video_conference(account, video_uri, audio=audio, target=target)     # without audio: the microphone starts muted; removes SIP audio to the room
+            from blink.webrtc import room_chat_session
+            existing = room_chat_session(video_room) if video_room is not None else None
+            streams = [] if existing is not None else [StreamDescription('chat')]
+        else:
+            streams = []
+            if audio:
+                streams.append(StreamDescription('audio'))
+            if self.chat_button.isChecked():
+                streams.append(StreamDescription('chat'))
+            ActivityLog().info(f'[conference] Join {sip_uri}' + (f', inviting {", ".join(invitees)}' if invitees else ''))
+        session = session_manager.create_session(contact, contact_uri, streams, account=account) if streams else None
+        if session is not None and video_room is not None:
+            session.opened_for_videoroom = True     # the video room's chat: leaving the video room ends it too
+        if session is None and video_room is not None:
+            from blink.webrtc import room_chat_session
+            session = room_chat_session(video_room)     # the room's MSRP session was there already: kept, without its audio
+        if invitees and session is None and video_room is not None:
+            video_room.invite(invitees)       # no MSRP session to REFER them from: the room invites them
+            invitees = []
+        if video_room is not None and session is not None:
+            # the MSRP window comes up with the chat: the room's window goes back in front of it
+            QTimer.singleShot(800, lambda: raise_videoroom_window(video_room))
         if invitees and session is not None:
             inviter = ConferenceInviter(session, account, invitees, self._inviters)
             self._inviters.add(inviter)
@@ -8133,9 +8312,38 @@ class SessionManager(object, metaclass=Singleton):
                 account = AccountManager().default_account
 
         if any(stream.type == 'video' for stream in streams) and is_conference_uri(getattr(contact_uri, 'uri', contact_uri), account):
+            from blink.webrtc import conference_video_available, join_video_conference, local_room_host, media_available, room_target
+            user, host = split_uri(getattr(contact_uri, 'uri', contact_uri))
+            # a room of another SylkServer whose configuration is known: joined at its server
+            target = room_target(user, host, account) if not local_room_host(host, account) else None
+            target = target if target is not None and target.remote else None
+            if (target is not None and media_available()) or (target is None and conference_video_available(account)):
+                # a room's video is WebRTC: joined through the webrtcgateway, in its own window
+                video_uri = target.video_uri if target is not None else f'{user}@{host}'
+                ActivityLog().info(f'[conference] {user}@{host} is a conference: joining with audio and video over WebRTC ({video_uri}), chat over MSRP')
+                video_room = join_video_conference(account, video_uri, target=target)     # removes SIP audio to the room
+                from blink.webrtc import room_chat_session
+                session = room_chat_session(video_room) if video_room is not None else None
+                if session is None:
+                    session = self.create_session(contact, contact_uri, [StreamDescription('chat')], account=account, connect=connect)
+                    if session is not None:
+                        session.opened_for_videoroom = True     # the video room's chat: leaving it ends this too
+                if video_room is not None:
+                    from blink.webrtc import raise_videoroom_window
+                    QTimer.singleShot(800, lambda: raise_videoroom_window(video_room))
+                return session
             # no SIP video in conferences: audio (and whatever else was asked for) only
             streams = [stream for stream in streams if stream.type != 'video'] or [StreamDescription('audio')]
             ActivityLog().info(f'[conference] {getattr(contact_uri, "uri", contact_uri)} is a conference: no video, joining with {", ".join(stream.type for stream in streams)}')
+
+        if any(stream.type == 'audio' for stream in streams) and is_conference_uri(getattr(contact_uri, 'uri', contact_uri), account):
+            from blink.webrtc import active_videoroom, raise_videoroom_window
+            video_room = active_videoroom(getattr(contact_uri, 'uri', contact_uri))
+            if video_room is not None:
+                # the room's audio is in its video conference window already: audio here too would loop
+                streams = [stream for stream in streams if stream.type not in ('audio', 'video')] or [StreamDescription('chat')]
+                ActivityLog().info(f'[conference] {getattr(contact_uri, "uri", contact_uri)} has its audio in the video conference window: joining with chat only')
+                raise_videoroom_window(video_room)
 
         if any(stream.type == 'audio' for stream in streams) and not any(stream.type == 'chat' for stream in streams) and is_conference_uri(getattr(contact_uri, 'uri', contact_uri), account):
             # audio to a room always comes with its MSRP chat (the room's messages, push to talk)
@@ -8633,7 +8841,8 @@ class SessionManager(object, metaclass=Singleton):
         if new_state in ('connecting/ringing', 'connecting/early_media', 'connected/*', 'ending'):
             self.update_ringtone()
         if new_state == 'ending':
-            notification.sender._play_hangup_tone = notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
+            notification.sender._play_hangup_tone = (notification.data.old_state in ('connecting/*', 'connected/*') and notification.sender.streams.types.intersection({'audio', 'video'})
+                                                     and not getattr(notification.sender, 'silent_media_end', False))
 
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
         settings = SIPSimpleSettings()
@@ -8645,6 +8854,8 @@ class SessionManager(object, metaclass=Singleton):
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
         settings = SIPSimpleSettings()
+        if getattr(notification.sender, 'silent_media_end', False):
+            return      # the audio moved to the video room: no hangup tone
         if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive() and not settings.audio.silent:
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)

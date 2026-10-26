@@ -527,8 +527,8 @@ class OutgoingMessage(object):
                             content = stream.encrypt(self.content, self.content_type)
                         except Exception as e:
                             reason = f"Encryption error {str(e)}"
-                            data = NotificationData(originator='remote', reason=reason, id=self.id)
-                            notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data, code=None)
+                            data = NotificationData(originator='remote', reason=reason, id=self.id, code=None)
+                            notification_center.post_notification('BlinkMessageDidFail', sender=self.session, data=data)
                             log.info(f'Message {self.id} to {str(self.sip_uri)[4:]} failed: {reason}')
                             return
                         self.is_secure = True

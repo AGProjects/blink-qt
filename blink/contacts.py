@@ -77,6 +77,7 @@ from blink.pgp_keyids import address_keys
 from blink.messages import MessageManager
 from blink.uris import bare_instance_id, bonjour_placeholder_uri, canonical_uri, is_fileable_address, is_instance_id, placeholder_instance_id
 from blink.util import call_in_gui_thread, call_later, run_in_gui_thread, translate
+from blink.webrtc import conference_video_available
 from blink.widgets.buttons import SwitchViewButton
 from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, secondary_text_color
 from blink.widgets.labels import ElidedLabel
@@ -6900,7 +6901,7 @@ class ContactListView(QListView):
                     call_submenu.addAction(call_item)
 
                 call_submenu = menu.addMenu(translate('contact_list', 'Start Video Call'))
-                call_submenu.setEnabled(not conference)    # no SIP video in conferences
+                call_submenu.setEnabled(not conference or conference_video_available())    # a room's video is WebRTC (blink.webrtc.videoroom)
                 for uri in contact.uris:
                     uri_text = '%s (%s)' % (uri.uri, uri.type) if uri.type not in ('SIP', 'Other') else uri.uri
                     call_item = QAction(uri_text, self)
@@ -6949,7 +6950,7 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.start_chat_session)
 
                 self.actions.start_audio_call.setEnabled(can_call)
-                self.actions.start_video_call.setEnabled(can_call and not conference)     # no SIP video in conferences
+                self.actions.start_video_call.setEnabled(can_call and (not conference or conference_video_available()))     # a room's video is WebRTC (blink.webrtc.videoroom)
                 self.actions.start_chat_session.setEnabled(can_call)
                 self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages
                 self.actions.send_files.setEnabled(can_call)
@@ -7515,7 +7516,7 @@ class ContactSearchListView(QListView):
             can_call = account_manager.default_account is not None and contact.uri is not None
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
             self.actions.start_audio_call.setEnabled(can_call)
-            self.actions.start_video_call.setEnabled(can_call and not is_conference_contact(contact))     # no SIP video in conferences
+            self.actions.start_video_call.setEnabled(can_call and (not is_conference_contact(contact) or conference_video_available()))     # a room's video is WebRTC (blink.webrtc.videoroom)
             self.actions.start_chat_session.setEnabled(can_call)
             conference = is_conference_contact(contact)
             self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages
@@ -7879,7 +7880,7 @@ class ContactDetailView(QListView):
         can_call = account_manager.default_account is not None and contact_has_uris
         can_transfer = contact_has_uris and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
         self.actions.start_audio_call.setEnabled(can_call)
-        self.actions.start_video_call.setEnabled(can_call and not is_conference_contact(model.contact))     # no SIP video in conferences
+        self.actions.start_video_call.setEnabled(can_call and (not is_conference_contact(model.contact) or conference_video_available()))     # a room's video is WebRTC (blink.webrtc.videoroom)
         self.actions.start_chat_session.setEnabled(can_call)
         conference = is_conference_contact(model.contact)
         self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages

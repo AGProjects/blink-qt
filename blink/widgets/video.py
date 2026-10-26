@@ -49,6 +49,7 @@ class VideoSurface(QWidget):
 
     interactive = False  # if the widget can be interacted with (moved, resized)
     mirror = False       # mirror the image horizontally
+    crop = False         # fill the widget, cropping the picture, instead of fitting it
 
     def __init__(self, parent=None, framerate=None):
         super(VideoSurface, self).__init__(parent)
@@ -182,7 +183,7 @@ class VideoSurface(QWidget):
         image = self._image
 
         if image is not None:
-            if self.height() < 240:
+            if self.height() < 240 and not self.crop:
                 fast_scaler = QTransform()
                 scale = 297/image.height()
                 if self.mirror:
@@ -193,7 +194,7 @@ class VideoSurface(QWidget):
                 painter.drawPixmap(rect, QPixmap.fromImage(image.transformed(fast_scaler)).scaledToHeight(self.height(), Qt.TransformationMode.SmoothTransformation), rect)
             else:
                 transform = QTransform()
-                scale = min(self.width()/image.width(), self.height()/image.height())
+                scale = (max if self.crop else min)(self.width()/image.width(), self.height()/image.height())
                 if self.mirror:
                     transform.translate((self.width() + image.width()*scale)/2, (self.height() - image.height()*scale)/2)
                     transform.scale(-scale, scale)

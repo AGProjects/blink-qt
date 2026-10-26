@@ -309,17 +309,25 @@ class CallBarSegment(QAbstractButton):
         bar = self.parent()
         return isinstance(bar, CallBar) and bar.compact
 
-    @staticmethod
-    def label_font():
+    @property
+    def bar_scale(self):
+        bar = self.parent()
+        return bar.scale if isinstance(bar, CallBar) else 1.0
+
+    def m(self, value):
+        """A measure of the bar, at its scale."""
+        return value * self.bar_scale
+
+    def label_font(self):
         font = QFont(QApplication.font())
-        font.setPointSizeF(CALL_BAR_LABEL_PT)
+        font.setPointSizeF(self.m(CALL_BAR_LABEL_PT))
         font.setWeight(QFont.Weight.Medium)
         return font
 
     def preferred_width(self, compact):
         if compact:
-            return CALL_BAR_SEGMENT_COMPACT_W
-        return max(CALL_BAR_SEGMENT_MIN_W, QFontMetrics(self.label_font()).horizontalAdvance(self.label) + 18)
+            return round(self.m(CALL_BAR_SEGMENT_COMPACT_W))
+        return round(max(self.m(CALL_BAR_SEGMENT_MIN_W), QFontMetrics(self.label_font()).horizontalAdvance(self.label) + self.m(18)))
 
     def _retile(self):
         bar = self.parent()
@@ -343,15 +351,16 @@ class CallBarSegment(QAbstractButton):
         super(CallBarSegment, self).leaveEvent(event)
 
     def sizeHint(self):
-        return QSize(self.preferred_width(self.compact), CALL_BAR_HEIGHT - 2 * CALL_BAR_PADDING)
+        return QSize(self.preferred_width(self.compact), round(self.m(CALL_BAR_HEIGHT - 2 * CALL_BAR_PADDING)))
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        rect = QRectF(self.rect()).adjusted(2, 2, -2, -2)
+        inset = self.m(2)
+        rect = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
         enabled = self.isEnabled()
         pressed = enabled and self.isDown()
-        radius = CALL_BAR_RADIUS - 5
+        radius = self.m(CALL_BAR_RADIUS - 5)
         if self.destructive:
             color = QColor(RED)
             color.setAlphaF(0.65 if pressed else (0.95 if self.hovering else 0.85))
@@ -368,22 +377,23 @@ class CallBarSegment(QAbstractButton):
         color.setAlphaF(color.alphaF() * alpha)
 
         width, height = self.width(), self.height()
+        icon_w, icon_h, icon_gap = self.m(CALL_BAR_ICON_W), self.m(CALL_BAR_ICON_H), self.m(CALL_BAR_ICON_GAP)
         if self.compact:
-            icon_rect = QRectF((width - CALL_BAR_ICON_W) / 2, (height - CALL_BAR_ICON_H) / 2, CALL_BAR_ICON_W, CALL_BAR_ICON_H)
+            icon_rect = QRectF((width - icon_w) / 2, (height - icon_h) / 2, icon_w, icon_h)
             draw_icon(painter, self.icon_name, icon_rect, color)
             return
         font = self.label_font()
         metrics = QFontMetrics(font)
         label_h = metrics.height()
-        block = CALL_BAR_ICON_H + CALL_BAR_ICON_GAP + label_h
+        block = icon_h + icon_gap + label_h
         top = floor((height - block) / 2)
-        icon_rect = QRectF(floor((width - CALL_BAR_ICON_W) / 2), top, CALL_BAR_ICON_W, CALL_BAR_ICON_H)
+        icon_rect = QRectF(floor((width - icon_w) / 2), top, icon_w, icon_h)
         draw_icon(painter, self.icon_name, icon_rect, color)
         label_color = QColor(self.tint) if self.tint is not None else white(0.92)
         label_color.setAlphaF(min(label_color.alphaF(), 0.92) * alpha)
         painter.setFont(font)
         painter.setPen(label_color)
-        label_rect = QRectF(0, top + CALL_BAR_ICON_H + CALL_BAR_ICON_GAP, width, label_h)
+        label_rect = QRectF(0, top + icon_h + icon_gap, width, label_h)
         painter.drawText(label_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self.label)
 
 
@@ -394,6 +404,8 @@ class CallBar(QWidget):
         super(CallBar, self).__init__(parent)
         self.segments = []
         self.compact = False
+        self.scale = 1.0                # of all its measures (the video room's is smaller)
+        self.bottom = CALL_BAR_BOTTOM   # from the bottom of the window
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.opacity_effect = QGraphicsOpacityEffect(self)
@@ -414,26 +426,27 @@ class CallBar(QWidget):
         return [segment for segment in self.segments if segment.isVisibleTo(self)]
 
     def width_for(self, compact):
-        return 2 * CALL_BAR_PADDING + sum(segment.preferred_width(compact) for segment in self.visible_segments)
+        return round(2 * CALL_BAR_PADDING * self.scale) + sum(segment.preferred_width(compact) for segment in self.visible_segments)
 
     def minimum_window_width(self):
         """Narrower than this and not even the icons fit: the bar goes."""
-        return self.width_for(True) + CALL_BAR_MARGIN
+        return self.width_for(True) + round(CALL_BAR_MARGIN * self.scale)
 
     def tile(self):
         container = self.parent()
         available = container.width() if container is not None else None
-        self.compact = available is not None and self.width_for(False) + CALL_BAR_MARGIN > available
-        height = CALL_BAR_COMPACT_HEIGHT if self.compact else CALL_BAR_HEIGHT
-        x = CALL_BAR_PADDING
+        padding = round(CALL_BAR_PADDING * self.scale)
+        self.compact = available is not None and self.width_for(False) + round(CALL_BAR_MARGIN * self.scale) > available
+        height = round((CALL_BAR_COMPACT_HEIGHT if self.compact else CALL_BAR_HEIGHT) * self.scale)
+        x = padding
         for segment in self.visible_segments:
             width = segment.preferred_width(self.compact)
-            segment.setGeometry(x, CALL_BAR_PADDING, width, height - 2 * CALL_BAR_PADDING)
+            segment.setGeometry(x, padding, width, height - 2 * padding)
             segment.update()
             x += width
-        width = x + CALL_BAR_PADDING
+        width = x + padding
         if container is not None:
-            self.setGeometry((container.width() - width) // 2, container.height() - CALL_BAR_BOTTOM - height, width, height)
+            self.setGeometry((container.width() - width) // 2, container.height() - self.bottom - height, width, height)
         else:
             self.resize(width, height)
         self.update()
@@ -465,12 +478,12 @@ class CallBar(QWidget):
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         painter.setPen(QPen(white(0.16), 1))
         painter.setBrush(QColor(0, 0, 0, int(255 * 0.45)))
-        painter.drawRoundedRect(rect, CALL_BAR_RADIUS, CALL_BAR_RADIUS)
+        painter.drawRoundedRect(rect, CALL_BAR_RADIUS * self.scale, CALL_BAR_RADIUS * self.scale)
         # hairlines between neighbours, but not against the red End
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(white(0.14))
-        inset = 8 if self.compact else 10
+        inset = round((8 if self.compact else 10) * self.scale)
         visible = self.visible_segments
         for left, right in zip(visible, visible[1:]):
             if left.destructive or right.destructive:

@@ -21,7 +21,10 @@ hidden_imports = collect_submodules('blink') + collect_submodules('application.v
     'PyQt6.QtPositioning',
     'PyQt6.QtSvg',
     'PyQt6.QtSvgWidgets',
+    'PyQt6.QtWebSockets',      # video conferences: sylkRTC signalling
     'gi.repository.Gst',
+    'gi.repository.GstSdp',    # video conferences: webrtcbin (the typelibs)
+    'gi.repository.GstWebRTC',
     'gi.repository.Gio',
     'gi.repository.GLib',
 ]
@@ -62,7 +65,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
-    hooksconfig={},     # all of GStreamer's plugins: voice notes (AAC in .m4a) and media playback
+    hooksconfig={},     # all of GStreamer's plugins: voice notes (AAC in .m4a), media playback, video conferences (webrtcbin, nice)
     runtime_hooks=[],
     excludes=excludes,
     noarchive=False,

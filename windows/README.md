@@ -49,12 +49,14 @@ Check it before going on:
       mingw-w64-ucrt-x86_64-qt6-svg \
       mingw-w64-ucrt-x86_64-qt6-pdf \
       mingw-w64-ucrt-x86_64-qt6-positioning \
+      mingw-w64-ucrt-x86_64-qt6-websockets \
       mingw-w64-ucrt-x86_64-python-gobject \
       mingw-w64-ucrt-x86_64-gstreamer \
       mingw-w64-ucrt-x86_64-gst-plugins-base \
       mingw-w64-ucrt-x86_64-gst-plugins-good \
       mingw-w64-ucrt-x86_64-gst-plugins-bad \
       mingw-w64-ucrt-x86_64-gst-libav \
+      mingw-w64-ucrt-x86_64-libnice \
       mingw-w64-ucrt-x86_64-python-lxml \
       mingw-w64-ucrt-x86_64-python-requests \
       mingw-w64-ucrt-x86_64-python-numpy \
@@ -72,6 +74,7 @@ What they are for:
 | python-gobject, gstreamer, gst-* | voice notes (AAC in .m4a) and media transcoding |
 | qt6-pdf | PDF previews in messages (optional) |
 | qt6-positioning | location sharing (optional; uses the Windows location service) |
+| qt6-websockets, libnice, gst-plugins-bad | video conferences in SylkServer rooms (WebRTC: sylkRTC signalling, ICE, webrtcbin and echo cancellation; optional) |
 | python-numpy | video frames |
 | python-pynacl | data import from other devices |
 | segno | QR codes |

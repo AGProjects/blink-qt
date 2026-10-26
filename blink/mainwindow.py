@@ -335,6 +335,7 @@ class MainWindow(base_class, ui_class):
         self.call_menu.aboutToShow.connect(self._update_call_me_action)
         NotificationCenter().add_observer(self, name='SylkServerConfigurationDidChange')
         self._update_call_me_action()
+        self._update_video_conference_action()
         self.history_menu.aboutToShow.connect(self._SH_HistoryMenuAboutToShow)
         self.history_menu.triggered.connect(self._AH_HistoryMenuTriggered)
         self.transfer_menu.aboutToShow.connect(self._SH_TransferMenuAboutToShow)
@@ -505,6 +506,37 @@ class MainWindow(base_class, ui_class):
         self.window_menu.insertAction(first_action, self.call_info_action)
         self.addAction(self.call_info_action)
         self.call_info_action.setVisible(False)     # shown while there are calls (_SH_AudioSessionModelChangedStructure)
+
+        # the open video conference windows, to bring one back when minimized or behind others
+        self._video_room_actions = []
+        self.window_menu.aboutToShow.connect(self._fill_video_room_actions)
+
+    def _fill_video_room_actions(self):
+        for action in self._video_room_actions:
+            self.window_menu.removeAction(action)
+            action.deleteLater()
+        self._video_room_actions = []
+        import sys
+        module = sys.modules.get('blink.webrtc.videoroomwindow')    # loaded only once a room was joined
+        windows = list(module.VideoroomWindow.windows.values()) if module is not None else []
+        if not windows:
+            return
+        actions = self.window_menu.actions()
+        # after the windows (Chat, Transfers, Logs), before the separator that ends them
+        anchor = self.logs_window_action
+        position = actions.index(anchor) + 1 if anchor in actions else len(actions)
+        before = actions[position] if position < len(actions) else None
+        for window in windows:
+            action = QAction(window.windowTitle() or window.title, self)
+            action.triggered.connect(lambda checked=False, window=window: self._show_video_room_window(window))
+            self.window_menu.insertAction(before, action)
+            self._video_room_actions.append(action)
+
+    @staticmethod
+    def _show_video_room_window(window):
+        if window.isMinimized():
+            window.showNormal()
+        window.raise_and_activate()
 
     contacts_column_minimum_width = 274
 
@@ -877,8 +909,40 @@ class MainWindow(base_class, ui_class):
             self.call_me_action.setVisible(False)
             ActivityLog().warning(f'[ui] Cannot tell whether the account can be called from the web: {e!r}')
 
+    def _update_video_conference_action(self, *args):
+        """Join Conference joins with video (WebRTC, blink.webrtc) when the selected account's domain runs SylkServer: say so in the Activity log."""
+        from blink.webrtc import ws_server
+        account = self._selected_account()
+        server = ws_server(account)
+        if server is None:
+            self._log_video_conference_state(account, None, None)
+            return
+        # SylkServer is there: only now is the WebRTC code loaded, to see whether the media can be done
+        from blink.webrtc.videoroom import media_missing
+        self._log_video_conference_state(account, server, media_missing())
+
+    def _log_video_conference_state(self, account, server, missing):
+        """Say in the Activity log whether video conferences can be joined, when that changes."""
+        if account is None:
+            return
+        state = (str(account.id), server, tuple(missing) if missing is not None else None)
+        if state == getattr(self, '_video_conference_state', None):
+            return
+        self._video_conference_state = state
+        if server is None:
+            ActivityLog().info(f'[webrtc] Video conferences: {account.id} has no SylkServer WebSocket server, conferences are joined without video')
+            return
+        from blink.webrtc.videoroom import media_report
+        if missing:
+            packages = ' '.join(sorted({package for what, package in missing}))
+            ActivityLog().warning(f'[webrtc] Video conferences for {account.id} through {server} need: {", ".join(what for what, package in missing)} (install {packages})')
+        else:
+            ActivityLog().info(f'[webrtc] Video conferences available for {account.id} through {server}')
+        ActivityLog().info(f'[webrtc] WebRTC media: {media_report()}')
+
     def _NH_SylkServerConfigurationDidChange(self, notification):
         self._update_call_me_action()
+        self._update_video_conference_action()
         self._update_pgp_key_actions()      # a domain found to run SylkServer
 
     def _AH_CallMeMaybeActionTriggered(self):
@@ -1531,6 +1595,7 @@ class MainWindow(base_class, ui_class):
 
     def _SH_IdentityCurrentIndexChanged(self, index):
         self._update_call_me_action()
+        self._update_video_conference_action()
         if index != -1:
             account = self.identity.itemData(index).account
             self._show_display_name(account)

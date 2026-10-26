@@ -240,7 +240,7 @@ QToolButton:pressed {
 	border: 1px solid palette(dark);
 	border-style: outset;
 	border-radius: 3px;
-	background: white;
+	background: palette(base);
 }
 
 QWidget#session_widget_no:hover {

@@ -375,6 +375,10 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def quit(self):
         ActivityLog().info('Quit requested')
+        import sys
+        if 'blink.webrtc.videoroomwindow' in sys.modules:     # loaded only when a room was joined
+            for window in list(sys.modules['blink.webrtc.videoroomwindow'].VideoroomWindow.windows.values()):
+                window.close()      # leaves the room
         self.chat_window.close()
         self.main_window.close()
         super(Blink, self).quit()
