@@ -1,10 +1,23 @@
-blink (7.1.7) unstable; urgency=medium
+blink (7.2.0) unstable; urgency=medium
 
-  * Fix RTT calculus
   * Re-added preffered media per contact
   * Allow search entire messages database from main search bar
   * Added OTR controls for MSRP sessions
-
+  * Improved one to one video call flows
+  * Added multiple video cameras, external RTSP streams and screens sharing to conferencing app
+  * Fixed RTT calculus
+  * Promote newest contacts group on top
+  * Improve contacts healing logic
+  * Added bluring for my own video
+  * SVG pictures of the forms and of the session info and transfers drawn for the screen's pixel ratio (sharp on scaled screens)
+  * Alert panel shows who invited and to what conference
+  * Snap message pane out when downsize main window too much
+  * Fix a bug when dark theme switched
+  * Explain MSRP connect failure in logs
+  * Invite participants when drop contact over conference participants panel
+  * Don't remove the session tile when connected, just close MSRP session
+  * Added display receipt for MSRP chat messages
+  * Allow search entire messages database from main search bar
 
  -- Adrian Georgescu <ag@ag-projects.com>  Fri, 23 Oct 2026 10:26:26 -0300
 
