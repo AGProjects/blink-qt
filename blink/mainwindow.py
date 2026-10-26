@@ -1722,7 +1722,10 @@ class MainWindow(base_class, ui_class):
             self.conference_button.setChecked(False)
 
     def _SH_AudioSessionModelAddedSession(self, session_item):
-        if len(session_item.blink_session.streams) == 1:
+        # a call, with or without video: it shows in the audio drawer, the video window
+        # comes up only once the remote picture arrives
+        streams = session_item.blink_session.streams
+        if 'chat' not in streams and 'screen-sharing' not in streams:
             self.switch_view_button.view = SwitchViewButton.SessionView
 
     def _SH_AudioSessionModelRemovedSession(self, session_item):

@@ -2330,6 +2330,7 @@ class AudioSessionItem(object):
         self.media_connected = session.state == 'connected/*' and 'audio' in session.streams
         if not self.media_connected:
             self.status = Status(translate('sessions', 'Initializing...'))  # never leave the status empty before the call connects
+            self.type = self._setup_type()
 
         self.zrtp_widget = ZRTPWidget()
         self.zrtp_widget.setWindowFlags(Qt.WindowType.Popup)
@@ -2584,8 +2585,18 @@ class AudioSessionItem(object):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
         handler(notification)
 
+    def _connected_type(self):
+        audio_info = self.blink_session.info.streams.audio
+        return translate('sessions', 'HD Audio') if audio_info.sample_rate and audio_info.sample_rate >= 16000 else translate('sessions', 'Audio')
+
+    def _setup_type(self):
+        """What the tile says the call is while it is set up: the media asked for."""
+        return translate('sessions', 'Audio and video') if 'video' in self.blink_session.streams else translate('sessions', 'Audio')
+
     def _NH_BlinkSessionConnectionProgress(self, notification):
         stage = notification.data.stage
+        if not self.media_connected:
+            self.type = self._setup_type()      # a redial reuses the tile, maybe with other media
         if stage == 'initializing':
             self.status = Status(translate('sessions', 'Initializing...'))
         elif stage in ('dns_lookup', 'connecting/dns_lookup'):
@@ -2611,7 +2622,8 @@ class AudioSessionItem(object):
     def _NH_BlinkSessionInfoUpdated(self, notification):
         if 'media' in notification.data.elements:
             audio_info = self.blink_session.info.streams.audio
-            self.type = translate('sessions', 'HD Audio') if audio_info.sample_rate and audio_info.sample_rate >= 16000 else translate('sessions', 'Audio')
+            if self.media_connected:
+                self.type = self._connected_type()
             self.codec_info = audio_info.codec
             if audio_info.encryption is not None:
                 self.widget.srtp_label.setToolTip(translate('sessions', 'Media is encrypted using %s (%s)') % (audio_info.encryption, audio_info.encryption_cipher))
@@ -2643,6 +2655,7 @@ class AudioSessionItem(object):
             self.widget.address_label.setText(self.name)    # 'Room ...' once the remote turns out to be a focus
         if 'audio' in session.streams:
             self.media_connected = True
+            self.type = self._connected_type()
             self.widget.mute_button.setEnabled(True)
             self.widget.hold_button.setEnabled(True)
             self.widget.record_button.setEnabled(True)
@@ -2659,6 +2672,7 @@ class AudioSessionItem(object):
     def _NH_BlinkSessionDidAddStream(self, notification):
         if notification.data.stream.type == 'audio':
             self.media_connected = True
+            self.type = self._connected_type()
             self.widget.mute_button.setEnabled(True)
             self.widget.hold_button.setEnabled(True)
             self.widget.record_button.setEnabled(True)

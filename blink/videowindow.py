@@ -28,6 +28,8 @@ from datetime import datetime
 from itertools import count
 from math import ceil, floor
 
+import numpy as np
+
 from PyQt6.QtCore import Qt, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QShortcut, QDesktopServices, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QRegion
 from PyQt6.QtWidgets import QAbstractButton, QApplication, QGraphicsOpacityEffect, QLabel, QMenu, QPushButton, QWidget
@@ -606,17 +608,20 @@ class TrackedVideoSurface(VideoSurface):
 
     firstFrame = pyqtSignal(int, int)
     frameSizeChanged = pyqtSignal(int, int)    # a later frame of another size than the one before
+    pictureAppeared = pyqtSignal()             # the first frame that is not plain black
 
     def __init__(self, parent=None, framerate=None):
         super(TrackedVideoSurface, self).__init__(parent, framerate=framerate)
         self.frame_count = 0
         self.frame_size = None
+        self.has_picture = False
 
     def _set_tracked_producer(self, producer):
         if producer is not None and producer is VideoSurface.producer.fget(self):
             return              # already attached: detaching and attaching again would cycle the camera
         self.frame_count = 0
         self.frame_size = None
+        self.has_picture = False
         VideoSurface.producer.fset(self, producer)
         if producer is None:
             self._image = None
@@ -633,6 +638,28 @@ class TrackedVideoSurface(VideoSurface):
         elif self.frame_size != (frame.width, frame.height):
             self.frame_size = (frame.width, frame.height)
             self.frameSizeChanged.emit(frame.width, frame.height)
+        if not self.has_picture and frame_has_picture(frame):
+            self.has_picture = True
+            self.pictureAppeared.emit()
+
+
+def frame_has_picture(frame):
+    """Whether a frame shows something: a remote party with the camera off still sends
+    video, plain black frames, and that is no reason to bring up a window."""
+    width, height = frame.width, frame.height
+    try:
+        data = frame.data
+        if width < 16 or height < 16 or len(data) < width * height * 4:
+            return False
+        sample = np.frombuffer(data, dtype=np.uint8, count=width * height * 4).reshape((height, width, 4))[::8, ::8]
+    except Exception:
+        return False
+    # leave out the alpha channel, wherever it is: the one that is 255 everywhere
+    channels = [c for c in range(4) if not (sample[..., c] == 255).all()]
+    if not channels:
+        return False
+    values = sample[..., channels]
+    return int(values.max()) > 40 or float(values.std()) > 6
 
 
 def local_is_screen():
@@ -1113,6 +1140,7 @@ SCREEN_SHARE_NOTIFICATIONS = ('BlinkScreenPointerDidChange', 'BlinkScreenPointer
 @implementer(IObserver)
 class VideoWindow(QWidget):
     closed = pyqtSignal(object)
+    remoteVideoArrived = pyqtSignal(object)     # the window, once a remote frame shows something (not black)
 
     def __init__(self, blink_session):
         super(VideoWindow, self).__init__(None)
@@ -1129,6 +1157,7 @@ class VideoWindow(QWidget):
         self.always_on_top = False
         self.ending = False
         self.received_video = False
+        self.remote_picture = False       # a remote frame that is not black arrived: the other party's camera is on
         self.docked = False               # hidden, its video shown under the call in the main window
         self._remote_producer = None
         self.pointer_mode = False         # clicks on the picture point at the other party's shared screen
@@ -1209,6 +1238,8 @@ class VideoWindow(QWidget):
 
         self.video_view.firstFrame.connect(self._SH_MainViewFirstFrame)
         self.my_video_view.firstFrame.connect(self._SH_ThumbnailFirstFrame)
+        self.video_view.pictureAppeared.connect(lambda: self._SH_PictureAppeared(self.video_view))
+        self.my_video_view.pictureAppeared.connect(lambda: self._SH_PictureAppeared(self.my_video_view))
         self.video_view.frameSizeChanged.connect(lambda width, height: self._SH_FrameSizeChanged('main view', width, height))
         self.my_video_view.frameSizeChanged.connect(lambda width, height: self._SH_FrameSizeChanged('thumbnail', width, height))
 
@@ -1976,6 +2007,21 @@ class VideoWindow(QWidget):
         self.my_video_view.set_placeholder('')
         self.my_video_view.layout_in_parent()     # the camera's real shape is known now
 
+    def _SH_PictureAppeared(self, view):
+        # Frames reach the view as soon as the remote stream exists, before anything is
+        # decoded, and a party with the camera off sends black frames: only a frame that
+        # shows something means there is video to look at.
+        if self.blink_session is None or self._remote_producer is None or view.producer is not self._remote_producer:
+            return
+        self._remote_picture_arrived()
+
+    def _remote_picture_arrived(self):
+        if self.remote_picture:
+            return
+        self.remote_picture = True
+        self.log('Remote video arrived')
+        self.remoteVideoArrived.emit(self)
+
     def _remote_video_arrived(self):
         if self.received_video:
             return
@@ -2238,7 +2284,13 @@ class VideoWindow(QWidget):
 
 @implementer(IObserver)
 class VideoWindowManager(object):
-    """Opens a video window for every call that gets video, and forgets it when it closes."""
+    """Opens a video window for every call that gets video, and forgets it when it closes.
+
+    The window is made as soon as the call has video, so its views take the camera and the
+    remote picture, but it stays hidden until the first remote picture arrives: until then
+    the call shows only in the audio drawer, and a remote party that never sends video never
+    brings up an empty window.
+    """
 
     def __init__(self):
         self.windows = {}
@@ -2276,20 +2328,32 @@ class VideoWindowManager(object):
         if window is not None and not window.ending:
             if connected_stream is not None:
                 window.show_connected_layout(connected_stream)
-            if not window.isVisible() and not window.docked:
-                window.show()
+            if window.remote_picture and not window.isVisible() and not window.docked:
+                self._reveal(window)
             return
         window = VideoWindow(blink_session)
         window.closed.connect(self._SH_WindowClosed)
+        window.remoteVideoArrived.connect(self._SH_RemoteVideoArrived)
         self.windows[blink_session] = window
         if connected_stream is not None:
             window.show_connected_layout(connected_stream)
         else:
             window.show_preview_layout()
+
+    def _reveal(self, window):
+        window._center_on_screen()
         window.show()
         window.raise_()
         window.activateWindow()
         window.show_controls()
+
+    def _SH_RemoteVideoArrived(self, window):
+        if window.ending or window.docked or window.isVisible() or window.blink_session is None:
+            return
+        if self.windows.get(window.blink_session) is not window:
+            return
+        window.log('Showing the video window')
+        self._reveal(window)
 
     def _SH_WindowClosed(self, blink_session):
         _forget_decoded_sizes(blink_session)
