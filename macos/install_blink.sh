@@ -39,7 +39,7 @@ bash "$HERE/install_sipsimple.sh"
 # --- Build & install Blink Qt into the same environment --------------------
 cd "$REPO"
 
-sudo port install libvncserver upx
+sudo port install upx
 
 export CFLAGS="-I/opt/local/include"
 export LDFLAGS="-L/opt/local/lib"
@@ -51,19 +51,52 @@ pip3 install --upgrade pip wheel setuptools
 pip3 install -r "$HERE/python-requirements.txt"
 pip3 install --no-build-isolation -r "$HERE/sipsimple-requirements.txt"
 
-# Blink's own requirements (cython + setuptools for the _rfb extension).
+# Blink's own requirements.
 pip3 install -r "$HERE/requirements-osx.txt"
 
-# --- Optional: GStreamer (voice notes as AAC .m4a, video call recording) -----
-# Without it Blink still runs: voice notes are sent as WAV and video recording
-# is disabled. Opt in with WITH_GSTREAMER=1. gst-libav is deliberately not
-# installed: it pulls a current ffmpeg, which would replace the ffmpeg 4.4.5
-# that PJSIP is built against.
-if [ "${WITH_GSTREAMER:-0}" = "1" ]; then
-    sudo port install gobject-introspection gstreamer1 gstreamer1-gst-plugins-base \
-        gstreamer1-gst-plugins-good gstreamer1-gst-plugins-ugly gstreamer1-gst-plugins-bad
-    pip3 install PyGObject || pip3 install "PyGObject<3.51"
+# --- GStreamer (WebRTC video conferences, voice notes as AAC .m4a, video call
+# recording) ---------------------------------------------------------------------
+# From Homebrew (prebuilt). Not from MacPorts: its plugin sets drag in
+# X11/GTK/pulseaudio and build for hours, and a MacPorts gstreamer1 next to
+# Homebrew's overwrites its plugin registry (~/.cache/gstreamer-1.0).
+if ! command -v brew > /dev/null; then
+    echo
+    echo "GStreamer (video conferences) needs Homebrew: install it from https://brew.sh"
+    echo "and run this script again."
+    echo
+    exit 1
 fi
+if port -q installed gstreamer1 2> /dev/null | grep -q .; then
+    echo
+    echo "MacPorts gstreamer1 is installed and clashes with Homebrew's; remove it with:"
+    echo "  sudo port uninstall --follow-dependents gstreamer1 && rm -rf ~/.cache/gstreamer-1.0"
+    echo
+    exit 1
+fi
+brew install gstreamer gobject-introspection pkgconf
+# nicesrc (webrtcbin's ICE) is a separate formula in Homebrew
+brew install libnice-gstreamer 2> /dev/null || brew install libnice || true
+BREW_PREFIX=$(brew --prefix)
+
+# PyGObject is built against Homebrew's GLib, never MacPorts' (two GLibs in one
+# process crash), so the /opt/local flags exported above are dropped for it.
+# pycairo is not used. < 3.51 first: newer PyGObject uses GLib's girepository-2.0,
+# which dlopens the bare library names in Homebrew's typelibs
+# (libgobject-2.0.0.dylib) and misses /opt/homebrew/lib; Homebrew's
+# gobject-introspection (girepository-1.0) looks in its prefix. The venv's python
+# is named explicitly: Homebrew's bin goes first in PATH and has a pip3.
+VENV_PYTHON="$VENV/bin/python3"
+"$VENV_PYTHON" -m pip uninstall -y PyGObject > /dev/null 2>&1 || true
+for spec in "PyGObject<3.51" PyGObject; do
+    if env -u CFLAGS -u CPPFLAGS -u CPATH \
+        PKG_CONFIG_PATH="$BREW_PREFIX/lib/pkgconfig:$(brew --prefix libffi)/lib/pkgconfig" \
+        LDFLAGS="-L$BREW_PREFIX/lib" \
+        PATH="$BREW_PREFIX/bin:$PATH" \
+        "$VENV_PYTHON" -m pip install --no-cache-dir --no-binary PyGObject --no-deps \
+            --config-settings=setup-args=-Dpycairo=disabled "$spec"; then
+        break
+    fi
+done
 
 cp "$HERE/_codecs.py" blink/configuration/
 cp "$HERE/_tls.py" blink/configuration/
@@ -83,7 +116,6 @@ checks = [
     ('nacl.secret', 'encrypted data import'),
     ('segno', 'QR codes'),
     ('Foundation', 'macOS notifications'),
-    ('blink.screensharing._rfb', 'screen sharing'),
 ]
 for module, feature in checks:
     try:
@@ -95,12 +127,18 @@ try:
     import gi
     gi.require_version('Gst', '1.0')
     from gi.repository import Gst
-    Gst.init(None)
+    Gst.init([])
     aac = [n for n in ('avenc_aac', 'fdkaacenc', 'voaacenc') if Gst.ElementFactory.find(n)]
     h264 = [n for n in ('x264enc', 'openh264enc') if Gst.ElementFactory.find(n)]
     print('  ok       %-28s AAC: %s, H.264: %s' % ('GStreamer', aac or 'none (voice notes sent as WAV)', h264 or 'none (no video recording)'))
-except Exception:
-    print('  optional %-28s not installed (WITH_GSTREAMER=1 to add)' % 'GStreamer')
+    from blink.webrtc.videoroom import media_missing
+    missing = media_missing()
+    if missing:
+        print('  MISSING  %-28s video conferences (%s)' % ('GStreamer WebRTC', ', '.join(what for what, package in missing)))
+    else:
+        print('  ok       %-28s video conferences' % 'GStreamer WebRTC')
+except Exception as e:
+    print('  MISSING  %-28s not usable: no video conferences, voice notes sent as WAV (%s)' % ('GStreamer', e))
 PY2
 )
 
