@@ -1,3 +1,13 @@
+blink (7.2.2) unstable; urgency=medium
+
+  * Key escrow: write the escrow to the account storage as well as to our own contacts
+  * Fix logs when restore tiles
+  * Fix saving call items in history
+  * Fix restore tiles in msrp window at start
+  * Chose a real SIP account for calls outside neighbourhood
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 27 Oct 2026 18:10:15 -0300
+
 blink (7.2.1) unstable; urgency=medium
 
   * Added sorting for groups  
