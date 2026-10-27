@@ -1,3 +1,11 @@
+blink (7.2.1) unstable; urgency=medium
+
+  * Refactor own video blur
+  * Don't subscribe to conference rooms for other events
+  * Healing contacts updates
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 27 Oct 2026 10:45:02 -0300
+
 blink (7.2.0) unstable; urgency=medium
 
   * Re-added preffered media per contact
