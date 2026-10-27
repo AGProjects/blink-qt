@@ -103,7 +103,7 @@ def _init():
     if _gi_error is not None:
         return False
     if not Gst.is_initialized():
-        Gst.init(None)
+        Gst.init([])
     return True
 
 

@@ -37,7 +37,7 @@ def _init():
     if Gst is None:
         return False
     if not _initialized:
-        Gst.init(None)
+        Gst.init([])
         _initialized = True
     return True
 
