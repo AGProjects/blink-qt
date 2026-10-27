@@ -2754,7 +2754,17 @@
            <string>Preview</string>
           </property>
           <layout class="QGridLayout" name="video_camera_layout">
-           <item row="5" column="0" colspan="3">
+           <item row="5" column="1" colspan="2">
+            <widget class="QCheckBox" name="video_background_blur_button">
+             <property name="toolTip">
+              <string>In video conferences only you are seen, the room behind you is blurred. The preview shows what the others see.</string>
+             </property>
+             <property name="text">
+              <string>Blur the background in video conferences</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0" colspan="3">
             <spacer name="video_spacer_3">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -4094,6 +4104,7 @@
   <tabstop>video_camera_button</tabstop>
   <tabstop>video_resolution_button</tabstop>
   <tabstop>video_framerate_button</tabstop>
+  <tabstop>video_background_blur_button</tabstop>
   <tabstop>video_codecs_list</tabstop>
   <tabstop>h264_profile_button</tabstop>
   <tabstop>video_codec_bitrate_button</tabstop>

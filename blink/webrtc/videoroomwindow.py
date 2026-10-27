@@ -1386,10 +1386,6 @@ class VideoroomWindow(QWidget):
     def _set_background_blur(self, enabled):
         from blink.webrtc.background_blur import set_blur_enabled
         set_blur_enabled(enabled)
-        ActivityLog().info(f'[videoroom] Background blur {"on" if enabled else "off"}')
-        for session, window in list(VideoroomWindow.windows.items()):     # every room sends the same camera
-            session.blur_changed()
-            window.local_tile.attach_camera()
 
     def _use_camera(self, device):
         from blink.screen_share import ScreenShareManager, _select_device

@@ -53,10 +53,19 @@ def blur_enabled():
 
 
 def set_blur_enabled(enabled):
+    """From the video room's Camera menu or the Preferences: saved, and the open rooms read the
+    camera again, through the blur or not (every room sends the same camera)."""
     from sipsimple.configuration.settings import SIPSimpleSettings
     settings = SIPSimpleSettings()
+    if settings.video.background_blur == bool(enabled):
+        return
     settings.video.background_blur = bool(enabled)
     settings.save()
+    ActivityLog().info(f'[videoroom] Background blur {"on" if enabled else "off"}')
+    from blink.webrtc.videoroomwindow import VideoroomWindow
+    for session, window in list(VideoroomWindow.windows.items()):
+        session.blur_changed()
+        window.local_tile.attach_camera()
 
 
 def _fit(width, height):

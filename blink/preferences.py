@@ -463,6 +463,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.video_camera_button.activated[int].connect(self._SH_VideoCameraButtonActivated)
         self.video_resolution_button.activated[int].connect(self._SH_VideoResolutionButtonActivated)
         self.video_framerate_button.activated[int].connect(self._SH_VideoFramerateButtonActivated)
+        self.video_background_blur_button.clicked.connect(self._SH_VideoBackgroundBlurButtonClicked)
 
         # Video codecs
         self.video_codecs_list.itemChanged.connect(self._SH_VideoCodecsListItemChanged)
@@ -668,10 +669,28 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         if watched is self.camera_preview:
             event_type = event.type()
             if event_type == QEvent.Type.Show:
-                self.camera_preview.producer = SIPApplication.video_device.producer
+                self._show_camera_preview()
             elif event_type == QEvent.Type.Hide:
-                self.camera_preview.producer = None
+                self._show_camera_preview(False)
         return False
+
+    def _show_camera_preview(self, visible=True):
+        """The camera in the Video page, blurred as the video rooms send it when the blur is on."""
+        from blink.webrtc.background_blur import BlurredCamera, blur_enabled
+        producer = SIPApplication.video_device.producer if visible else None
+        blurred = producer is not None and blur_enabled() and not is_screen_device(SIPSimpleSettings().video.device)
+        if blurred:
+            self.camera_preview.producer = None
+            if getattr(self, '_preview_blurred', False):
+                BlurredCamera().refresh()       # the camera was switched
+            else:
+                BlurredCamera().add_listener(self, self.camera_preview.set_frame)
+        else:
+            if getattr(self, '_preview_blurred', False):
+                BlurredCamera().remove_listener(self)
+                self.camera_preview.clear_frame()
+            self.camera_preview.producer = producer
+        self._preview_blurred = blurred
 
     def closeEvent(self, event):
         super(PreferencesWindow, self).closeEvent(event)
@@ -905,6 +924,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.load_video_devices()
 
         self.video_framerate_button.setCurrentIndex(self.video_framerate_button.findData(settings.video.framerate))
+        from blink.webrtc.background_blur import blur_available
+        self.video_background_blur_button.setEnabled(blur_available())
+        self.video_background_blur_button.setChecked(blur_available() and settings.video.background_blur)
+        if not blur_available():
+            self.video_background_blur_button.setToolTip(translate('preferences_window', 'Needs python3-numpy'))
 
         # Video codecs
         with blocked_qt_signals(self.video_codecs_list):
@@ -1938,6 +1962,12 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings.video.h264.level = H264_LEVELS.get(resolution, '3.1')
         settings.save()
 
+    def _SH_VideoBackgroundBlurButtonClicked(self, checked):
+        from blink.webrtc.background_blur import set_blur_enabled
+        set_blur_enabled(checked)
+        if self.camera_preview.isVisible():
+            self._show_camera_preview()
+
     def _SH_VideoFramerateButtonActivated(self, index):
         framerate = self.video_framerate_button.itemData(index)
         settings = SIPSimpleSettings()
@@ -2173,7 +2203,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
     def _NH_VideoDeviceDidChangeCamera(self, notification):
         if self.camera_preview.isVisible():
-            self.camera_preview.producer = SIPApplication.video_device.producer
+            self._show_camera_preview()
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         settings = SIPSimpleSettings()
@@ -2197,6 +2227,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             if 'video.device' in notification.data.modified:
                 self.video_camera_button.setCurrentIndex(self.video_camera_button.findData(settings.video.device))
                 self.load_video_resolutions()
+            if 'video.background_blur' in notification.data.modified:      # from a video room's Camera menu
+                self.video_background_blur_button.setChecked(settings.video.background_blur)
+                if self.camera_preview.isVisible():
+                    self._show_camera_preview()
         elif notification.sender is self.selected_account is not None:
             account = notification.sender
             if 'sip.auto_answer' in notification.data.modified:
