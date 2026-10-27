@@ -490,6 +490,8 @@ class ChatWidget(QWidget):
         video_button = self.header.video_button
         # a room of another SylkServer counts as one even before (or without) its focus saying so
         room_video = self._room_video(blink_session) if video_room is None else None
+        if video_room is None and room_video is None and blink_session.is_conference:
+            self._resolve_room_host(blink_session)      # its SylkServer not known yet: the button once it is
         video_possible = video_room is not None or (room_video is not None and (room_video[1] is not None or blink_session.is_conference))
         video_button.setVisible(video_possible)
         from blink.webrtc.sharedialog import share_available, share_icon
@@ -516,6 +518,21 @@ class ChatWidget(QWidget):
         from blink.webrtc import room_video
         contact_uri = blink_session.contact_uri
         return room_video(contact_uri.uri, blink_session.account) if contact_uri is not None and blink_session.account is not None else None
+
+    _resolved_room_hosts = set()    # room hosts looked up for their SylkServer, once a run
+
+    def _resolve_room_host(self, blink_session):
+        from blink.conference import split_uri
+        from blink.webrtc import local_room_host, resolve_room
+        if blink_session.contact_uri is None or blink_session.account is None:
+            return
+        user, host = split_uri(blink_session.contact_uri.uri)
+        if not user or not host or host in ChatWidget._resolved_room_hosts or local_room_host(host, blink_session.account):
+            return
+        if not host.startswith(('conference.', 'videoconference.')):
+            return
+        ChatWidget._resolved_room_hosts.add(host)
+        resolve_room(user, host, blink_session.account, lambda target: self.update_header() if self.session is not None else None)
 
     def _SH_HeaderShareClicked(self):
         if self.session is None:
@@ -1389,6 +1406,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
 
     def __init__(self, parent=None):
         super(ChatWindow, self).__init__(parent)
+        self._history_pending = set()   # sessions added while the window was hidden: their history is not loaded yet
         with Resources.directory:
             self.setupUi()
 
@@ -2516,8 +2534,35 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         hidden = {str(item.blink_session.contact_uri.uri).lower(): item for item in self.session_model.sessions
                   if item.blink_session.contact_uri is not None and not self._shows_session(item.blink_session)}
         self._restoring_tiles = True
+        self._restored_adhoc_tiles = set()
+        self._dropped_adhoc_tiles = set()
         pending = list(reversed(tiles))       # the bottom one first: each newer one goes on top
         self._restore_next_tile(tiles, pending, present, hidden, 0)
+
+    _restored_adhoc_tiles = set()   # ad hoc rooms restored this start, until their history is loaded
+    _dropped_adhoc_tiles = set()    # those dropped for having none
+
+    @staticmethod
+    def _is_adhoc_room(uri):
+        """A room named as the conference dialog names a new one (ConferenceDialog.random_room: seven digits)."""
+        from blink.conference import split_uri, is_conference_uri
+        user, host = split_uri(uri)
+        return bool(user and re.fullmatch(r'[1-9][0-9]{6}', user)) and is_conference_uri(uri)
+
+    def _drop_empty_adhoc_tile(self, blink_session, messages):
+        """A restored ad hoc room with nothing in its history and not joined: its tile is not kept."""
+        if blink_session.contact_uri is None:
+            return False
+        uri = str(blink_session.contact_uri.uri).lower()
+        if uri not in self._restored_adhoc_tiles:
+            return False
+        self._restored_adhoc_tiles.discard(uri)
+        if messages or str(blink_session.state or '').startswith(('connecting', 'connected')):
+            return False
+        self._dropped_adhoc_tiles.add(uri)
+        ActivityLog().info(f'[ui] Chat window: the ad hoc room {blink_session.contact_uri.uri} has no messages, its tile is not kept')
+        blink_session.end(delete=True)
+        return True
 
     def _restore_next_tile(self, tiles, pending, present, hidden, restored):
         from blink.contacts import URIUtils
@@ -2541,6 +2586,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 if account is None or not account.enabled:
                     continue
                 contact, contact_uri = URIUtils.find_contact(uri)
+                if self._is_adhoc_room(uri):
+                    self._restored_adhoc_tiles.add(uri.lower())     # dropped if its history turns out empty
                 SessionManager().create_session(contact, contact_uri, [StreamDescription('chat')], account=account, connect=False)
                 present.add(uri.lower())
                 restored += 1
@@ -2554,7 +2601,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self._hide_message_only_sessions()      # the rows of tiles made visible again
         shown = {str(item.blink_session.contact_uri.uri).lower() for item in self.session_model.sessions
                  if item.blink_session.contact_uri is not None and self._shows_session(item.blink_session)}
-        missing = [tile for tile in tiles if tile.get('uri') and tile['uri'].lower() not in shown]
+        missing = [tile for tile in tiles if tile.get('uri') and tile['uri'].lower() not in shown and tile['uri'].lower() not in self._dropped_adhoc_tiles]
         self._save_conference_tiles(keep=missing)
         if restored:
             ActivityLog().info(f'[ui] Chat window: {restored - len(missing)} of {len(tiles)} tiles restored')
@@ -3293,6 +3340,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             return
 
         kind = getattr(notification.data, 'kind', None) or 'initial'
+        if kind == 'initial' and self._drop_empty_adhoc_tile(blink_session, messages):
+            return
         if kind in ('jump', 'now'):
             session.chat_widget.clear()       # a page of its own: what was shown goes
 
@@ -3906,18 +3955,37 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.session_list.animation.setStartValue(self.session_widget.geometry())
         self.session_list.show()
         session.chat_widget.chat_input.setFocus(Qt.FocusReason.OtherFocusReason)
-        history = HistoryManager()
-        history.load(session.blink_session.contact.uri.uri, session.blink_session)
+        if self.isVisible():
+            self._load_history(session)
+        else:
+            self._history_pending.add(session)      # loaded when the window is first shown (showEvent)
         self._hide_message_only_sessions()
+
+    def _load_history(self, session):
+        self._history_pending.discard(session)
+        HistoryManager().load(session.blink_session.contact.uri.uri, session.blink_session)
+
+    def showEvent(self, event):
+        super(ChatWindow, self).showEvent(event)
+        if self._history_pending:
+            pending = [session for session in self.session_model.sessions if session in self._history_pending]
+            self._history_pending = set()
+            if pending:
+                ActivityLog().info(f'[ui] Chat window shown: loading the history of {len(pending)} tiles')
+            for session in pending:
+                self._load_history(session)
 
     def _NH_BlinkMessageHistoryMustReload(self, notification):
         history = HistoryManager()
         for session in self.session_model.sessions:
             # print(f'Check if we must reload {session.blink_session}')
+            if session in self._history_pending:
+                continue        # not loaded yet: its first load reads it as it is now
             if session.blink_session.account.id == notification.data.account:
                 history.reload_pending_encrypted(session.blink_session.contact.uri.uri, session.blink_session)
 
     def _SH_SessionModelSessionRemoved(self, session):
+        self._history_pending.discard(session)
         self.tab_widget.removeTab(self.tab_widget.indexOf(session.chat_widget))
         session.chat_widget = None
         session.active_panel = None

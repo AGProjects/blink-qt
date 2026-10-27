@@ -654,8 +654,9 @@ class AccountStorage(object, metaclass=Singleton):
                                  headers={'If-Match': f'"{meta.get("etag")}"', 'X-Sylk-Device-Id': self.device_id()})
             if gone.status in (204, 404):
                 collected += 1
-        ActivityLog().info(f'[avatar] Avatar sync of {account.id}: {len(objects)} on the server, {len(to_fetch)} to fetch, '
-                           f'{len(dropped)} dropped from the cache, {collected} orphans deleted')
+        if to_fetch or dropped or collected:
+            ActivityLog().info(f'[avatar] Avatar sync of {account.id}: {len(objects)} on the server, {len(to_fetch)} to fetch, '
+                               f'{len(dropped)} dropped from the cache, {collected} orphans deleted')
         if dropped:
             self._post_changed(dropped)
         for object_id, cached_etag, meta in to_fetch:
