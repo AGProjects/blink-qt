@@ -29,7 +29,7 @@ Precedence when a contact is drawn (contact_picture):
 """
 
 __all__ = ['STORAGE_CHANGED_CONTENT_TYPE', 'AVATARS_NAMESPACE', 'AccountStorage', 'contact_picture',
-           'storage_url', 'storage_account', 'encode_avatar', 'valid_name']
+           'storage_url', 'storage_account', 'encode_avatar', 'valid_name', 'device_name']
 
 import json
 import os
@@ -106,6 +106,16 @@ def storage_url(account):
     if not root:
         return None
     return '%s/storage/%s' % (root, urllib.parse.quote(str(account.id).lower(), safe='@'))
+
+
+def device_name():
+    """This device for a human, as the account storage keeps it with what it writes:
+    'Blink Qt on ag-xps (Linux)'."""
+    import platform
+    import socket
+    host = socket.gethostname().split('.')[0] or 'unknown host'
+    system = {'Darwin': 'macOS'}.get(platform.system(), platform.system()) or 'unknown system'
+    return f'Blink Qt on {host} ({system})'
 
 
 def _token(account):
@@ -433,6 +443,9 @@ class AccountStorage(object, metaclass=Singleton):
             self.logged_urls.add(base)
             ActivityLog().info(f'[avatar] Account storage of {account.id} at {base}')
         request_headers = {'Authorization': f'Apikey {token}'}
+        if method in ('PUT', 'DELETE'):
+            # who wrote it, for humans (sylk-account, the other devices): the id alone says nothing
+            request_headers['X-Sylk-Device-Name'] = urllib.parse.quote(device_name(), safe=" '()")
         request_headers.update((name, value) for name, value in (headers or {}).items() if value is not None)
         try:
             response = requests.request(method, url, data=body, headers=request_headers, timeout=(15, 30),

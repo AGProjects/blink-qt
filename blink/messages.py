@@ -3745,6 +3745,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
     escrow record (key_escrow.STORAGE_ID): the pass waits for the storage to answer
     (or fail), and runs again whenever what it keeps changes -- a key escrowed by
     another device is restored here without waiting for an addressbook reload.
+    While both are kept (Phase 1) the pass also keeps them equal: the newest record
+    is copied as it is to the side that lacks it or holds an older one (copy_escrow).
 
     Generating a key waits for the answer (when_answered): the addressbook has
     loaded (or the account has no XCAP, or 15 seconds have passed) AND the server
@@ -3782,6 +3784,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.password_checked = {}      # account id -> the escrow and password last checked (escrow_password_check)
         self.imported = set()           # accounts whose imported key has not been compared with the escrow yet
         self.storage_waiting = set()    # accounts whose escrow pass waits for the account storage
+        self.copied = {}                # account id -> the last escrow copy sent (copy_escrow), not repeated
 
     def start(self):
         if not self._started:
@@ -3968,6 +3971,10 @@ class KeyEscrowManager(object, metaclass=Singleton):
             except Exception as e:
                 ActivityLog().exception(f'[pgp] Key escrow restore failed for {account.id}: {e!r}')
             try:
+                self.copy_escrow(account)
+            except Exception as e:
+                ActivityLog().exception(f'[pgp] Key escrow copy failed for {account.id}: {e!r}')
+            try:
                 key_escrow.log_self_contact(account)
             except Exception as e:
                 ActivityLog().error(f'[pgp] Key escrow inspection failed for {account.id}: {e!r}')
@@ -4134,15 +4141,39 @@ class KeyEscrowManager(object, metaclass=Singleton):
         if account.id in self.repaired:
             return
         if not key_escrow.self_contact_elements(account):
-            # the escrow lives on our own contact, as Sylk Mobile keeps it: create it, and
-            # the escrow is written on the reload that brings it back from the server
+            # the escrow is also kept on our own contact, as Sylk Mobile keeps it: create it, and
+            # the contacts get the escrow on the reload that brings it back from the server
             self.create_self_contact(account)
-            return
+            if not key_escrow.escrow_write_targets(account):
+                return      # and no account storage to write meanwhile
         self.repaired.add(account.id)
         ActivityLog().info(f'[pgp] Key escrow: {account.id} holds a key but the server carries no escrow for it, saving it there')
         written, reason = key_escrow.write_self_keys(account)
         if not written:
             ActivityLog().info(f'[pgp] Key escrow: could not save the key of {account.id} on the server: {reason}')
+
+    def copy_escrow(self, account):
+        """Keep the account storage and our contacts equal: copy the newest escrow record, as
+        it is, to the side that lacks it or holds an older one. Each copy is sent once per run."""
+        if not account.enabled or not account.sms.enable_pgp or not MessageManager._pgp_messaging_possible(account):
+            return
+        direction, record, detail = key_escrow.escrow_copy_action(account)
+        if direction is None:
+            if detail:
+                ActivityLog().debug(f'[pgp] Key escrow: nothing copied for {account.id}: {detail}')
+            return
+        signature = (direction, record.get('timestamp'), len(record.get('private_key') or ''))
+        if self.copied.get(account.id) == signature:
+            return
+        self.copied[account.id] = signature
+        where = (f'from contact {detail} to the account storage' if direction == 'storage'
+                 else f'from the account storage to contact(s) {", ".join(str(item) for item in detail)}')
+        ActivityLog().info(f'[pgp] Key escrow: copying the escrow of {account.id} written {record.get("timestamp") or "?"} '
+                           f'by "{record.get("device") or "?"}" {where}')
+        sent = key_escrow.copy_escrow(account, direction, record, detail)
+        if not sent:
+            self.copied.pop(account.id, None)
+            ActivityLog().info(f'[pgp] Key escrow: the copy for {account.id} could not be sent, tried again on the next pass')
 
     def create_self_contact(self, account):
         if account.id in self.self_contact_created:
