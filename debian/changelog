@@ -2,6 +2,7 @@ blink (7.2.1) unstable; urgency=medium
 
   * Added sorting for groups  
   * Refactor own video blur
+  * Show selected Conference group in edit contact modal
   * Don't subscribe to conference rooms for other events
   * Healing contacts updates
 

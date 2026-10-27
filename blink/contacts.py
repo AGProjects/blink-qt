@@ -8875,13 +8875,15 @@ class ContactURITableView(QTableView):
 
 def is_read_only_group(group_settings):
     """Messages, Calls and Tel: a record of who this account has messages or calls with,
-    kept by the software (MessagesGroupFiler, CallsGroupFiler). The contact editor shows
+    kept by the software (MessagesGroupFiler, CallsGroupFiler); Conference, which holds what
+    is a room by its address (ContactRepair.file_into_kind_groups). The contact editor shows
     them, ticked when the contact is in one, but never offers them as a choice: putting
     somebody in one by hand states something untrue, and taking somebody out is undone
     by their next message or call (macOS ContactController.isReadOnlyGroup)."""
     if group_settings is None or isinstance(group_settings, VirtualGroup):
         return False
-    return is_messages_group(group_settings) or is_group(group_settings, CALLS) or is_group(group_settings, TEL)
+    return (is_messages_group(group_settings) or is_group(group_settings, CALLS) or is_group(group_settings, TEL) or
+            is_group(group_settings, CONFERENCE))
 
 
 def kind_group_changes(contact, old_addresses):
@@ -8918,7 +8920,7 @@ def kind_group_changes(contact, old_addresses):
 def is_selectable_group(group_settings):
     """Whether the contact editor lists this group: the ones the user files people into,
     plus the read-only ones, which the contact is shown in and so would look lost if left
-    out (macOS ContactController.selectableGroups). Deleted and Conference are not listed."""
+    out (macOS ContactController.selectableGroups). Deleted is not listed."""
     if group_settings is None or isinstance(group_settings, VirtualGroup):
         return False
     return is_read_only_group(group_settings) or not is_managed_group(group_settings)
