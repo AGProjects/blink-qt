@@ -5282,6 +5282,8 @@ class BlinkFileTransfer(BlinkSessionBase):
         headers = {'Content-Type': content_type, 'Content-Length': str(size)}
         if token:
             headers['Authorization'] = f'Apikey {token}'
+            from blink.account_storage import device_headers
+            headers.update(device_headers())
         try:
             response = requests.post(url, data=body, headers=headers, timeout=(15, 600))
         except (requests.RequestException, IOError) as e:

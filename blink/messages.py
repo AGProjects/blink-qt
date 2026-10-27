@@ -445,11 +445,12 @@ class OutgoingMessage(object):
     __ignored_content_types__ = {IsComposingDocument.content_type, IMDNDocument.content_type}  # Content types to ignore in notifications
     __disabled_imdn_content_types__ = {'text/pgp-public-key', 'text/pgp-private-key', 'application/sylk-api'}.union(__ignored_content_types__)  # Content types to ignore in notifications
 
-    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False, sessionless=False, on_result=None):
+    def __init__(self, account, contact, content, content_type='text/plain', recipients=None, courtesy_recipients=None, subject=None, timestamp=None, required=None, additional_headers=None, id=None, session=None, use_cpim=True, skip_journal=False, sessionless=False, on_result=None, extra_sip_headers=None):
         self.lookup = None
         self.on_result = on_result          # on_result(code, reason) once: the final answer, or code None when it could not be sent
         self.sessionless = sessionless     # sent without a conversation, straight to the account's proxy
         self.skip_journal = skip_journal
+        self.extra_sip_headers = list(extra_sip_headers or [])
         self.account = account
         self.uri = contact.uri.uri
         self.content_type = content_type
@@ -532,7 +533,7 @@ class OutgoingMessage(object):
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
-            additional_sip_headers = skip_journal_headers(content, skip=self.skip_journal)
+            additional_sip_headers = skip_journal_headers(content, skip=self.skip_journal) + self.extra_sip_headers
             if additional_sip_headers:
                 why = 'a notice for the other devices' if self.skip_journal else 'OTR'
                 ActivityLog().info(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} without journalling it ({why})')
@@ -973,7 +974,10 @@ class MessageManager(object, metaclass=Singleton):
         ActivityLog().info(f'[journal] Requesting an API token for account {account.id} ({reason})')
         from blink.contacts import URIUtils
         contact, contact_uri = URIUtils.find_contact(account.uri)
-        outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token', use_cpim=False)
+        # who we are: the server records the devices that use the account (SylkServer devices.py)
+        from blink.account_storage import device_headers
+        outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token', use_cpim=False,
+                                           extra_sip_headers=[Header(name, value) for name, value in device_headers().items()])
         self._send_message(outgoing_message)
 
     def _retry_token_request(self, account, reason):
@@ -1280,7 +1284,8 @@ class MessageManager(object, metaclass=Singleton):
 
         self._restore_journal_cursor(account)
         directory = self._journal_directory(account)
-        headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
+        from blink.account_storage import device_headers
+        headers = dict(device_headers(), Authorization=f'Apikey {account.sms.history_synchronization_token}')
         settings = SIPSimpleSettings()
         activity = ActivityLog()
         marker = self._journal_first_sync_marker(account)
@@ -1626,7 +1631,8 @@ class MessageManager(object, metaclass=Singleton):
         activity = ActivityLog()
         jlog = JournalLog()
         until = ISOTimestamp(state['until']).astimezone(timezone.utc)
-        headers = {'Authorization': f'Apikey {account.sms.history_synchronization_token}'}
+        from blink.account_storage import device_headers
+        headers = dict(device_headers(), Authorization=f'Apikey {account.sms.history_synchronization_token}')
         verify = SIPSimpleSettings().tls.verify_server
         fetched = state.get('fetched') or 0
         activity.info(f'[journal] Downloading the history of {account.id} older than {until} in the background' + (' (resumed)' if state.get('cursor') else ''))
@@ -2548,7 +2554,8 @@ class MessageManager(object, metaclass=Singleton):
         url = upload_url(base, account.id, account.id, transfer_id, name)
         ActivityLog().info(f'[transfer] Uploading {name} ({len(data)} bytes) for our own devices to {url}')
         try:
-            response = requests.post(url, data=data, headers={'Content-Type': content_type, 'Authorization': f'Apikey {token}'}, timeout=(15, 600))
+            from blink.account_storage import device_headers
+            response = requests.post(url, data=data, headers=dict(device_headers(), **{'Content-Type': content_type, 'Authorization': f'Apikey {token}'}), timeout=(15, 600))
         except requests.RequestException as e:
             ActivityLog().warning(f'[transfer] Uploading {name} for our own devices failed: {e}')
             return

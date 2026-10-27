@@ -209,7 +209,8 @@ def remove_from_journal(history_url, token, message_ids, verify=True, timeout=(1
     if progress is not None:
         body['progress'] = int(every)
     try:
-        response = requests.post(url, json=body, headers={'Authorization': f'Apikey {token}'}, timeout=timeout, verify=verify, stream=True)
+        from blink.account_storage import device_headers
+        response = requests.post(url, json=body, headers=dict(device_headers(), Authorization=f'Apikey {token}'), timeout=timeout, verify=verify, stream=True)
     except requests.RequestException as e:
         raise JournalRemoveError(f'cannot reach {url}: {e}')
     with response:
@@ -353,7 +354,8 @@ def scan_journal(history_url, token, since=None, verify=True, timeout=(15, 60), 
     know the content_type argument)."""
     if since is None:
         since = datetime.now(timezone.utc) - timedelta(days=365 * JOURNAL_SINCE_YEARS)
-    headers = {'Authorization': f'Apikey {token}'}
+    from blink.account_storage import device_headers
+    headers = dict(device_headers(), Authorization=f'Apikey {token}')
     entries = []
     cursor = None
     wanted = {str(content_type).lower() for content_type in content_types} if content_types else None
