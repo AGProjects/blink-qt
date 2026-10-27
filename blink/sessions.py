@@ -565,7 +565,11 @@ class BlinkSession(BlinkSessionBase):
         old_state = self.__dict__.get('state', None)
         new_state = self.__dict__['state'] = value
         if new_state != old_state:
-            if old_state is not None and self.items.chat is not None:
+            if str(new_state or '').startswith(('connecting', 'connected')):
+                self.__dict__['_tried_to_connect'] = True
+            # a tile that never connected (restored, opened and closed) has nothing worth logging:
+            # its initialized -> ending -> ended (Call cancelled) -> deleted is no call at all
+            if old_state is not None and self.items.chat is not None and self.__dict__.get('_tried_to_connect'):
                 reason = getattr(new_state, 'reason', None)
                 uri = self.contact_uri.uri if self.contact_uri is not None else '?'
                 ActivityLog().info(f'[chat window] {uri}: {old_state} -> {new_state}' + (f' ({reason})' if reason else ''))
