@@ -1,0 +1,10 @@
+pphumanseg.npz
+
+Person segmentation (PP-HumanSeg, from PaddleSeg), as converted to ONNX by the OpenCV model zoo:
+https://github.com/opencv/opencv_zoo/tree/main/models/human_segmentation_pphumanseg
+human_segmentation_pphumanseg_2023mar.onnx, sha256 552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24
+License: Apache 2.0.
+
+Converted with: python3 scripts/onnx-to-npz.py human_segmentation_pphumanseg_2023mar.onnx resources/models/pphumanseg.npz
+Input 1x3x192x192 RGB normalized to -1..1; output 1x2x192x192 softmax (background, person).
+Run in numpy by blink/webrtc/numpy_net.py for blink/webrtc/background_blur.py.

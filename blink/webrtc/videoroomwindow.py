@@ -1376,7 +1376,7 @@ class VideoroomWindow(QWidget):
         blur.setCheckable(True)
         blur.setChecked(blur_available() and SIPSimpleSettings().video.background_blur)
         blur.setEnabled(blur_available() and not sharing)
-        blur.setToolTip('Only you are seen, the room behind you is blurred' if blur_available() else 'Needs python3-opencv')
+        blur.setToolTip('Only you are seen, the room behind you is blurred' if blur_available() else 'Needs python3-numpy')
         blur.triggered.connect(self._set_background_blur)
         menu.setToolTipsVisible(True)
         toggle = menu.addAction('Turn camera on' if off else 'Turn camera off')
