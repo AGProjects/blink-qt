@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QEasingCur
 from PyQt6.QtCore import QByteArray, QEvent, QLocale, QMimeData, QPoint, QPointF, QRectF, QRect, QSize, QTimer, QUrl, pyqtSignal, QT_TRANSLATE_NOOP
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QIcon, QKeyEvent, QLinearGradient, QMouseEvent, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtWidgets import QApplication, QItemDelegate, QStyledItemDelegate, QStyle
-from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QSizePolicy, QTableView, QWidget
+from PyQt6.QtWidgets import QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QListView, QMenu, QMessageBox, QRadioButton, QSizePolicy, QTableView, QToolButton, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -3217,19 +3217,136 @@ def conversation_uri(contact):
     return best or (default, _conversation_key(str(default.uri), account))
 
 
-def row_time_kind(group_settings):
-    """What the time on the right of a contact row is in this group: 'message' in Messages,
-    'call' in Calls, Tel and Conference (when the last conference in a room was), None elsewhere."""
-    if is_messages_group(group_settings):
-        return 'message'
+# How each group is sorted, chosen with the control on its header (macOS ContactListModel
+# GROUP_SORT_*): a view preference of this device, so a local file keyed by group id and never
+# the addressbook. A group not in it sorts its default way.
+GROUP_SORT_FILE = 'group_sort.json'
+GROUP_SORT_NAME = 'name'
+GROUP_SORT_RECENT = 'recent'
+GROUP_SORT_UNREAD = 'unread'
+GROUP_SORT_MODES = (GROUP_SORT_NAME, GROUP_SORT_RECENT, GROUP_SORT_UNREAD)
+_group_sort_modes = None
+
+
+def group_sort_modes():
+    """{group id: sort mode}, read once and kept."""
+    global _group_sort_modes
+    if _group_sort_modes is None:
+        _group_sort_modes = {}
+        try:
+            with open(ApplicationData.get(GROUP_SORT_FILE), encoding='utf-8') as file:
+                stored = json.load(file)
+        except OSError:
+            stored = None       # never written yet
+        except ValueError as e:
+            ActivityLog().warning(f'[contacts] Cannot read the group sort orders: {e}')
+            stored = None
+        if isinstance(stored, dict):
+            _group_sort_modes = {str(key): value for key, value in stored.items() if value in GROUP_SORT_MODES}
+    return _group_sort_modes
+
+
+def set_group_sort_mode(group_id, mode):
+    modes = group_sort_modes()
+    if mode is None:
+        modes.pop(group_id, None)
+    else:
+        modes[group_id] = mode
+    path = ApplicationData.get(GROUP_SORT_FILE)
+    try:
+        with open(path + '.tmp', 'w', encoding='utf-8') as file:
+            json.dump(modes, file, indent=1, sort_keys=True)
+        os.replace(path + '.tmp', path)
+    except OSError as e:
+        ActivityLog().warning(f'[contacts] Cannot save the group sort orders: {e}')
+
+
+def group_sort_identity(group_settings):
+    """What a group's sort order is stored under (its id), or None for a group without a choice."""
     if group_settings is None or isinstance(group_settings, VirtualGroup):
         return None
+    identity = getattr(group_settings, 'id', None)
+    return str(identity) if identity else None
+
+
+def group_uses_call_times(group_settings):
+    """Recent means the last call in Calls, Tel and Conference, the last message elsewhere."""
+    if group_settings is None or isinstance(group_settings, VirtualGroup):
+        return False
     try:
-        if is_group(group_settings, CALLS) or is_group(group_settings, TEL) or is_group(group_settings, CONFERENCE):
-            return 'call'
+        return is_group(group_settings, CALLS) or is_group(group_settings, TEL) or is_group(group_settings, CONFERENCE)
+    except Exception:
+        return False
+
+
+def group_default_sort_mode(group_settings):
+    # what each group did before it could be chosen
+    if is_messages_group(group_settings) or group_uses_call_times(group_settings):
+        return GROUP_SORT_RECENT
+    return GROUP_SORT_NAME
+
+
+def group_sort_mode(group_settings):
+    """The chosen sort order of a group (the default when none was chosen)."""
+    identity = group_sort_identity(group_settings)
+    if identity is None:
+        return GROUP_SORT_NAME
+    return group_sort_modes().get(identity) or group_default_sort_mode(group_settings)
+
+
+def contact_recent_time(contact, group_settings):
+    """The last call (Calls, Tel, Conference) or message (elsewhere) with a contact, or None,
+    whatever the group is sorted by."""
+    from blink.history import ConversationPreviews
+    previews = ConversationPreviews()
+    keys = contact_conversation_keys(contact)
+    return previews.call_time(keys) if group_uses_call_times(group_settings) else previews.message_time(keys)
+
+
+def group_available_sort_modes(group_settings, contacts):
+    """The orders a group's header offers: none for a group without a choice, and only what the
+    group has something to sort by (a time, an unread message)."""
+    if group_sort_identity(group_settings) is None:
+        return []
+    modes = [GROUP_SORT_NAME]
+    try:
+        if any(contact_recent_time(contact, group_settings) is not None for contact in contacts):
+            modes.append(GROUP_SORT_RECENT)
+        if any(getattr(contact, 'unread_messages', 0) for contact in contacts):
+            modes.append(GROUP_SORT_UNREAD)
     except Exception:
         pass
+    return modes
+
+
+def group_effective_sort_mode(group_settings, available):
+    """The order the group is shown in: Unread with nothing unread is Recent, Recent with no time
+    is A-Z, until there is something. The choice itself is kept."""
+    mode = group_sort_mode(group_settings)
+    if mode == GROUP_SORT_UNREAD and GROUP_SORT_UNREAD not in available:
+        mode = GROUP_SORT_RECENT
+    if mode == GROUP_SORT_RECENT and GROUP_SORT_RECENT not in available:
+        mode = GROUP_SORT_NAME
+    return mode
+
+
+def activity_time_kind(group_settings):
+    """The groups that are a record of activity: 'message' in Messages, 'call' in Calls, Tel and
+    Conference, None elsewhere. The newest of them goes to the top of the list."""
+    if is_messages_group(group_settings):
+        return 'message'
+    if group_uses_call_times(group_settings):
+        return 'call'
     return None
+
+
+def row_time_kind(group_settings):
+    """What the time on the right of a contact row is in this group: the activity groups' time
+    (activity_time_kind), and the last message in a group sorted by something other than its name."""
+    kind = activity_time_kind(group_settings)
+    if kind is None and group_sort_identity(group_settings) is not None and group_sort_mode(group_settings) != GROUP_SORT_NAME:
+        return 'message'
+    return kind
 
 
 def format_row_time(when, now=None):
@@ -4168,10 +4285,13 @@ class Group(object):
         old_widget.name_editor.editingFinished.disconnect(self._name_changed)
         widget.collapse_button.clicked.connect(self._collapsed_changed)
         widget.name_editor.editingFinished.connect(self._name_changed)
+        old_widget.sort_mode_chosen.disconnect(self._sort_mode_chosen)
+        widget.sort_mode_chosen.connect(self._sort_mode_chosen)
         widget.collapse_button.setChecked(old_widget.collapse_button.isChecked() if old_widget is not Null else self.settings.collapsed)
         widget.name = self.name
         self.__dict__['widget'] = widget
         self._show_unread()
+        self.update_sort_button()
 
     widget = property(_get_widget, _set_widget)
     del _get_widget, _set_widget
@@ -4239,6 +4359,28 @@ class Group(object):
     def _collapsed_changed(self, state):
         self.settings.collapsed = state
         self.settings.save()
+
+    def update_sort_button(self, contacts=None):
+        """The sort control on the right of the header: what the group is shown in, and the orders
+        it can be shown in; hidden when A-Z is all there is (macOS ContactCell.group_sort_label)."""
+        widget = self.widget
+        if widget is Null:
+            return
+        if contacts is None:
+            try:
+                contacts = QApplication.instance().main_window.contact_model.items[GroupContacts, self.settings]
+            except Exception:
+                contacts = ()
+        modes = group_available_sort_modes(self.settings, contacts)
+        widget.set_sort_modes(modes, group_effective_sort_mode(self.settings, modes), group_uses_call_times(self.settings))
+
+    def _sort_mode_chosen(self, mode):
+        identity = group_sort_identity(self.settings)
+        if identity is None or mode not in GROUP_SORT_MODES:
+            return
+        # the default is not stored, so a group left on it follows any change of default
+        set_group_sort_mode(identity, None if mode == group_default_sort_mode(self.settings) else mode)
+        NotificationCenter().post_notification('BlinkGroupSortModeDidChange', sender=self)
 
     def _name_changed(self):
         if self.settings.save is Null:
@@ -4312,13 +4454,19 @@ class Contact(object):
 
     @property
     def sort_key(self):
-        """Where the contact goes in its group: in Messages newest message first, in Calls and Tel
-        newest call first, the ones without either after them; by name otherwise and on a tie."""
+        """Where the contact goes in its group, by the group's sort order (group_sort_mode): A-Z;
+        Recent, the newest message (Messages and the user's groups) or call (Calls, Tel, Conference)
+        first, the ones without after them; Unread, the most unread messages first, then Recent.
+        By name on a tie, so a group with nothing to sort by is A-Z."""
         name = locale.strxfrm(self.name or '')
-        if row_time_kind(getattr(self.group, 'settings', None)) is None:
-            return (0, 0, name)
-        when = self.row_time
-        return (0, -when.timestamp(), name) if when is not None else (1, 0, name)
+        settings = getattr(self.group, 'settings', None)
+        mode = group_sort_mode(settings)
+        if mode == GROUP_SORT_NAME or row_time_kind(settings) is None:
+            return (0, 0, 0, name)
+        when = contact_recent_time(self, settings)
+        recent = (0, -when.timestamp()) if when is not None else (1, 0)
+        unread = -(self.unread_messages or 0) if mode == GROUP_SORT_UNREAD else 0
+        return (unread,) + recent + (name,)
 
     def __gt__(self, other):
         if isinstance(other, Contact):
@@ -4975,10 +5123,30 @@ ui_class, base_class = load_ui_type('contact_group.ui')
 
 
 class GroupWidget(base_class, ui_class):
+    sort_mode_chosen = pyqtSignal(str)
+
+    sort_titles = {GROUP_SORT_NAME: QT_TRANSLATE_NOOP('contact_list', 'A\u2013Z'),
+                   GROUP_SORT_RECENT: QT_TRANSLATE_NOOP('contact_list', 'Recent'),
+                   GROUP_SORT_UNREAD: QT_TRANSLATE_NOOP('contact_list', 'Unread')}
+
     def __init__(self, parent=None):
         super(GroupWidget, self).__init__(parent)
         with Resources.directory:
             self.setupUi(self)
+        # how the group is sorted, on the right: a click opens the choice (macOS ContactOutlineView.showSortMenuForGroup)
+        self.sort_button = QToolButton(self)
+        self.sort_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.sort_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.sort_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        sort_font = self.sort_button.font()
+        sort_font.setPointSizeF(max(sort_font.pointSizeF() - 1.5, 7.0))
+        self.sort_button.setFont(sort_font)
+        self.sort_menu = QMenu(self.sort_button)
+        self.sort_button.setMenu(self.sort_menu)
+        self.sort_button.hide()
+        self.layout().addWidget(self.sort_button)
+        self.layout().addSpacing(6)
+        self._style_sort_button()
         font = self.name_label.font()
         font.setWeight(QFont.Weight(550))         # between medium and semi-bold: above the contacts' regular weight, softer than bold
         self.name_label.setFont(font)
@@ -4997,6 +5165,32 @@ class GroupWidget(base_class, ui_class):
     def editing(self):
         return self.name_view.currentWidget() is self.editor_widget
 
+    def _style_sort_button(self):
+        color = secondary_text_color(self.palette())
+        self.sort_button.setStyleSheet(f'QToolButton {{ background: transparent; border: none; padding: 0px 2px; color: {color.name()}; }}'
+                                       ' QToolButton::menu-indicator { image: none; width: 0px; }')
+
+    def set_sort_modes(self, modes, current, call_times):
+        """Offer `modes` (shown only when there is a choice), `current` checked and on the button."""
+        self.sort_menu.clear()
+        if len(modes) < 2:
+            self.sort_button.hide()
+            return
+        titles = {GROUP_SORT_NAME: translate('contact_list', 'Alphabetically'),
+                  GROUP_SORT_RECENT: translate('contact_list', 'By Last Call') if call_times else translate('contact_list', 'By Last Message'),
+                  GROUP_SORT_UNREAD: translate('contact_list', 'By Unread Messages')}
+        for mode in modes:
+            action = self.sort_menu.addAction(titles[mode])
+            action.setCheckable(True)
+            action.setChecked(mode == current)
+            action.triggered.connect(partial(self._sort_action_triggered, mode, current))
+        self.sort_button.setText(translate('contact_list', self.sort_titles[current]) + ' \u25be')
+        self.sort_button.show()
+
+    def _sort_action_triggered(self, mode, current, checked=False):
+        if mode != current:
+            self.sort_mode_chosen.emit(mode)
+
     def _get_name(self):
         return self.name_label.text()
 
@@ -5014,6 +5208,8 @@ class GroupWidget(base_class, ui_class):
         selected = self.__dict__.get('selected', False)
         self.__dict__['selected'] = None
         self.selected = selected
+        if 'sort_button' in self.__dict__:
+            self._style_sort_button()
 
     def _set_selected(self, value):
         if self.__dict__.get('selected', None) == value:
@@ -5745,6 +5941,7 @@ class ContactModel(QAbstractListModel):
         notification_center.add_observer(self, name='BlinkMessagesGroupShouldPromote')
         notification_center.add_observer(self, name='BlinkConversationPreviewsDidChange')
         notification_center.add_observer(self, name='BlinkUnreadMessagesChanged')
+        notification_center.add_observer(self, name='BlinkGroupSortModeDidChange')
         notification_center.add_observer(self, name='SIPAccountManagerDidAddAccount')
         notification_center.add_observer(self, name='SIPAccountManagerDidRemoveAccount')
 
@@ -5765,8 +5962,50 @@ class ContactModel(QAbstractListModel):
                 index = self.index(self.items.index(contact))
                 self.dataChanged.emit(index, index)
         self.update_own_contact_rows(changed)     # our own contact shows up with its first message
+        self._update_sort_buttons({contact.group for contact in changed})     # a first time makes Recent a choice
         if moving:
             self._promote_newest_group()
+
+    def _update_sort_buttons(self, groups=None):
+        for group in self.items[GroupList]:
+            if groups is None or group in groups:
+                group.update_sort_button(self.items[GroupContacts, group])
+
+    def _resort_group(self, group):
+        """Put a group's contacts in its order again in one layout change (its sort order was chosen,
+        or what it sorts by changed for many of them), keeping the selection and the scroll position."""
+        try:
+            start = self.items.index(group) + 1
+        except ValueError:
+            return
+        end = start
+        while end < len(self.items) and isinstance(self.items[end], Contact) and self.items[end].group is group:
+            end += 1
+        if end - start < 1:
+            return
+        block = sorted(self.items[start:end], key=attrgetter('sort_key'))
+        if block == list(self.items[start:end]):
+            self.dataChanged.emit(self.index(start), self.index(end - 1))     # the time on the rows may come or go
+            return
+        self.layoutAboutToBeChanged.emit()
+        persistent = [(index, self.items[index.row()]) for index in self.persistentIndexList() if index.isValid() and index.row() < len(self.items)]
+        self.items[start:end] = block
+        for index, item in persistent:
+            try:
+                self.changePersistentIndex(index, self.index(self.items.index(item), index.column()))
+            except ValueError:
+                self.changePersistentIndex(index, QModelIndex())
+        self.layoutChanged.emit()
+        for position in range(start, end):
+            self.contact_list.setRowHidden(position, self.row_hidden(self.items[position]))
+        self.dataChanged.emit(self.index(start), self.index(end - 1))
+
+    def _NH_BlinkGroupSortModeDidChange(self, notification):
+        group = notification.sender
+        mode = group_sort_mode(group.settings)
+        ActivityLog().info(f'[contacts] The {group.name!r} group is sorted {mode}' + (' (its default)' if mode == group_default_sort_mode(group.settings) else ''))
+        self._resort_group(group)
+        group.update_sort_button(self.items[GroupContacts, group])
 
     def _promote_newest_group(self):
         """The group whose contact had the most recent message or call goes to the top of the list:
@@ -5778,11 +6017,11 @@ class ContactModel(QAbstractListModel):
             return
         newest_group, newest = None, None
         for item in self.items:
-            if not isinstance(item, Contact) or row_time_kind(getattr(item.group, 'settings', None)) is None:
+            if not isinstance(item, Contact) or activity_time_kind(getattr(item.group, 'settings', None)) is None:
                 continue
             if own_contact_hidden(item):
                 continue        # a collapsed group still counts, a hidden own contact does not
-            when = item.row_time
+            when = contact_recent_time(item, item.group.settings)
             when = when.timestamp() if when is not None else None     # message and call times may differ in tz-awareness
             if when is not None and (newest is None or when > newest):
                 newest_group, newest = item.group, when
@@ -5838,6 +6077,11 @@ class ContactModel(QAbstractListModel):
         if group is None:
             return
         total = QApplication.instance().main_window.total_unread_messages
+        # the groups sorted by unread messages move their rows; every group's choice may change
+        for sorted_group in groups:
+            if group_sort_mode(sorted_group.settings) == GROUP_SORT_UNREAD:
+                self._resort_group(sorted_group)
+        self._update_sort_buttons()
         group.set_unread(total)
         self._log_unread_messages(group, total)
         if total and groups[0] is not group:
@@ -6266,7 +6510,8 @@ class ContactModel(QAbstractListModel):
             if deleted or not is_deleted_contact(contact):     # a deleted contact is shown in Deleted only
                 self.addContact(Contact(contact, group))
         self._update_deleted_group_visibility()
-        if notification.data.modified['contacts'].added and row_time_kind(notification.sender) is not None:
+        group.update_sort_button(self.items[GroupContacts, group])
+        if notification.data.modified['contacts'].added and activity_time_kind(notification.sender) is not None:
             self._promote_newest_group()      # filed after its call or message: its group may now be the newest
         if deleted:
             self._hide_elsewhere(list(notification.data.modified['contacts'].added))
