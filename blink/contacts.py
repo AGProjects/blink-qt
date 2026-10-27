@@ -1364,12 +1364,13 @@ class ContactRepair(object, metaclass=Singleton):
                 purged = self.purge_lan_addresses()
                 repaired = self.repair_contacts()
                 merged = self.merge_duplicates()
+                unsubscribed = self.stop_room_subscriptions()
                 filed = self.file_into_kind_groups()
                 self.file_test_numbers()
         except Exception as e:
             activity.exception(f'[addressbook] Repairing the addressbook failed: {e!r}')
         else:
-            activity.info(f'[addressbook] Repair done: {purged} LAN addresses purged, {repaired} contacts repaired, {merged} duplicates merged, {filed} contacts filed into Tel or Conference')
+            activity.info(f'[addressbook] Repair done: {purged} LAN addresses purged, {repaired} contacts repaired, {merged} duplicates merged, {unsubscribed} rooms unsubscribed, {filed} contacts filed into Tel or Conference')
         # the addressbook has loaded and been healed: what adds contacts of its own (the server's
         # call history) waits for this, not to make contacts the addressbook was still bringing
         NotificationCenter().post_notification('BlinkAddressbookDidSettle', sender=self, data=NotificationData(accounts=set(self.settled)))
@@ -1573,6 +1574,38 @@ class ContactRepair(object, metaclass=Singleton):
             for group in changed.values():
                 group.save()
         return purged
+
+    def stop_room_subscriptions(self):
+        """A conference room is never subscribed to (the rule of every client): the conference server
+        takes only the conference event and rejects presence and dialog. A contact whose addresses are
+        all rooms (the conference server of an account, or any conference. or videoconference. domain)
+        gets its presence and dialog subscriptions turned off; one that also has a person's address
+        keeps them."""
+        activity = ActivityLog()
+        manager = addressbook.AddressbookManager()
+        account = AccountManager().default_account
+
+        def is_room(uri):
+            host = re.sub('^sips?:', '', str(uri).strip(), flags=re.I).partition('@')[2].split(';')[0].split(':')[0].lower()
+            return bool(host) and (host.startswith(('conference.', 'videoconference.')) or is_conference_uri(str(uri), account))
+
+        rooms = [contact for contact in live_contacts(manager)
+                 if (contact.presence.subscribe or contact.dialog.subscribe) and contact.uris
+                 and all(is_room(uri.uri) for uri in contact.uris)]
+        if not rooms:
+            return 0
+        with addressbook_origin.reason('room-subscription'), addressbook.AddressbookManager.transaction():
+            for contact in rooms:
+                contact.presence.subscribe = False
+                contact.dialog.subscribe = False
+                try:
+                    contact.save()
+                except Exception as e:
+                    activity.error(f'[addressbook] Cannot stop the subscriptions to the room {contact.name} ({contact.id}): {e!r}')
+                else:
+                    activity.info(f'[addressbook] Repair (room-subscription): no presence or dialog subscription to the room {contact.name} ({contact.id}), '
+                                  f'{", ".join(str(uri.uri) for uri in contact.uris)}')
+        return len(rooms)
 
     def merge_duplicates(self):
         """Contacts sharing a canonical address are one contact (the rule of every client): merged
