@@ -1275,6 +1275,20 @@ class CallsGroupFiler(object, metaclass=Singleton):
         return contact
 
 
+def is_room_address(uri, account=None):
+    """A conference room: on the conference server of an account (is_conference_uri) or on any
+    conference. or videoconference. domain, as Cocoa and mobile see it."""
+    host = re.sub('^sips?:', '', str(uri or '').strip(), flags=re.I).partition('@')[2].split(';')[0].split(':')[0].lower()
+    return bool(host) and (host.startswith(('conference.', 'videoconference.')) or is_conference_uri(str(uri), account or AccountManager().default_account))
+
+
+def is_room_only(uris):
+    """Whether there are addresses and all of them are rooms: such a contact has no presence, no
+    presence policy that means anything and nothing to auto answer."""
+    uris = [uri for uri in uris if uri]
+    return bool(uris) and all(is_room_address(uri) for uri in uris)
+
+
 @implementer(IObserver)
 class ContactRepair(object, metaclass=Singleton):
     """Repair the addressbook once per run, after it has loaded, as Blink for macOS does.
@@ -1583,15 +1597,8 @@ class ContactRepair(object, metaclass=Singleton):
         keeps them."""
         activity = ActivityLog()
         manager = addressbook.AddressbookManager()
-        account = AccountManager().default_account
-
-        def is_room(uri):
-            host = re.sub('^sips?:', '', str(uri).strip(), flags=re.I).partition('@')[2].split(';')[0].split(':')[0].lower()
-            return bool(host) and (host.startswith(('conference.', 'videoconference.')) or is_conference_uri(str(uri), account))
-
         rooms = [contact for contact in live_contacts(manager)
-                 if (contact.presence.subscribe or contact.dialog.subscribe) and contact.uris
-                 and all(is_room(uri.uri) for uri in contact.uris)]
+                 if (contact.presence.subscribe or contact.dialog.subscribe) and is_room_only(uri.uri for uri in contact.uris)]
         if not rooms:
             return 0
         with addressbook_origin.reason('room-subscription'), addressbook.AddressbookManager.transaction():
@@ -8720,6 +8727,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.rejected.connect(self.contact_uri_model.reset)
         for signal in (self.contact_uri_model.dataChanged, self.contact_uri_model.rowsInserted, self.contact_uri_model.rowsRemoved, self.contact_uri_model.modelReset):
             signal.connect(self._update_pgp_key_label)
+            signal.connect(self._update_room_fields)
 
     def setupUi(self, contact_editor):
         super(ContactEditorDialog, self).setupUi(contact_editor)
@@ -8756,6 +8764,7 @@ class ContactEditorDialog(base_class, ui_class):
         self.presence.setEnabled(True)
         self.accept_button.setText(translate('contact_editor', 'Add'))
         self.accept_button.setEnabled(False)
+        self._update_room_fields()
         self.show()
 
     def open_for_edit(self, contact):
@@ -8782,7 +8791,18 @@ class ContactEditorDialog(base_class, ui_class):
         self.accept_button.setText(translate('contact_editor', 'Ok'))
         self.accept_button.setEnabled(True)
         self._update_pgp_key_label()
+        self._update_room_fields()
         self.show()
+
+    def _is_room(self):
+        return is_room_only(item.uri for item in self.contact_uri_model.items)
+
+    def _update_room_fields(self, *args):
+        """A conference room has no presence to watch or share and is not auto answered: those
+        settings are hidden while every address is a room (room-subscription)."""
+        room = self._is_room()
+        for widget in (self.presence, self.presence_policy, self.auto_answer):
+            widget.setVisible(not room)
 
     def _update_pgp_key_label(self, *args):
         """The key ids of the public keys held for the addresses being edited, bottom left."""
@@ -8943,13 +8963,16 @@ class ContactEditorDialog(base_class, ui_class):
         contact.name = self.name_editor.text()
         contact.organization = self.organization_editor.text().strip()     # shared with the other clients (ag-projects:sipsimple)
         # two settings, as on macOS: whether we watch their presence, and whether they may watch ours
-        contact.presence.subscribe = self.presence.isChecked()
-        contact.presence.policy = 'allow' if self.presence_policy.isChecked() else 'block'
-
-        if self.auto_answer.isChecked():
-            contact.auto_answer = True
+        # a room: no subscription (the conference server rejects it), the policy and auto answer
+        # are hidden and kept as they were
+        room = is_room_only(item.uri for item in self.contact_uri_model.items if item.uri and item.uri not in refused)
+        if room:
+            contact.presence.subscribe = False
+            contact.dialog.subscribe = False
         else:
-            contact.auto_answer = False
+            contact.presence.subscribe = self.presence.isChecked()
+            contact.presence.policy = 'allow' if self.presence_policy.isChecked() else 'block'
+            contact.auto_answer = self.auto_answer.isChecked()
         contact.auto_download_media = self.auto_download_media.isChecked()     # shared: replicated to the other devices
         preferred_media = self.preferred_media.currentData() or 'messages'
         if self.edited_contact is None or preferred_media != preferred_media_choice(contact.preferred_media):
