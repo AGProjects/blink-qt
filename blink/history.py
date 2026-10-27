@@ -2834,8 +2834,12 @@ class MessageHistory(object, metaclass=Singleton):
         call_id = str(record.get('sessionId') or '').strip()
         what = f"{record.get('direction') or '?'} call {call_id or '(no Call-ID)'} with {record.get('remoteParty') or '?'}" + (f' ({origin})' if origin else '')
         try:
+            # A call to our own account has both legs under one Call-ID (received and placed):
+            # one row per direction, or each replay merges the two legs into each other.
+            direction = str(record.get('direction') or '')
+            direction_clause = f' and direction = {self.db.sqlrepr(direction)}' if direction else ''
             rows = list(Message.select(f'account_id = {self.db.sqlrepr(account_id)} and sip_callid = {self.db.sqlrepr(call_id)}'
-                                       f" and content_type = '{CALL_CONTENT_TYPE}'", limit=1)) if call_id else []
+                                       f" and content_type = '{CALL_CONTENT_TYPE}'{direction_clause}", limit=1)) if call_id else []
             if rows:
                 row = rows[0]
                 stored = call_record(row.content, row.metadata)

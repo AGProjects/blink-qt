@@ -23,6 +23,8 @@ for the same Call-ID, where the server's view wins the fields it knows best
 for a call this device did not see.
 """
 
+import hashlib
+import json
 import urllib.parse
 
 from datetime import datetime, timezone
@@ -160,6 +162,7 @@ class ServerCallHistory(object, metaclass=Singleton):
         self.timers = {}        # account id: QTimer
         self.running = set()    # account ids with a fetch under way
         self.waiting = {}       # account id: account, started before its addressbook settled (ContactRepair.addressbook_ready)
+        self.digests = {}       # account id: digest of the last listing, to log the summary only when it changed
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='BlinkAddressbookDidSettle')
         notification_center.add_observer(self, name='SIPAccountDidActivate')
@@ -262,6 +265,10 @@ class ServerCallHistory(object, metaclass=Singleton):
                 stored += 1
             counts[key] = (stored, skipped)
         (received, received_skipped), (placed, placed_skipped) = counts['received'], counts['placed']
+        digest = hashlib.sha1(json.dumps(calls, sort_keys=True, default=str).encode()).hexdigest()
+        if self.digests.get(account.id) == digest:
+            return      # the same listing as the last poll: replayed for the merge, nothing new to log
+        self.digests[account.id] = digest
         ActivityLog().info(f'[calls] Server call history of {account.id}: {received} received, {placed} placed'
                            + (f', {received_skipped + placed_skipped} skipped (no Call-ID, party or audio/video)' if received_skipped + placed_skipped else ''))
 
