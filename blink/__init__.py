@@ -892,7 +892,9 @@ class Blink(QApplication, metaclass=QSingleton):
         originator = getattr(data, 'originator', None)
         what = ' '.join(str(part) for part in (code, reason) if part) or 'no answer'
         detail = f', {failure}' if failure and failure != reason else ''
-        ActivityLog().warning(f'[call] Call with {self._call_party(session)} failed{f" ({originator})" if originator else ""}: {what}{detail}{self._call_route(session) if getattr(session, 'direction', None) == 'outgoing' else ''} ({self._call_info(session)})')
+        by = f' ({originator})' if originator else ''
+        route = self._call_route(session) if getattr(session, 'direction', None) == 'outgoing' else ''
+        ActivityLog().warning(f'[call] Call with {self._call_party(session)} failed{by}: {what}{detail}{route} ({self._call_info(session)})')
         if 'media stream' in f'{reason} {failure}'.lower() or 'msrp' in f'{reason} {failure}'.lower():
             self._explain_msrp_failure(session, failure or reason)
 
