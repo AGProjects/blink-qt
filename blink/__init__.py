@@ -289,6 +289,8 @@ class Blink(QApplication, metaclass=QSingleton):
         SylkServerDiscovery().start()   # the domains' SylkServer settings (DNS TXT _sylkserver.<domain>), cached
         from blink.account_storage import AccountStorage
         AccountStorage().start()        # contact avatars in the SylkServer account storage (docs/CONTACT-AVATARS.md)
+        from blink.key_storage import KeyStorage
+        KeyStorage().start()            # the PGP key escrow in the account storage (SylkServer docs/PRIVATE-KEY-STORAGE.md)
         SIPSimpleSettings.register_extension(SIPSimpleSettingsExtension)
 
         notification_center = NotificationCenter()

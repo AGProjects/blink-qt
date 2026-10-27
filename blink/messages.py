@@ -2616,10 +2616,12 @@ class MessageManager(object, metaclass=Singleton):
             metadata = None
 
         if content_type.lower() == 'application/sylk-storage-changed':
-            # an object of our account storage changed (a contact avatar): acted on, never stored, shown or counted
+            # an object of our account storage changed (a contact avatar, the key escrow): acted on, never stored, shown or counted
             if account is not BonjourAccount():
                 from blink.account_storage import AccountStorage
+                from blink.key_storage import KeyStorage
                 AccountStorage().handle_changed(account, body)
+                KeyStorage().handle_changed(account, body)
             return
 
         encryption = self.check_encryption(content_type, body)
@@ -3739,6 +3741,11 @@ class KeyEscrowManager(object, metaclass=Singleton):
     Nothing written here is announced to the other devices: it is this device
     catching up with the document it was handed.
 
+    The escrow the SylkServer account storage keeps (blink.key_storage) is one more
+    escrow record (key_escrow.STORAGE_ID): the pass waits for the storage to answer
+    (or fail), and runs again whenever what it keeps changes -- a key escrowed by
+    another device is restored here without waiting for an addressbook reload.
+
     Generating a key waits for the answer (when_answered): the addressbook has
     loaded (or the account has no XCAP, or 15 seconds have passed) AND the server
     has answered a public key lookup for the account itself (or it failed).
@@ -3774,12 +3781,14 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.password_changed = set()   # accounts whose password changed and has not been accepted yet
         self.password_checked = {}      # account id -> the escrow and password last checked (escrow_password_check)
         self.imported = set()           # accounts whose imported key has not been compared with the escrow yet
+        self.storage_waiting = set()    # accounts whose escrow pass waits for the account storage
 
     def start(self):
         if not self._started:
             self._started = True
             notification_center = NotificationCenter()
             notification_center.add_observer(self, name='XCAPManagerDidReloadData')
+            notification_center.add_observer(self, name='BlinkKeyStorageDidChange')
             notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
             notification_center.add_observer(self, name='CFGSettingsObjectDidChange')
             # started from MessageManager, made while SIPApplicationDidStart is being handled:
@@ -3874,7 +3883,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
             elif account.id not in self.checked:
                 escrow = f'unknown, the addressbook was not fetched within {self.answer_timeout:.0f}s'
             else:
-                record = key_escrow.read_self_keys(account)
+                record = key_escrow.read_self_keys(account, storage=False)
                 contacts = key_escrow.self_contact_elements(account)
                 if record is not None:
                     escrow = (f"present on contact {record.get('contact_id')} ({record.get('namespace')}), written {record.get('timestamp') or '?'} "
@@ -3898,6 +3907,21 @@ class KeyEscrowManager(object, metaclass=Singleton):
 
             activity.info(f'[pgp] Private key of {account.id}: this device: {here}')
             activity.info(f'[pgp] Private key of {account.id}: addressbook escrow: {escrow}')
+            from blink.key_storage import KeyStorage
+            stored = KeyStorage().entry(account)
+            if not KeyStorage._wanted(account) or stored is None:
+                storage_escrow = 'not asked'
+            elif stored['state'] == 'present':
+                kept = stored['record']
+                storage_escrow = (f"present, written {kept.get('timestamp') or '?'} by \"{kept.get('device') or '?'}\", "
+                                  f"{compared(key_fingerprint(kept.get('public_key')))}")
+            elif stored['state'] == 'absent':
+                storage_escrow = 'none'
+            elif stored['state'] in ('invalid', 'failed', 'unsupported'):
+                storage_escrow = f"{stored['state']}: {stored['reason']}"
+            else:
+                storage_escrow = 'unknown, the account storage has not answered'
+            activity.info(f'[pgp] Private key of {account.id}: storage escrow: {storage_escrow}')
             activity.info(f'[pgp] Private key of {account.id}: server public key: {server}')
         except Exception as e:
             activity.exception(f'[pgp] Reporting the private key of {account.id} failed: {e!r}')
@@ -3908,6 +3932,34 @@ class KeyEscrowManager(object, metaclass=Singleton):
             return
         self.checked.add(account.id)
         self.check_key_status(account)
+        if not self._storage_answered(account):
+            from blink.key_storage import KeyStorage
+            if account.id not in self.storage_waiting:
+                self.storage_waiting.add(account.id)
+                ActivityLog().info(f'[pgp] Key escrow: waiting for the account storage of {account.id} before the escrow pass')
+            KeyStorage().fetch(account, 'addressbook loaded')
+            return
+        self._escrow_pass(account)
+
+    def _NH_BlinkKeyStorageDidChange(self, notification):
+        account = notification.data.account
+        waited = account.id in self.storage_waiting
+        self.storage_waiting.discard(account.id)
+        if account.id in self.checked and (waited or notification.data.state in ('present', 'absent')):
+            self._escrow_pass(account)
+        else:
+            self._release(account)
+
+    def _storage_answered(self, account):
+        """Whether the account storage has said what escrow it keeps: answered, failed, or not
+        asked (no storage for the account, PGP off)."""
+        from blink.key_storage import KeyStorage
+        storage = KeyStorage()
+        return not storage._wanted(account) or storage.state(account) in ('present', 'absent', 'invalid', 'unsupported', 'failed')
+
+    def _escrow_pass(self, account):
+        """Restore, report, repair and the password check, once the addressbook and the account
+        storage have answered."""
         from blink.contacts import AddressbookNotifier
         with AddressbookNotifier().quiet():
             # restore before reporting, so one pass tells one story
@@ -3970,7 +4022,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
             new = None
         old_id = old[-16:].upper() if old else translate('pgp_key_escrow', 'unknown')
         new_id = new[-16:].upper() if new else translate('pgp_key_escrow', 'unknown')
-        ActivityLog().info(f'[pgp] Key escrow: contact {contact_id} of {account.id} keeps a backup of key {old_id}, '
+        ActivityLog().info(f'[pgp] Key escrow: {key_escrow.escrow_location(contact_id)} of {account.id} keeps a backup of key {old_id}, '
                            f'saved {record.get("timestamp", "?")} by "{record.get("device", "?")}", not of the imported key {new_id}: asking')
 
         main_window = getattr(QApplication.instance(), 'main_window', None)
@@ -4120,9 +4172,18 @@ class KeyEscrowManager(object, metaclass=Singleton):
         return time.time() - first > self.answer_timeout
 
     def answered(self, account):
-        """Whether we know enough to decide: the addressbook has loaded (or will not) and the
+        """Whether we know enough to decide: the addressbook has loaded (or will not), the
+        account storage has said what escrow it keeps (or failed, or the wait is over) and the
         server has answered the public key lookup (or it failed)."""
-        return self._addressbook_answered(account) and self.server_key.get(account.id) in ('present', 'absent', 'failed', 'unsupported')
+        storage = self._storage_answered(account) or not self._addressbook_answered_in_time(account)
+        return (self._addressbook_answered(account) and storage
+                and self.server_key.get(account.id) in ('present', 'absent', 'failed', 'unsupported'))
+
+    def _addressbook_answered_in_time(self, account):
+        """False once the answer_timeout has passed since the first question: past it, nothing
+        is waited for any longer."""
+        first = self._first_asked.setdefault(account.id, time.time())
+        return time.time() - first <= self.answer_timeout
 
     def may_generate_silently(self, account):
         """(True, None) when a key may be generated without asking, else (False, why not)."""
@@ -4137,7 +4198,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         except Exception as e:
             return False, f'the addressbook could not be searched for a key ({e!r})'
         if escrowed:
-            return False, 'the addressbook keeps a key for it that this device could not restore'
+            return False, 'the addressbook or the account storage keeps a key for it that this device could not restore'
         state = self.server_key.get(account.id)
         if state == 'present':
             return False, 'the server keeps a public key for it'
