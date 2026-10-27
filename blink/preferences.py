@@ -9,7 +9,7 @@ from dateutil.tz import tzlocal
 
 from PyQt6.QtCore import Qt, QEvent, QRegularExpression
 from PyQt6.QtGui import QRegularExpressionValidator, QValidator, QActionGroup
-from PyQt6.QtWidgets import QApplication, QButtonGroup, QDialog, QDialogButtonBox, QFileDialog, QTextBrowser, QVBoxLayout, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
+from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QTextBrowser, QVBoxLayout, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
 from application.notification import IObserver, NotificationCenter
@@ -512,6 +512,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Auto answer
         self.auto_answer_interval.valueChanged[int].connect(self._SH_AutoAnswerIntervalChanged)
         self.account_auto_answer.clicked.connect(self._SH_AccountAutoAnswerChanged)
+        # Bonjour only: sessions to addresses outside the neighbourhood
+        # on the Account tab, in the password row (Bonjour has no password: only one of them is shown)
+        self.bonjour_outside_button = QCheckBox(translate('preferences_window', 'Allow calls to addresses outside the neighbourhood'), self.account_information_tab)
+        self.bonjour_outside_button.setToolTip(translate('preferences_window', 'Sessions from Bonjour to addresses at SIP domains. When off, Blink asks which account to use for them'))
+        self.account_information_tab_layout.addWidget(self.bonjour_outside_button, 3, 0, 1, 2)     # from the left edge, as Enabled
+        self.bonjour_outside_button.hide()
+        self.bonjour_outside_button.clicked.connect(self._SH_BonjourOutsideButtonClicked)
 
         # Interface
         self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
@@ -1077,6 +1084,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.key_negotiation_button.setCurrentIndex(self.key_negotiation_button.findData(account.rtp.encryption.key_negotiation))
 
         self.account_auto_answer.setChecked(account.sip.auto_answer)
+        self.bonjour_outside_button.setVisible(account is bonjour_account)
+        if account is bonjour_account:
+            self.bonjour_outside_button.setChecked(account.sip.outside_neighbourhood)
 
         # SMS settings tab, also relevant for bonjour
         self.message_cpim_enabled_button.setChecked(account.sms.use_cpim)
@@ -1505,6 +1515,13 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         settings = SIPSimpleSettings()
         settings.sip.auto_answer_interval = interval
         settings.save()
+
+    def _SH_BonjourOutsideButtonClicked(self, checked):
+        account = self.selected_account
+        if account is not BonjourAccount():
+            return
+        account.sip.outside_neighbourhood = checked
+        account.save()
 
     def _SH_AccountAutoAnswerChanged(self, auto_answer):
         account = self.selected_account
@@ -2235,6 +2252,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
             account = notification.sender
             if 'sip.auto_answer' in notification.data.modified:
                 self.account_auto_answer.setChecked(account.sip.auto_answer)
+            if 'sip.outside_neighbourhood' in notification.data.modified and account is BonjourAccount():
+                self.bonjour_outside_button.setChecked(account.sip.outside_neighbourhood)
             if 'enabled' in notification.data.modified:
                 self.account_enabled_button.setChecked(account.enabled)
                 if not account.enabled:

@@ -253,8 +253,14 @@ def room_target(room, host, account):
 
 def local_room_host(host, account):
     """Whether a room host is the account's own conference server (nothing to look up)."""
-    if not host or account is None or account is BonjourAccount():
+    if not host or account is None:
         return True
+    if account is BonjourAccount():
+        # a neighbour's room is local; a room at a real domain (Bonjour allowed outside the
+        # neighbourhood) is another SylkServer's, joined there as a guest
+        from blink.sessions import in_neighbourhood
+        from types import SimpleNamespace
+        return in_neighbourhood(SimpleNamespace(host=host))
     host = host.lower()
     own = str(getattr(account.server, 'conference_server', None) or '').lower()
     return host == own or _configuration_domain(host) == account.id.domain.lower()

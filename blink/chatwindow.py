@@ -537,6 +537,8 @@ class ChatWidget(QWidget):
             raise_videoroom_window(video_room)      # already there: bring it up
             self.update_header()
             return
+        if blink_session.state in ('initialized', 'ended') and not blink_session._check_bonjour_reach():
+            return      # from Bonjour outside the neighbourhood and no account chosen
         video = self._room_video(blink_session)
         if video is None:
             self.update_header()

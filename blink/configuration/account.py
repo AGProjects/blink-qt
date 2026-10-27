@@ -20,6 +20,9 @@ class BonjourSIPSettings(SettingsGroup):
     transport_order = Setting(type=SIPTransportList, default=SIPTransportList(['tcp', 'udp', 'tls']))
     tls_name = Setting(type=str, default='Blink')
     auto_answer = Setting(type=bool, default=False)
+    # sessions from Bonjour to addresses at real SIP domains (not a neighbour, a .local host or an IP
+    # address): a developer's setting; off, starting such a session asks which account to use
+    outside_neighbourhood = Setting(type=bool, default=False)
 
 
 class MessageSummarySettingsExtension(MessageSummarySettings):

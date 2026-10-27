@@ -873,6 +873,8 @@ class BlinkSession(BlinkSessionBase):
 
     def connect(self):
         assert self.direction == 'outgoing' and self.state == 'initialized'
+        if not self._check_bonjour_reach():
+            return
         self._remember_conference()
         notification_center = NotificationCenter()
         self.streams.extend(stream_description.create_stream() for stream_description in self.stream_descriptions)
@@ -1115,6 +1117,28 @@ class BlinkSession(BlinkSessionBase):
 
         if not self.persistent:
             self._delete()
+
+    def _check_bonjour_reach(self):
+        """Whether the session may go on: from Bonjour to an address outside the neighbourhood (a real
+        SIP domain) only with the Bonjour setting on; else the user picks the account to use instead
+        (the session moves to it), or cancels. In the GUI thread."""
+        if self.account is not BonjourAccount() or BonjourAccount().sip.outside_neighbourhood:
+            return True
+        if in_neighbourhood(self.uri, self.contact):
+            return True
+        target = '%s@%s' % (self.uri.user.decode(), self.uri.host.decode()) if self.uri.user else self.uri.host.decode()
+        account = choose_account_for(target)
+        if account is None:
+            ActivityLog().info(f'[call] {target} is outside the Bonjour neighbourhood and no account was chosen: not connecting')
+            if self.items.chat is None:
+                self.end(delete=True)       # a call nobody will start: the tile of a chat stays, to connect later
+            return False
+        ActivityLog().info(f'[call] {target} is outside the Bonjour neighbourhood: using {account.id}')
+        self.account = account
+        self.uri = self._normalize_uri(self.contact_uri.uri)
+        self.info.update(self)
+        NotificationCenter().post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session'}))
+        return True
 
     def _parse_uri(self, uri):
         if '@' not in uri:
@@ -1605,6 +1629,51 @@ class ClientConference(object):
 
 
 from blink.conference import conference_domains, split_uri, remember_focus, is_conference_uri as _is_conference_address
+
+
+def in_neighbourhood(uri, contact=None):
+    """Whether a Bonjour session can reach uri as a neighbour: a Bonjour contact, a .local host or an
+    IP address (the LAN, or a developer's address); anything else is a real SIP domain."""
+    import ipaddress
+    if contact is not None and getattr(contact, 'type', None) == 'bonjour':
+        return True
+    host = getattr(uri, 'host', None)
+    host = host.decode() if isinstance(host, bytes) else str(host or '')
+    host = host.strip('[]').rstrip('.').lower()
+    if not host or host == 'localhost' or host.endswith('.local'):
+        return True
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+def choose_account_for(target, parent=None):
+    """Ask which SIP account starts a session to target, an address outside the Bonjour
+    neighbourhood; the account, or None when cancelled or there is none."""
+    from PyQt6.QtWidgets import QApplication, QInputDialog, QLabel, QMessageBox
+    parent = parent or QApplication.activeWindow()
+    accounts = [account for account in AccountManager().get_accounts() if account is not BonjourAccount() and account.enabled]
+    if not accounts:
+        QMessageBox.information(parent, translate('sessions', 'No SIP account'),
+                                translate('sessions', '{} is outside the Bonjour neighbourhood and there is no SIP account to reach it.').format(target))
+        return None
+    labels = [getattr(account, 'label', None) or str(account.id) for account in accounts]
+    default = AccountManager().default_account
+    current = accounts.index(default) if default in accounts else 0
+    dialog = QInputDialog(parent)
+    dialog.setWindowTitle(translate('sessions', 'Choose an account'))
+    dialog.setLabelText(translate('sessions', '{} is outside the Bonjour neighbourhood. Start the session from:').format(target))
+    dialog.setComboBoxItems(labels)
+    dialog.setComboBoxEditable(False)
+    dialog.setTextValue(labels[current])
+    for text_label in dialog.findChildren(QLabel):
+        text_label.setWordWrap(True)    # a long address wraps instead of widening the dialog
+    dialog.setFixedWidth(360)
+    if dialog.exec() != QInputDialog.DialogCode.Accepted:
+        return None
+    return accounts[labels.index(dialog.textValue())]
 
 
 def is_conference_uri(uri, account=None):
