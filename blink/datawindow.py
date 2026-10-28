@@ -7,7 +7,8 @@ and remove a selection here and from the journal on the server
 (blink.data_manage). File Transfers: the same drill down over the file
 transfers whose file is on the server and not on this computer, and Download
 for the selection. Import from device and Export to device: history copied
-between devices of the account (blink.data_devices).
+between devices of the account (blink.data_devices). Devices: the devices
+that use the account, as the server records them (blink.account_devices).
 
 Three threads: the GUI; 'db', where the history is read and erased; and
 'data-manage', which talks to the server and waits for the erasing, one batch
@@ -1709,6 +1710,9 @@ class DataWindow(QWidget):
         self.tabs.addTab(self.import_panel, translate('data_window', 'Import from device'))
         self.export_panel = ExportPanel(self.tabs)
         self.tabs.addTab(self.export_panel, translate('data_window', 'Export to device'))
+        from blink.account_devices import DevicesPanel
+        self.devices_panel = DevicesPanel(self.tabs)
+        self.tabs.addTab(self.devices_panel, translate('data_window', 'Devices'))
         self.tabs.currentChanged.connect(self._SH_TabChanged)
         layout.addWidget(self.tabs)
         geometry = ui_settings().value('data_window/geometry')
@@ -1722,6 +1726,8 @@ class DataWindow(QWidget):
         self.manage_panel.refresh()
         if self.tabs.currentWidget() is self.files_panel:
             self.files_panel.refresh()
+        if self.tabs.currentWidget() is self.devices_panel and not self.devices_panel.loading:
+            self.devices_panel.refresh()
 
     def open_import(self, account, announcement):
         """A fresh export announcement from another device of ours: shown on the Import from device tab."""
@@ -1734,6 +1740,9 @@ class DataWindow(QWidget):
             self.export_panel.refresh_accounts()
         if self.tabs.widget(index) is self.compact_panel:
             self.compact_panel.refresh_accounts()
+        # the server is asked when the tab is looked at
+        if self.tabs.widget(index) is self.devices_panel and not self.devices_panel.loading:
+            self.devices_panel.refresh()
         # the storage is listed when the tab is looked at, not every time the window opens
         if self.tabs.widget(index) is self.files_panel and not self.files_panel.busy and not self.files_panel.loading:
             self.files_panel.refresh(keep_status=True)
