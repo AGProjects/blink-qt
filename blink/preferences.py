@@ -33,7 +33,7 @@ from blink.configuration.settings import H264_LEVELS, BlinkSettings
 from blink.sip_domain_check import DomainInspector, HtmlReport, RelayInspector, system_ca_file
 from blink.screen_pointer import is_screen_device, screen_index
 from blink.screen_share import ScreenShareManager
-from blink.resources import ApplicationData, Resources, load_ui_type
+from blink.resources import ApplicationData, Resources, lightness_inverted_icon, load_ui_type
 from blink.logging import LogManager
 from blink.pstn_normalize import pstn_apply_leading_zero_rule
 from blink.util import QSingleton, call_in_gui_thread, call_later, run_in_gui_thread, translate
@@ -579,6 +579,9 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         for index, action in enumerate(action for action in self.toolbar.actions() if not action.isSeparator()):
             action.index = index
             self.section_group.addAction(action)
+        self._apply_toolbar_icons()
+        from blink.widgets.color import follow_theme
+        follow_theme(self)
         # the VNC screen sharing settings are obsolete: a screen is now shared as a video call
         # (the page indexes above still count it, so the other sections keep their pages)
         self.screen_sharing_action.setVisible(False)
@@ -2187,6 +2190,18 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         invalidate()
         if self.selected_account is not None:
             self.load_account_settings(self.selected_account)     # the account fields, shown again
+
+    _toolbar_icons = {'accounts_action': 'icons/accounts.png', 'audio_action': 'icons/audio.png', 'video_action': 'icons/video.png',
+                      'chat_action': 'icons/chat.png', 'screen_sharing_action': 'icons/screensharing.png',
+                      'logging_action': 'icons/logging.png', 'advanced_action': 'icons/advanced-settings.png'}
+
+    def _apply_toolbar_icons(self):
+        # dark shaded pictures that vanish on a dark toolbar: their lightness inverted there
+        for name, filename in self._toolbar_icons.items():
+            getattr(self, name).setIcon(lightness_inverted_icon(Resources.get(filename)))
+
+    def apply_theme(self):
+        self._apply_toolbar_icons()
 
     def _SH_SearchEnterActionButtonActivated(self, index):
         settings = BlinkSettings()

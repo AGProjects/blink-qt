@@ -18,7 +18,7 @@ from sipsimple.configuration.datatypes import Path
 from blink.util import run_in_gui_thread
 
 
-__all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon', 'ui_settings']
+__all__ = ['ApplicationData', 'Resources', 'IconManager', 'themed_icon', 'lightness_inverted_icon', 'ui_settings']
 
 
 def themed_icon(filename, dark_color='#b4b4b4', size=64, outline=False):
@@ -54,6 +54,29 @@ def themed_icon(filename, dark_color='#b4b4b4', size=64, outline=False):
     painter.fillRect(pixmap.rect(), QColor(dark_color))
     painter.end()
     return QIcon(pixmap)
+
+def lightness_inverted_icon(filename):
+    """QIcon of a shaded, mostly dark picture (the Preferences toolbar icons), with its lightness
+    inverted under a dark theme: hue, saturation and the shading detail stay, the dark body
+    turns light. Unlike themed_icon, which flattens a glyph into one colour."""
+    from PyQt6.QtGui import QColor, QImage, QPalette
+    from PyQt6.QtWidgets import QApplication
+    application = QApplication.instance()
+    if application is None or application.palette().color(QPalette.ColorRole.Window).lightness() >= 128:
+        return QIcon(filename)
+    image = QImage(filename)
+    if image.isNull():
+        return QIcon(filename)
+    image = image.convertToFormat(QImage.Format.Format_ARGB32)
+    for y in range(image.height()):
+        for x in range(image.width()):
+            pixel = image.pixelColor(x, y)
+            if pixel.alpha() == 0:
+                continue
+            hue, saturation, lightness, alpha = pixel.getHslF()
+            image.setPixelColor(x, y, QColor.fromHslF(hue, saturation, 1.0 - lightness * 0.85, alpha))
+    return QIcon(QPixmap.fromImage(image))
+
 
 class DirectoryContextManager(str):
     def __enter__(self):
