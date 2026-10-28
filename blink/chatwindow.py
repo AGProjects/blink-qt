@@ -2686,7 +2686,12 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_BlinkSessionNewIncoming(self, notification):
         if notification.sender.streams.types.intersection(self.__streamtypes__):
             if self.session_model.rowCount():
-                call_later(.5, self._NH_BlinkSessionIsSelected, notification)
+                # raised now, while still in the Accept click: raised later (a timer) the window
+                # manager keeps the focus where the incoming dialog left it (the main window)
+                if self._shows_session(notification.sender) and self._select_session(notification.sender):
+                    self.show()
+                else:
+                    call_later(.5, self._NH_BlinkSessionIsSelected, notification)
             else:
                 self.show()
 
@@ -2697,7 +2702,11 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
             if session_videoroom(notification.sender) is not None:
                 call_later(.5, self.show_in_background, notification.sender)     # joined with video: its window is in front
             elif self.session_model.rowCount():
-                call_later(.5, self._NH_BlinkSessionIsSelected, notification)
+                # raised now, in the user's action (a call, an accepted transfer): see NewIncoming
+                if self._shows_session(notification.sender) and self._select_session(notification.sender):
+                    self.show()
+                else:
+                    call_later(.5, self._NH_BlinkSessionIsSelected, notification)
             else:
                 self.show()
 
