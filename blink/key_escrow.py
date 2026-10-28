@@ -1,75 +1,42 @@
 # Copyright (C) 2026 AG Projects. See LICENSE for details.
 #
 
-"""The PGP key escrow carried on our own XCAP contact.
+"""The PGP key escrow of an account, kept in its SylkServer account storage.
 
-Ported from Blink for macOS (KeyEscrow.py); the rules are the same, so either
-client opens the other's escrow and refuses the same writes. What differs is
-where Qt keeps its keys (<keys_directory>/private/<account>.{privkey,pubkey})
-and that account.sms.{private,public}_key are path settings here. The
-scheduling (restore on reload, repair once per session, the generate prompt
-waiting for the answer) is blink.messages.KeyEscrowManager.
+The rules are the ones of Blink for macOS (KeyEscrow.py), so either client opens
+the other's escrow and refuses the same writes. What differs is where Qt keeps
+its keys (<keys_directory>/private/<account>.{privkey,pubkey}) and that
+account.sms.{private,public}_key are path settings here. The scheduling (the
+escrow pass, the generate prompt waiting for the answer) is
+blink.messages.KeyEscrowManager.
 
-Sylk mobile escrows the account keypair on the user's own ("self") contact in
-the XCAP addressbook, as a JSON ``keys`` attribute::
+The escrow lets a device that has no key of its own adopt the account's existing
+keypair instead of generating a fresh one and orphaning every message ever
+encrypted to the old one. It is one object per account, keys/pgp-private in that
+account's own storage (blink.key_storage; SylkServer docs/PRIVATE-KEY-STORAGE.md):
 
     {"private_key": <symmetrically encrypted with the ACCOUNT PASSWORD>,
      "public_key":  <armored, in clear>,
      "device":      "motorola razr 60 ultra",
      "timestamp":   "2026-07-10T12:44:19.049Z"}
 
-so a device that has no key of its own can adopt the account's existing one
-instead of generating a fresh keypair and orphaning every message ever
-encrypted to the old one.
-
-The escrow is moving to the SylkServer account storage (keys/pgp-private,
-blink.key_storage; SylkServer docs/PRIVATE-KEY-STORAGE.md). While both are
-kept, the record the storage holds is one more escrow record next to the ones
-on our contacts: self_escrow_records() and read_self_keys() include it under
-the contact id STORAGE_ID, and every rule below applies to it unchanged.
-
-Which attribute bag does the escrow live in? Read below.
-
-Every contact in the resource-lists document can carry TWO independent
-attribute containers, and each client reads only its own:
-
-    urn:ag-projects:sipsimple:xml:ns:addressbook   written by sylk mobile via
-                                                   SylkServer, and now by Blink
-                                                   too -- see the namespace note
-                                                   in configuration/contact.py
-    urn:ag-projects:blink:xml:ns:addressbook       written by Blink until that
-                                                   switch; still present in
-                                                   every existing document
-
-They are not in sync: `organization` exists in both bags on the same contacts,
-holding independent values, and documents will carry the older bag for as long
-as those contacts live. Rather than assume, read_self_keys() looks in both and
-reports which one answered.
-
-The read is deliberately done against the raw lxml tree rather than through
-sipsimple's Contact settings, because XCAPContact.normalize() drops every
-attribute that is not a registered SharedSetting -- which is exactly what
-hides the escrow from Blink today. Going to the tree also means this module
-needs no change to the addressbook schema to see what is there, so it stays
-honest about the document as the server actually returns it.
+The escrow used to be a `keys` attribute on our own XCAP contact. That copy is no
+longer read or written: storage is the only escrow. Where the storage keeps an
+escrow and our own contact still carries the old attribute, the attribute is
+cleared (strip_contact_escrow), so the key stops riding along with every copy of
+the addressbook.
 """
 
-__all__ = ['ADDRESSBOOK_NS', 'SIPSIMPLE_ATTRIBUTES_NS', 'BLINK_ATTRIBUTES_NS', 'ESCROW_NAMESPACE',
-           'STORAGE_ID', 'escrow_location',
-           'self_contact_element', 'self_contact_elements', 'self_escrow_records',
-           'read_self_keys', 'escrow_write_targets', 'escrow_write_blockers', 'escrow_write_action',
-           'escrow_is_missing', 'escrow_record',
-           'write_self_keys', 'install_keypair', 'restore_from_own_contact',
-           'escrow_copy_action', 'copy_escrow',
-           'escrow_password_check', 'reencrypt_escrow', 'foreign_escrows',
-           'self_contact_report', 'log_self_contact']
+__all__ = ['SIPSIMPLE_ATTRIBUTES_NS',
+           'read_escrow', 'escrow_write_blockers', 'escrow_write_action', 'escrow_is_missing',
+           'escrow_record', 'write_escrow', 'foreign_escrow', 'escrow_password_check',
+           'reencrypt_escrow', 'install_keypair', 'restore_from_storage', 'strip_contact_escrow']
 
 import datetime
 import json
 import os
 
 from urllib.parse import unquote
-
 
 
 class _Logger(object):
@@ -116,35 +83,42 @@ def _has_file(value):
 
 ADDRESSBOOK_NS = 'urn:ag-projects:xml:ns:addressbook'
 SIPSIMPLE_ATTRIBUTES_NS = 'urn:ag-projects:sipsimple:xml:ns:addressbook'
-BLINK_ATTRIBUTES_NS = 'urn:ag-projects:blink:xml:ns:addressbook'
-
-# Searched in this order; the first bag carrying a `keys` attribute wins.
-# sipsimple first, because that is where the mobile's attributes land.
-ATTRIBUTE_NAMESPACES = (('sipsimple', SIPSIMPLE_ATTRIBUTES_NS),
-                        ('blink', BLINK_ATTRIBUTES_NS))
-
-# Where an escrow written by Blink has to go. Not a preference: the mobile
-# reads only this bag, so an escrow written anywhere else is invisible to the
-# device that needs it, which is the entire point of writing one.
-ESCROW_NAMESPACE = SIPSIMPLE_ATTRIBUTES_NS
-
-# The contact id under which the record of the account storage is listed
-STORAGE_ID = 'storage'
 
 
-def _storage_record(account):
-    """The escrow record the account storage keeps (blink.key_storage), or None. None too
-    where blink is not importable (the offline harnesses)."""
+def _key_storage():
+    """The KeyStorage singleton, or None where blink is not importable (tests)."""
     try:
         from blink.key_storage import KeyStorage
-        return KeyStorage().record(account)
+        return KeyStorage()
     except Exception:
         return None
 
 
-def escrow_location(contact_id):
-    """Where an escrow record is, for a human: the account storage or a contact."""
-    return 'the account storage' if contact_id == STORAGE_ID else 'contact %s' % contact_id
+def read_escrow(account):
+    """The escrow record the account storage keeps for the account, or None."""
+    storage = _key_storage()
+    return storage.record(account) if storage is not None else None
+
+
+def _storage_state(account):
+    """What KeyStorage knows of the account storage (None where it is not importable)."""
+    storage = _key_storage()
+    if storage is None:
+        return None
+    return storage.state(account) if storage._wanted(account) else 'unsupported'
+
+
+def _local_public_key(account):
+    """This device's armored public key for the account, normalized, or None."""
+    try:
+        with open(_path(account.sms.public_key), 'rb') as fd:
+            return fd.read().decode('utf-8', 'replace').replace('\r', '').strip()
+    except (IOError, OSError, TypeError):
+        return None
+
+
+def _normalized(public_key):
+    return (public_key or '').replace('\r', '').strip()
 
 
 def _pgpy():
@@ -164,91 +138,6 @@ def _pgpy():
     except ImportError:
         return None
     return pgpy
-
-
-def _resource_lists_element(account):
-    """The lxml root of this account's resource-lists document, or None.
-
-    None covers every "not yet" there is: an account with XCAP disabled, one
-    whose root has not been discovered, one whose first fetch has not landed.
-    """
-    try:
-        content = account.xcap_manager.resource_lists.content
-    except (AttributeError, ReferenceError):
-        return None
-    return getattr(content, 'element', None)
-
-
-def _contact_elements(root):
-    return root.iter('{%s}contact' % ADDRESSBOOK_NS)
-
-
-def _contact_uris(contact_element):
-    """Every URI on a contact, percent-decoded.
-
-    The document stores them encoded (``ag%40ag-projects.com``), so comparing
-    a raw attribute against account.id never matches.
-    """
-    for uri_element in contact_element.iter('{%s}uri' % ADDRESSBOOK_NS):
-        value = uri_element.get('uri')
-        if value:
-            yield unquote(value)
-
-
-def _attributes(contact_element, namespace):
-    """The {name: value} of one attribute bag on this contact.
-
-    findall rather than iter on purpose: each of a contact's URIs carries an
-    attribute bag of its own, and iter() would fold those into the contact's,
-    which is how you end up reporting a `position` attribute on a contact that
-    has no such thing.
-    """
-    attributes = {}
-    for container in contact_element.findall('{%s}attributes' % namespace):
-        for child in container.findall('{%s}attribute' % namespace):
-            name = child.get('name')
-            if name is None:
-                continue
-            attributes[name] = None if child.get('nil') == 'true' else (child.text or '')
-    return attributes
-
-
-def self_contact_elements(account):
-    """Every contact element carrying our own account URI.
-
-    Plural on purpose. Nothing stops the document holding our URI on more
-    than one contact -- the two clients already add a `uri` entry each for the
-    same address -- and an escrow written to one of them is invisible to a
-    reader that picks the other. A caller that silently took the first would
-    never notice.
-    """
-    root = _resource_lists_element(account)
-    if root is None:
-        return []
-    account_id = str(account.id).lower()
-    return [contact_element for contact_element in _contact_elements(root)
-            if any(uri.lower() == account_id for uri in _contact_uris(contact_element))]
-
-
-def self_contact_element(account):
-    """The contact element whose URI is our own account, or None."""
-    elements = self_contact_elements(account)
-    return elements[0] if elements else None
-
-
-def shared_accounts(contact_element, account, known_accounts):
-    """Other configured accounts whose URI sits on this same contact.
-
-    A contact carries ONE `keys` attribute. If it also carries the URI of
-    another of our accounts, both accounts resolve to it as their own
-    contact -- and they have different keypairs, so whichever escrows last
-    overwrites the other. Detecting that is the difference between a backup
-    and a lost key.
-    """
-    account_id = str(account.id).lower()
-    uris = {uri.lower() for uri in _contact_uris(contact_element)}
-    return sorted(known for known in known_accounts
-                  if known.lower() in uris and known.lower() != account_id)
 
 
 def known_accounts():
@@ -286,103 +175,6 @@ def _escrow_owner(public_key, accounts):
     return None
 
 
-def self_escrow_records(account, storage=True):
-    """[(contact id, namespace label, record)] for every escrow on a contact of ours, and
-    (STORAGE_ID, 'storage', record) for the one the account storage keeps (unless storage=False).
-
-    Several contacts can legitimately carry our URI -- they are all us, so
-    they all deserve the same escrow. They can nonetheless disagree, if a
-    write reached one and not another, so the records are gathered rather
-    than the first one taken.
-    """
-    found = []
-    for contact_element in self_contact_elements(account):
-        for label, namespace in ATTRIBUTE_NAMESPACES:
-            raw = _attributes(contact_element, namespace).get('keys')
-            if not raw:
-                continue
-            try:
-                record = json.loads(raw)
-            except (TypeError, ValueError) as e:
-                BlinkLogger().log_info('Key escrow: the %s `keys` attribute on contact %s of %s is not '
-                                       'valid JSON: %s' % (label, contact_element.get('id'), account.id, e))
-                continue
-            if not isinstance(record, dict):
-                BlinkLogger().log_info('Key escrow: the %s `keys` attribute on contact %s of %s is not '
-                                       'an object' % (label, contact_element.get('id'), account.id))
-                continue
-            found.append((contact_element.get('id'), label, record))
-    if storage:
-        record = _storage_record(account)
-        if record is not None:
-            found.append((STORAGE_ID, 'storage', record))
-    return found
-
-
-def read_self_keys(account, storage=True):
-    """The newest escrow record on any contact of ours or in the account storage, or None.
-
-    Returns the parsed JSON with two added keys: 'namespace', naming the bag
-    it came from, and 'contact_id', the contact it was found on.
-
-    EVERY contact carrying our URI is searched, and the newest record wins.
-    Duplicates genuinely occur -- one account here sits on two "AG Projects"
-    contacts -- so a first-match reader would report an escrow as absent
-    merely because it sat on the second one, which is the worst possible
-    wrong answer: it reads as "no backup exists" exactly when somebody needs
-    one. Between two escrows for the same account the newest is the right
-    one, since a re-escrow only ever happens to supersede.
-
-    Never raises: no document, no self contact, no attribute and unparseable
-    JSON all come back as None, because every caller is on a path that must
-    survive not finding anything.
-    """
-    records = self_escrow_records(account, storage)
-    if not records:
-        return None
-    contact_id, label, record = max(records, key=lambda item: item[2].get('timestamp') or '')
-    record = dict(record)
-    record['namespace'] = label
-    record['contact_id'] = contact_id
-    return record
-
-
-def _storage_state(account):
-    """What blink.key_storage knows of the account storage (None where blink is not importable)."""
-    try:
-        from blink.key_storage import KeyStorage
-        storage = KeyStorage()
-        return storage.state(account) if storage._wanted(account) else 'unsupported'
-    except Exception:
-        return None
-
-
-def _xcap_blockers(account, accounts):
-    """Why the escrow cannot be written to our own contacts now ([] when it can)."""
-    if _resource_lists_element(account) is None:
-        return ['the addressbook has not been fetched from the server yet']
-
-    elements = self_contact_elements(account)
-    if not elements:
-        return ['no contact carries the URI %s, so there is nowhere to write' % account.id]
-
-    blockers = []
-    for contact_element in elements:
-        shared = shared_accounts(contact_element, account, accounts)
-        if shared:
-            blockers.append('contact %s also carries %s; one contact holds one `keys` attribute, so '
-                            'split it -- move %s onto its own contact -- rather than choosing which '
-                            'key survives'
-                            % (contact_element.get('id'), ' and '.join(shared), ' and '.join(shared)))
-
-    for contact_id, _label, record in self_escrow_records(account, storage=False):
-        owner = _escrow_owner(record.get('public_key'), accounts)
-        if owner and owner.lower() != str(account.id).lower():
-            blockers.append('the escrow already in %s is the key of %s; overwriting it '
-                            'would destroy that account\'s only backup' % (escrow_location(contact_id), owner))
-    return blockers
-
-
 def _storage_blockers(account, accounts):
     """Why the escrow cannot be written to the account storage now ([] when it can)."""
     state = _storage_state(account)
@@ -390,50 +182,17 @@ def _storage_blockers(account, accounts):
         return ['the account storage cannot be written: %s' % {
             None: 'not asked yet', 'pending': 'it has not answered yet', 'failed': 'it could not be read',
             'invalid': 'it keeps something that is not a key escrow', 'unsupported': 'the account has none'}.get(state, state)]
-    record = _storage_record(account)
+    record = read_escrow(account)
     owner = _escrow_owner((record or {}).get('public_key'), accounts)
     if owner and owner.lower() != str(account.id).lower():
-        return ['the escrow already in the account storage is the key of %s; overwriting it '
+        return ['the escrow in the account storage is the key of %s; overwriting it '
                 'would destroy that account\'s only backup' % owner]
     return []
 
 
-def escrow_write_targets(account, accounts=None):
-    """Every place an escrow for this account should be written to now: every contact carrying
-    our URI, and the account storage (STORAGE_ID), each where nothing blocks it.
-
-    All the contacts, not one. Several contacts carrying the same account URI is a
-    valid, non-conflictual configuration: they are all us, so they all take
-    the same key. Writing every one of them keeps the document consistent and
-    makes a read correct whichever contact it happens to pick first.
-    """
-    accounts = known_accounts() if accounts is None else accounts
-    targets = []
-    if not _xcap_blockers(account, accounts):
-        targets.extend(element.get('id') for element in self_contact_elements(account))
-    if not _storage_blockers(account, accounts):
-        targets.append(STORAGE_ID)
-    return targets
-
-
 def escrow_write_blockers(account, accounts=None):
-    """Why an escrow must not be written for this account right now.
-
-    A list of reasons; empty means a write is safe to attempt. This exists
-    before write_self_keys does, on purpose -- the guard is the part that
-    decides whether the feature backs a key up or destroys one, so it is
-    written and proven while everything is still read-only.
-
-    The escrow goes to our own contacts and to the account storage, each where
-    nothing blocks it (escrow_write_targets); only when neither can take it is
-    the write refused. The one genuine conflict on the contacts is a contact
-    carrying the URI of a DIFFERENT account of ours: one contact holds one
-    `keys` attribute, and two accounts have two keypairs, so the second writer
-    would destroy the first's backup. The resolution is to split that contact,
-    not to pick a surviving key -- choosing a key only chooses which account is
-    left without a backup. The account storage is the account's own, so it
-    knows no such conflict.
-    """
+    """Why an escrow must not be written for this account right now: a list of reasons,
+    empty when a write is safe to attempt. force never overrides these."""
     accounts = known_accounts() if accounts is None else accounts
     blockers = []
 
@@ -445,10 +204,7 @@ def escrow_write_blockers(account, accounts=None):
     if not (password or '').strip():
         blockers.append('no account password available to encrypt the escrow with')
 
-    xcap = _xcap_blockers(account, accounts)
-    storage = _storage_blockers(account, accounts)
-    if xcap and storage:
-        blockers.extend(xcap + storage)
+    blockers.extend(_storage_blockers(account, accounts))
     return blockers
 
 
@@ -456,16 +212,14 @@ def escrow_write_action(account, force=False, accounts=None):
     """(would it do anything, why not) for a write right now.
 
     Two kinds of no. escrow_write_blockers holds the refusals that force can
-    never override, because they mean the write would destroy somebody's key.
-    The two decided here are softer and overridden by force:
+    never override. The two decided here are softer and Option-overridable:
 
-      * the server already carries this key, so a write is pointless;
-      * the server carries a key this device does NOT hold. That is what a
+      * the storage already keeps this key, so a write is pointless;
+      * the storage keeps a key this device does NOT hold. That is what a
         fresh profile looks like after Blink has been talked into generating
         a new keypair: the escrow is the account's real, older key, and
-        quietly replacing it with a key minted five minutes ago would burn
-        the only copy of the one every existing message was encrypted to.
-        Replacing it has to be a deliberate act, not the default.
+        quietly replacing it would burn the only copy of the one every
+        existing message was encrypted to.
     """
     blockers = escrow_write_blockers(account, accounts)
     if blockers:
@@ -473,39 +227,32 @@ def escrow_write_action(account, force=False, accounts=None):
     if force:
         return True, None
 
-    try:
-        with open(_path(account.sms.public_key), 'rb') as fd:
-            ours = fd.read().decode('utf-8', 'replace').replace('\r', '').strip()
-    except (IOError, OSError, TypeError) as e:
-        return False, 'this device\'s public key could not be read (%s).' % e
+    ours = _local_public_key(account)
+    if ours is None:
+        return False, 'this device\'s public key could not be read.'
 
-    records = self_escrow_records(account)
-    foreign = [(contact_id, record) for contact_id, _label, record in records
-               if (record.get('public_key') or '').replace('\r', '').strip() != ours]
-    if foreign:
-        contact_id, record = foreign[0]
-        return False, ('%s carries an escrow for a key this device does not hold, written '
+    record = read_escrow(account)
+    if record is None:
+        return True, None
+    if _normalized(record.get('public_key')) != ours:
+        return False, ('the account storage keeps an escrow for a key this device does not hold, written '
                        '%s by "%s". Replacing it would leave that key with no backup anywhere, and '
-                       'every message encrypted to it unreadable.'
-                       % (escrow_location(contact_id), record.get('timestamp', '?'), record.get('device', '?')))
-
-    current = set(contact_id for contact_id, _label, record in records
-                  if (record.get('public_key') or '').replace('\r', '').strip() == ours)
-    if all(target in current for target in escrow_write_targets(account, accounts)):
-        return False, 'the key of this account is already saved on the server.'
-    return True, None
+                       'every message encrypted to it unreadable. Hold Option to replace it anyway.'
+                       % (record.get('timestamp', '?'), record.get('device', '?')))
+    return False, 'the key of this account is already saved on the server.'
 
 
 def escrow_is_missing(account):
-    """True when this account has a key but nothing on the server carries it.
+    """True when this account has a key and the account storage said it keeps no escrow.
 
-    The one state safe to repair without asking: there is no escrow at all,
-    so writing one cannot displace anybody's key. Every other difference
-    between the local key and an escrow is a decision, not a repair.
+    The one state safe to repair without asking: there is no escrow at all, so
+    writing one cannot displace anybody's key. Every other difference between the
+    local key and an escrow is a decision, not a repair. A storage that has not
+    answered (or failed) is not "missing".
     """
     if not _has_file(account.sms.private_key):
         return False
-    return not self_escrow_records(account)
+    return _storage_state(account) == 'absent'
 
 
 def escrow_record(account):
@@ -518,8 +265,7 @@ def escrow_record(account):
     device wrote it and when, without holding the password.
 
     The timestamp is deliberately shaped like JavaScript's toISOString(), so
-    it sorts lexicographically against the ones mobile writes -- read_self_keys
-    picks the newest by string comparison.
+    it sorts lexicographically against the ones mobile writes.
     """
     import socket
 
@@ -554,238 +300,101 @@ def escrow_record(account):
             'timestamp': datetime.datetime.utcnow().isoformat(timespec='milliseconds') + 'Z'}
 
 
-def write_self_keys(account, force=False, accounts=None):
-    """Escrow this device's keypair onto every contact carrying our URI and into the
-    account storage (escrow_write_targets).
+def write_escrow(account, force=False, accounts=None):
+    """Escrow this device's keypair into the account storage. Returns (sent, reason);
+    sent False and a reason means nothing was written and says why.
 
-    Returns (contact ids written, STORAGE_ID among them when the storage write was sent, reason); an empty list and a reason means
-    nothing was written and says why.
-
-    Writes to every target rather than one, because several contacts carrying
-    the same account URI is a valid configuration and they are all us.
-    Whether a write should happen at all is escrow_write_action's decision,
-    so the menu item and this cannot drift into disagreeing.
+    Whether a write should happen at all is escrow_write_action's decision, so the
+    menu item and this cannot drift into disagreeing.
     """
     logger = BlinkLogger()
 
     ok, reason = escrow_write_action(account, force=force, accounts=accounts)
     if not ok:
         logger.log_info('Key escrow: not writing for %s -- %s' % (account.id, reason))
-        return [], reason
-
-    accounts = known_accounts() if accounts is None else accounts
-    targets = escrow_write_targets(account, accounts)
-    contact_targets = [target for target in targets if target != STORAGE_ID]
+        return False, reason
 
     try:
         record = escrow_record(account)
     except Exception as e:
         logger.log_error('Key escrow: could not build an escrow for %s: %s' % (account.id, e))
-        return [], str(e)
+        return False, str(e)
 
-    payload = json.dumps(record)
-    logger.log_info('Key escrow: writing an escrow for %s to %s -- device="%s" timestamp=%s blob=%d chars'
-                    % (account.id, ', '.join(targets), record['device'], record['timestamp'],
-                       len(record['private_key'])))
-
-    written = []
-    if STORAGE_ID in targets:
-        from blink.key_storage import KeyStorage
-        if KeyStorage().store(account, payload, 'escrow written by this device'):
-            written.append(STORAGE_ID)
-    else:
-        logger.log_info('Key escrow: not writing the account storage of %s -- %s'
-                        % (account.id, '; '.join(_storage_blockers(account, accounts))))
-    if not contact_targets:
-        logger.log_info('Key escrow: not writing the contacts of %s -- %s'
-                        % (account.id, '; '.join(_xcap_blockers(account, accounts))))
-        return written, None if written else 'nowhere to write the escrow'
-
-    written.extend(_write_contacts(account, contact_targets, payload))
-    logger.log_info('Key escrow: queued an escrow for %s to %s' % (account.id, ', '.join(written) or 'nowhere'))
-    return written, None
+    logger.log_info('Key escrow: writing an escrow for %s to the account storage -- device="%s" timestamp=%s blob=%d chars'
+                    % (account.id, record['device'], record['timestamp'], len(record['private_key'])))
+    if not _key_storage().store(account, json.dumps(record), 'escrow written by this device'):
+        return False, 'the account storage cannot be written now'
+    return True, None
 
 
-def _write_contacts(account, contact_ids, payload):
-    """Queue the `keys` attribute on these contacts (one transaction). Returns the ids queued."""
-    from sipsimple.addressbook import AddressbookManager
-
-    written = []
-    manager = account.xcap_manager
-    manager.start_transaction()
-    try:
-        for contact_id in contact_ids:
-            try:
-                contact = AddressbookManager().get_contact(contact_id)
-            except KeyError:
-                BlinkLogger().log_info('Key escrow: contact %s of %s is in the document but not loaded yet, skipped'
-                                       % (contact_id, account.id))
-                continue
-            manager.update_contact(contact.__toxcap__(), {'keys': payload})
-            written.append(contact_id)
-    finally:
-        # Commit whatever was queued even if one target could not be resolved:
-        # leaving a transaction open wedges every later addressbook change.
-        manager.commit_transaction()
-    return written
-
-
-# Keeping the account storage and our contacts equal (SylkServer docs/PRIVATE-KEY-STORAGE.md,
-# Phase 1). The newest record is copied as it is to the side that lacks it or holds an older
-# one: no password and no key are needed, and a client that knows only one side (an older
-# Blink, sylk-desktop, an older Sylk Mobile) sees what the others wrote.
-
-def _same_escrow(one, other):
-    return all((one.get(name) or '') == (other.get(name) or '') for name in ('private_key', 'public_key', 'timestamp'))
-
-
-def _bare_record(record):
-    """The record as a client writes it: without what read_self_keys adds."""
-    return dict((name, value) for name, value in record.items() if name not in ('namespace', 'contact_id'))
-
-
-def escrow_copy_action(account, accounts=None):
-    """(direction, record, detail): what to copy to keep the storage and the contacts equal.
-
-    direction 'storage': record (the newest on our contacts; detail: its contact) goes to the
-    account storage. 'contacts': record (the storage's) goes to the contacts in detail. None:
-    nothing to copy, detail says why (None when they are equal).
-    """
-    accounts = known_accounts() if accounts is None else accounts
-    state = _storage_state(account)
-    if state not in ('present', 'absent'):
-        return None, None, 'the account storage has not answered (%s)' % (state or 'not asked')
-    if _resource_lists_element(account) is None:
-        return None, None, 'the addressbook has not been fetched yet'
-
-    contacts = read_self_keys(account, storage=False)
-    stored = _storage_record(account)
-    if contacts is None and stored is None:
-        return None, None, None
-
-    def owned_elsewhere(record):
-        owner = _escrow_owner(record.get('public_key'), accounts)
-        return owner if owner and owner.lower() != str(account.id).lower() else None
-
-    contacts_time = (contacts or {}).get('timestamp') or ''
-    stored_time = (stored or {}).get('timestamp') or ''
-
-    if contacts is not None and (stored is None or contacts_time > stored_time):
-        owner = owned_elsewhere(contacts)
-        if owner:
-            return None, None, ('the escrow on contact %s is the key of %s, not copied to the account storage of %s'
-                                % (contacts.get('contact_id'), owner, account.id))
-        return 'storage', _bare_record(contacts), contacts.get('contact_id')
-
-    if contacts is not None and stored is not None and contacts_time == stored_time and not _same_escrow(contacts, stored):
-        return None, None, ('the contacts and the account storage keep different escrows written at the same time (%s); '
-                            'left as they are' % stored_time)
-
-    if stored is not None:
-        # the newest (or as new as the contacts'): every contact that lags gets it
-        if owned_elsewhere(stored):
-            return None, None, 'the escrow in the account storage is the key of another account, not copied to the contacts'
-        blockers = _xcap_blockers(account, accounts)
-        if blockers:
-            return None, None, 'the contacts cannot take the escrow of the account storage: %s' % '; '.join(blockers)
-        behind = [contact_id for contact_id in (element.get('id') for element in self_contact_elements(account))
-                  if not any(found == contact_id and _same_escrow(record, stored)
-                             for found, _label, record in self_escrow_records(account, storage=False))]
-        return ('contacts', _bare_record(stored), behind) if behind else (None, None, None)
-    return None, None, None
-
-
-def copy_escrow(account, direction, record, detail):
-    """Copy an escrow record as escrow_copy_action decided. Returns where it was sent."""
-    payload = json.dumps(record)
-    if direction == 'storage':
-        from blink.key_storage import KeyStorage
-        sent = KeyStorage().store(account, payload, 'copied from contact %s' % detail)
-        return [STORAGE_ID] if sent else []
-    if direction == 'contacts':
-        return _write_contacts(account, detail, payload)
-    return []
-
-
-def foreign_escrows(account):
-    """[(contact id, record)] for the escrows on our own contacts of a key this device does
-    NOT hold, or [] (also when this device holds no key or its public key cannot be read)."""
-    try:
-        with open(_path(account.sms.public_key), 'rb') as fd:
-            ours = fd.read().decode('utf-8', 'replace').replace('\r', '').strip()
-    except (IOError, OSError, TypeError):
-        return []
-    return [(contact_id, record) for contact_id, _label, record in self_escrow_records(account)
-            if (record.get('public_key') or '').replace('\r', '').strip() != ours]
+def foreign_escrow(account):
+    """The escrow record the account storage keeps of a key this device does NOT hold,
+    or None (also when this device holds no key or its public key cannot be read)."""
+    ours = _local_public_key(account)
+    record = read_escrow(account)
+    if ours is None or record is None:
+        return None
+    return record if _normalized(record.get('public_key')) != ours else None
 
 
 def escrow_password_check(account):
-    """(contact ids, reason): the contacts whose escrow of OUR key does not open with the current
-    account password, or ([], why nothing can be said).
+    """(stale, reason): stale is True when the escrow of OUR key does not open with the
+    current account password; reason says why nothing can be said (stale False then).
 
-    Only escrows of the key this device holds are judged. An escrow of another key is somebody
-    else's backup (escrow_write_action), and not being able to open it says nothing about our
-    password, so its presence stops the check rather than inviting a rewrite.
+    Only an escrow of the key this device holds is judged. An escrow of another key is
+    somebody else's backup, and not being able to open it says nothing about our password.
     """
     pgpy = _pgpy()
     if pgpy is None:
-        return [], 'pgpy is not importable'
+        return False, 'pgpy is not importable'
     password = (getattr(getattr(account, 'auth', None), 'password', None) or '').strip()
     if not password:
-        return [], 'no account password available'
+        return False, 'no account password available'
     if not _has_file(account.sms.private_key):
-        return [], 'this device holds no private key for %s' % account.id
-    try:
-        with open(_path(account.sms.public_key), 'rb') as fd:
-            ours = fd.read().decode('utf-8', 'replace').replace('\r', '').strip()
-    except (IOError, OSError, TypeError) as e:
-        return [], 'this device\'s public key could not be read (%s)' % e
-
-    records = self_escrow_records(account)
-    foreign = [contact_id for contact_id, _label, record in records
-               if (record.get('public_key') or '').replace('\r', '').strip() != ours]
-    if foreign:
-        return [], '%s carries an escrow for a key this device does not hold' % escrow_location(foreign[0])
+        return False, 'this device holds no private key for %s' % account.id
+    ours = _local_public_key(account)
+    if ours is None:
+        return False, 'this device\'s public key could not be read'
+    record = read_escrow(account)
+    if record is None:
+        return False, None
+    if _normalized(record.get('public_key')) != ours:
+        return False, 'the account storage keeps an escrow for a key this device does not hold'
 
     import warnings
-    stale = []
-    for contact_id, _label, record in records:
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                opened = pgpy.PGPMessage.from_blob((record.get('private_key') or '').encode()).decrypt(password).message
-        except Exception:
-            opened = None
-        if not opened:
-            stale.append(contact_id)
-    return stale, None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            opened = pgpy.PGPMessage.from_blob((record.get('private_key') or '').encode()).decrypt(password).message
+    except Exception:
+        opened = None
+    return not opened, None
 
 
 def reencrypt_escrow(account, accounts=None):
-    """Write the escrow again, encrypted with the current account password, when an escrow of
-    our key does not open with it. The caller decides that the password is good enough to
+    """Write the escrow again, encrypted with the current account password, when the escrow
+    of our key does not open with it. The caller decides that the password is good enough to
     encrypt with: the server has accepted it (a registration succeeded with it).
 
-    Returns (contact ids written, reason); nothing to do is ([], None).
+    Returns (sent, reason); nothing to do is (False, None).
     """
     logger = BlinkLogger()
     stale, reason = escrow_password_check(account)
     if reason:
         logger.log_info('Key escrow: not re-encrypting for %s -- %s' % (account.id, reason))
-        return [], reason
+        return False, reason
     if not stale:
-        return [], None
-    logger.log_info('Key escrow: the escrow of %s on %s does not open with the current account password, '
-                    're-encrypting it' % (account.id, ', '.join(str(contact_id) for contact_id in stale)))
+        return False, None
+    logger.log_info('Key escrow: the escrow of %s does not open with the current account password, '
+                    're-encrypting it' % account.id)
     # force only overrides "already saved": the blockers still refuse, and an escrow of a key we
     # do not hold was ruled out above
-    written, reason = write_self_keys(account, force=True, accounts=accounts)
-    if written:
-        logger.log_info('Key escrow: re-encrypted the escrow of %s with the current account password on %d contact(s)'
-                        % (account.id, len(written)))
+    sent, reason = write_escrow(account, force=True, accounts=accounts)
+    if sent:
+        logger.log_info('Key escrow: re-encrypted the escrow of %s with the current account password' % account.id)
     else:
         logger.log_info('Key escrow: could not re-encrypt the escrow of %s -- %s' % (account.id, reason))
-    return written, reason
+    return sent, reason
 
 
 def keys_directory():
@@ -869,13 +478,12 @@ def install_keypair(account, private_key, public_key):
     return private_key_path
 
 
-def restore_from_own_contact(account):
-    """Adopt the keypair escrowed on our own contact. Returns (ok, reason).
+def restore_from_storage(account):
+    """Adopt the keypair escrowed in the account storage. Returns (ok, reason).
 
-    Only where there is nothing to lose: an account that already holds a
-    private key is left alone, because choosing between a local key and a
-    different escrowed one decides which messages stay readable, and that is
-    the user's call rather than a side effect of an addressbook reload.
+    Only where there is nothing to lose: an account that already holds a private
+    key is left alone, because choosing between a local key and a different
+    escrowed one decides which messages stay readable, and that is the user's call.
 
     Every failure is a reason string, never an exception -- the caller is a
     notification handler and a sign-in must not fail because a backup did.
@@ -885,14 +493,14 @@ def restore_from_own_contact(account):
     if _has_file(account.sms.private_key):
         return False, 'this device already holds a private key for %s' % account.id
 
-    record = read_self_keys(account)
+    record = read_escrow(account)
     if record is None:
-        return False, 'no escrow on any contact of %s, nor in its account storage' % account.id
+        return False, 'no escrow in the account storage of %s' % account.id
 
     private_key_blob = record.get('private_key') or ''
     public_key = record.get('public_key') or ''
     if not private_key_blob or not public_key:
-        return False, 'the escrow in %s is incomplete' % escrow_location(record.get('contact_id'))
+        return False, 'the escrow in the account storage is incomplete'
 
     password = (getattr(getattr(account, 'auth', None), 'password', None) or '').strip()
     if not password:
@@ -905,16 +513,11 @@ def restore_from_own_contact(account):
     try:
         decrypted = pgpy.PGPMessage.from_blob(private_key_blob.encode()).decrypt(password)
     except Exception as e:
-        # Do NOT call this a wrong password. Signing in proved the password is
-        # right for the ACCOUNT; what it cannot prove is that it is the one
-        # the escrow was encrypted WITH. The escrow is written once and never
-        # refreshed, so a password changed afterwards -- on the web, on another
-        # client -- leaves a blob that fails exactly like a corrupt one.
-        return False, ('the escrow in %s (written %s by "%s") would not decrypt. Either the '
+        # Not necessarily a wrong password: signing in proved the password is right
+        # for the ACCOUNT, not that it is the one the escrow was encrypted WITH.
+        return False, ('the escrow in the account storage (written %s by "%s") would not decrypt. Either the '
                        'account password changed after that date, or the stored blob is damaged. '
-                       'openpgp said: %s'
-                       % (escrow_location(record.get('contact_id')), record.get('timestamp', '?'),
-                          record.get('device', '?'), e))
+                       'openpgp said: %s' % (record.get('timestamp', '?'), record.get('device', '?'), e))
 
     private_key = decrypted.message
     if isinstance(private_key, (bytes, bytearray)):
@@ -925,11 +528,64 @@ def restore_from_own_contact(account):
     except Exception as e:
         return False, 'the escrow decrypted but could not be installed: %s' % e
 
-    logger.log_info('Key escrow: restored the keypair of %s from the escrow in %s, '
-                    'written %s by "%s"'
-                    % (account.id, escrow_location(record.get('contact_id')), record.get('timestamp', '?'),
-                       record.get('device', '?')))
+    logger.log_info('Key escrow: restored the keypair of %s from the account storage, written %s by "%s"'
+                    % (account.id, record.get('timestamp', '?'), record.get('device', '?')))
     return True, None
+
+
+# The escrow formerly kept on our own XCAP contact
+
+def _own_contacts_with_keys(account):
+    """The ids of the contacts carrying our own URI that still have a `keys` attribute
+    with a value in the sipsimple bag (where every client wrote the escrow)."""
+    try:
+        root = account.xcap_manager.resource_lists.content.element
+    except (AttributeError, ReferenceError):
+        return []
+    if root is None:
+        return []
+    account_id = str(account.id).lower()
+    found = []
+    for contact_element in root.iter('{%s}contact' % ADDRESSBOOK_NS):
+        uris = (unquote(element.get('uri') or '') for element in contact_element.iter('{%s}uri' % ADDRESSBOOK_NS))
+        if not any(uri.lower() == account_id for uri in uris):
+            continue
+        for container in contact_element.findall('{%s}attributes' % SIPSIMPLE_ATTRIBUTES_NS):
+            if any(child.get('name') == 'keys' and child.get('nil') != 'true' and (child.text or '').strip()
+                   for child in container.findall('{%s}attribute' % SIPSIMPLE_ATTRIBUTES_NS)):
+                found.append(contact_element.get('id'))
+                break
+    return found
+
+
+def strip_contact_escrow(account):
+    """Clear the old `keys` attribute on our own contacts, once the account storage keeps an
+    escrow. Never while it keeps none: then the old attribute may be the only copy left of a
+    key, and it costs nothing to leave it. Returns the contact ids cleared."""
+    if _storage_state(account) != 'present' or read_escrow(account) is None:
+        return []
+    contact_ids = _own_contacts_with_keys(account)
+    if not contact_ids:
+        return []
+    from sipsimple.addressbook import AddressbookManager
+    cleared = []
+    manager = account.xcap_manager
+    manager.start_transaction()
+    try:
+        for contact_id in contact_ids:
+            try:
+                contact = AddressbookManager().get_contact(contact_id)
+            except KeyError:
+                continue
+            manager.update_contact(contact.__toxcap__(), {'keys': None})
+            cleared.append(contact_id)
+    finally:
+        # leaving a transaction open wedges every later addressbook change
+        manager.commit_transaction()
+    if cleared:
+        BlinkLogger().log_info('Key escrow: cleared the old escrow on contact(s) %s of %s, the account storage keeps it'
+                               % (', '.join(cleared), account.id))
+    return cleared
 
 
 def _describe_key_file(path):
@@ -949,162 +605,3 @@ def _describe_key_file(path):
         return 'unreadable as a PGP key (%s)' % e
     uids = ', '.join(str(uid.name or uid.email or '') for uid in key.userids) or '-'
     return 'fingerprint %s uid "%s"' % (key.fingerprint, uids)
-
-
-def _describe_local_keypair(account):
-    """What this device holds for the account: the thing an escrow would carry."""
-    private_path = _path(account.sms.private_key)
-    if not private_path:
-        return 'no private key configured'
-    if not os.path.exists(private_path):
-        return 'private key configured at %s, but that file is missing' % private_path
-
-    public_path = _path(account.sms.public_key)
-    if not public_path:
-        public = 'no public key configured'
-    elif not os.path.exists(public_path):
-        public = 'public key missing at %s' % public_path
-    else:
-        public = 'public key present'
-    return '%s, %s (%s)' % (_describe_key_file(private_path), public, private_path)
-
-
-def _describe_public_key(account, public_key):
-    """How the escrowed public key relates to the one this device holds."""
-    normalized = (public_key or '').replace('\r', '').strip()
-    if not normalized:
-        return 'MISSING'
-    if 'BEGIN PGP PUBLIC KEY' not in normalized:
-        return 'not-a-public-key'
-    path = _path(account.sms.public_key)
-    if not path or not os.path.exists(path):
-        return 'present, no local key to compare against'
-    try:
-        with open(path, 'rb') as fd:
-            local = fd.read().decode().replace('\r', '').strip()
-    except (IOError, OSError, UnicodeDecodeError) as e:
-        return 'present, local key unreadable (%s)' % e
-    return 'matches this device' if local == normalized else 'DIFFERENT from this device'
-
-
-def self_contact_report(account, accounts=None):
-    """The lines describing what our own contact carries. Pure, never raises.
-
-    Building the report before logging it is what makes the caller able to
-    tell whether anything actually changed: XCAPManagerDidReloadData fires
-    several times per sign-in, and six identical lines per account per reload
-    buries the one reload where something moved.
-    """
-    accounts = known_accounts() if accounts is None else accounts
-    lines = []
-
-    root = _resource_lists_element(account)
-    if root is None:
-        return lines                        # nothing fetched yet; not worth a line
-
-    elements = self_contact_elements(account)
-    if not elements:
-        total = sum(1 for _ in _contact_elements(root))
-        lines.append('no contact matching our own URI %s among %d XCAP contacts'
-                     % (account.id, total))
-        return lines
-
-    contact_element = elements[0]
-    if len(elements) > 1:
-        lines.append('%s is on %d contacts (%s) -- all of them are us, so an escrow goes to every '
-                     'one; a read takes the newest'
-                     % (account.id, len(elements),
-                        ', '.join(element.get('id') for element in elements)))
-
-    bags = ' '.join('%s=[%s]' % (label, ', '.join(sorted(_attributes(contact_element, namespace))) or '-')
-                    for label, namespace in ATTRIBUTE_NAMESPACES)
-    lines.append('own contact of %s is id=%s name="%s" uris=[%s] attributes %s'
-                 % (account.id, contact_element.get('id'),
-                    contact_element.findtext('{%s}name' % ADDRESSBOOK_NS) or '',
-                    ', '.join(_contact_uris(contact_element)), bags))
-
-    shared = shared_accounts(contact_element, account, accounts)
-    if shared:
-        lines.append('WARNING contact %s also carries the URI of %s. One contact holds ONE `keys` '
-                     'attribute but these accounts have different keypairs, so an escrow written '
-                     'for either would overwrite the other. Split the contact -- move %s onto its '
-                     'own -- rather than choosing which key survives.'
-                     % (contact_element.get('id'), ' and '.join(shared), ' and '.join(shared)))
-
-    lines.append('this device holds for %s: %s' % (account.id, _describe_local_keypair(account)))
-
-    record = read_self_keys(account, storage=False)
-    if record is None:
-        lines.append('%s has no key escrow on any of its contacts -- one would be written to %s, %s'
-                     % (account.id, ', '.join(escrow_write_targets(account)), ESCROW_NAMESPACE))
-    else:
-        private_key = record.get('private_key') or ''
-        found_on = record.get('contact_id')
-        lines.append('contact %s of %s carries an escrow in the %s bag -- device="%s" written=%s '
-                     'blob=%d chars armor=%s public_key %s'
-                     % (found_on, account.id, record['namespace'], record.get('device', '?'),
-                        record.get('timestamp', '?'), len(private_key),
-                        'ok' if 'BEGIN PGP MESSAGE' in private_key else 'MISSING',
-                        _describe_public_key(account, record.get('public_key'))))
-        stale = [contact_id for contact_id, _label, other in self_escrow_records(account, storage=False)
-                 if (other.get('timestamp') or '') != (record.get('timestamp') or '')]
-        if stale:
-            lines.append('NOTE contacts %s carry an older escrow for %s; a write would bring them '
-                         'back into step' % (', '.join(stale), account.id))
-        missing = [target for target in escrow_write_targets(account, accounts) if target != STORAGE_ID
-                   and target not in [contact_id for contact_id, _l, _r in self_escrow_records(account, storage=False)]]
-        if missing:
-            lines.append('NOTE contacts %s carry no escrow at all for %s' % (', '.join(missing), account.id))
-        owner = _escrow_owner(record.get('public_key'), accounts)
-        if owner and owner.lower() != str(account.id).lower():
-            lines.append('WARNING the escrow on contact %s is the key of %s, not of %s -- this '
-                         'contact is being shared by two accounts and only one escrow survives'
-                         % (found_on, owner, account.id))
-
-    stored = _storage_record(account)
-    if stored is not None:
-        lines.append('the account storage of %s carries an escrow -- device="%s" written=%s blob=%d chars public_key %s%s'
-                     % (account.id, stored.get('device', '?'), stored.get('timestamp', '?'), len(stored.get('private_key') or ''),
-                        _describe_public_key(account, stored.get('public_key')),
-                        '' if record is None or (record.get('timestamp') or '') == (stored.get('timestamp') or '')
-                        else ' (the contacts carry one written %s)' % record.get('timestamp', '?')))
-
-    # Ask the same question the menu item asks, through the same function.
-    # Reporting only the blockers made this line claim a write "would be
-    # permitted" on an account that is already fully escrowed -- disagreeing
-    # with the greyed-out menu item about the very same account.
-    blockers = escrow_write_blockers(account, accounts)
-    if blockers:
-        lines.append('an escrow write for %s would be REFUSED -- %d reason(s):'
-                     % (account.id, len(blockers)))
-        lines.extend('  %s' % blocker for blocker in blockers)
-    else:
-        would_write, reason = escrow_write_action(account, accounts=accounts)
-        if would_write:
-            lines.append('an escrow write for %s would be permitted' % account.id)
-        else:
-            lines.append('an escrow write for %s would do nothing -- %s' % (account.id, reason))
-    return lines
-
-
-# Last report logged per account, so an unchanged one is not repeated.
-_last_report = {}
-
-
-def log_self_contact(account, accounts=None, force=False):
-    """Log what our own XCAP contact carries, if it differs from last time."""
-    logger = BlinkLogger()
-    lines = self_contact_report(account, accounts)
-    if not lines:
-        return
-    key = str(account.id)
-    if not force and _last_report.get(key) == lines:
-        logger.log_debug('Key escrow: unchanged for %s since the last addressbook reload' % key)
-        return
-    _last_report[key] = lines
-    # A state report, not an event: debug only. A line that says something
-    # is wrong -- a shared contact, a refused write -- still reaches the log.
-    alarming = any(line.startswith('WARNING') or 'REFUSED' in line for line in lines)
-    log = logger.log_info if alarming else logger.log_debug
-    for line in lines:
-        log('Key escrow: %s' % line)

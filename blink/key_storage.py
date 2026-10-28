@@ -3,9 +3,9 @@
 
 """The PGP key escrow in the SylkServer account storage (keys/pgp-private).
 
-Spec: docs/PRIVATE-KEY-STORAGE.md in SylkServer. The escrow moves from our own
-XCAP contact (blink.key_escrow) to the account storage. The object is the same
-JSON record the clients write to the `keys` attribute today:
+Spec: docs/PRIVATE-KEY-STORAGE.md in SylkServer. The account storage is the only
+place the escrow is kept (it used to be a `keys` attribute on our own XCAP
+contact, which is no longer read or written). The object is a JSON record:
 
     {"private_key": <encrypted with the account password>, "public_key": <armored>,
      "device": "...", "timestamp": "2026-07-10T12:44:19.049Z"}
@@ -14,7 +14,7 @@ Each account keeps its own escrow in its own storage (unlike the avatars of the
 shared addressbook, which live in one account's). This module only knows what the
 storage holds: it fetches the record, keeps it in memory with its etag, and tells
 (BlinkKeyStorageDidChange) when that changes. What to do with it is the escrow's
-business (blink.messages.KeyEscrowManager), which writes through store().
+business (blink.messages.KeyEscrowManager, blink.key_escrow), which writes through store().
 
 A write is conditional on what the storage last said: If-Match its etag, or
 If-None-Match: * when it keeps none. A 412 means another device wrote first:

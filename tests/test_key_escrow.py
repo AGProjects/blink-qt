@@ -1,6 +1,7 @@
 """Tests for blink.key_escrow. Run from the top of the tree: python3 -m unittest tests.test_key_escrow
 
-lxml is required; the tests that encrypt or install a key are skipped without pgpy.
+The account storage (blink.key_storage) is replaced by a fake; lxml is required for the
+old-attribute tests and the tests that encrypt or install a key are skipped without pgpy.
 """
 
 import importlib.util
@@ -27,7 +28,34 @@ pgpy = escrow._pgpy()
 
 AB = escrow.ADDRESSBOOK_NS
 SIPSIMPLE = escrow.SIPSIMPLE_ATTRIBUTES_NS
-BLINK = escrow.BLINK_ATTRIBUTES_NS
+
+
+class FakeStorage(object):
+    """What blink.key_storage.KeyStorage offers the escrow, in memory."""
+
+    def __init__(self, state=None, record=None):
+        self.state_ = state
+        self.record_ = record
+        self.stored = []
+
+    def _wanted(self, account):
+        return True
+
+    def state(self, account):
+        return self.state_
+
+    def record(self, account):
+        return dict(self.record_) if self.state_ == 'present' and self.record_ else None
+
+    def writable(self, account):
+        return self.state_ in ('present', 'absent')
+
+    def store(self, account, payload, reason):
+        if not self.writable(account):
+            return False
+        self.stored.append(json.loads(payload))
+        self.state_, self.record_ = 'present', json.loads(payload)
+        return True
 
 
 def document(*contacts):
@@ -36,13 +64,9 @@ def document(*contacts):
     container = etree.SubElement(root, '{%s}contacts' % AB)
     for contact_id, uris, bags in contacts:
         contact = etree.SubElement(container, '{%s}contact' % AB, id=contact_id)
-        etree.SubElement(contact, '{%s}name' % AB).text = contact_id
         uri_list = etree.SubElement(contact, '{%s}uris' % AB)
         for uri in uris:
-            uri_element = etree.SubElement(uri_list, '{%s}uri' % AB, id=uri, uri=uri.replace('@', '%40'))
-            # a URI's own bag must not be read as the contact's
-            uri_bag = etree.SubElement(uri_element, '{%s}attributes' % SIPSIMPLE)
-            etree.SubElement(uri_bag, '{%s}attribute' % SIPSIMPLE, name='position').text = '1'
+            etree.SubElement(uri_list, '{%s}uri' % AB, id=uri, uri=uri.replace('@', '%40'))
         for namespace, attributes in (bags or {}).items():
             bag = etree.SubElement(contact, '{%s}attributes' % namespace)
             for name, value in attributes.items():
@@ -50,48 +74,33 @@ def document(*contacts):
     return root
 
 
-def account(account_id, root, private_key=None, public_key=None, password='secret'):
+def account(account_id, private_key=None, public_key=None, password='secret', root=None):
     return types.SimpleNamespace(
         id=account_id,
         auth=types.SimpleNamespace(password=password),
         sms=types.SimpleNamespace(private_key=private_key, public_key=public_key),
+        xcap=types.SimpleNamespace(enabled=True),
         xcap_manager=types.SimpleNamespace(resource_lists=types.SimpleNamespace(content=types.SimpleNamespace(element=root))),
         save=lambda: None)
 
 
-def record(public_key='PUB', timestamp='2026-01-01T00:00:00.000Z', device='phone'):
-    return json.dumps({'private_key': '-----BEGIN PGP MESSAGE-----x', 'public_key': public_key,
-                       'device': device, 'timestamp': timestamp})
+def record(public_key='PUB-A', timestamp='2026-07-10T12:44:19.049Z'):
+    return {'private_key': '-----BEGIN PGP MESSAGE-----', 'public_key': public_key,
+            'device': 'phone', 'timestamp': timestamp}
 
 
-class ReadTests(unittest.TestCase):
-    def test_no_document(self):
-        self.assertEqual(escrow.self_contact_elements(account('a@x', None)), [])
-        self.assertIsNone(escrow.read_self_keys(account('a@x', None)))
+class StorageTestCase(unittest.TestCase):
+    def use(self, storage):
+        self.storage = storage
+        self.saved_key_storage = escrow._key_storage
+        escrow._key_storage = lambda: storage
 
-    def test_finds_self_contacts_by_decoded_uri(self):
-        root = document(('c1', ['a@x'], None), ('c2', ['b@x'], None), ('c3', ['A@X'], None))
-        ids = [element.get('id') for element in escrow.self_contact_elements(account('a@x', root))]
-        self.assertEqual(ids, ['c1', 'c3'])
-        self.assertEqual(escrow.escrow_write_targets(account('a@x', root)), ['c1', 'c3'])
-
-    def test_contact_bag_only(self):
-        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': record()}}))
-        element = escrow.self_contact_element(account('a@x', root))
-        self.assertEqual(sorted(escrow._attributes(element, SIPSIMPLE)), ['keys'])
-
-    def test_newest_wins_across_contacts_and_bags(self):
-        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': record(timestamp='2026-01-01T00:00:00.000Z')}}),
-                        ('c2', ['a@x'], {BLINK: {'keys': record(timestamp='2026-02-01T00:00:00.000Z', device='mac')}}))
-        found = escrow.read_self_keys(account('a@x', root))
-        self.assertEqual((found['contact_id'], found['namespace'], found['device']), ('c2', 'blink', 'mac'))
-
-    def test_bad_json_is_skipped(self):
-        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': 'not json'}}), ('c2', ['a@x'], {SIPSIMPLE: {'keys': '[1]'}}))
-        self.assertIsNone(escrow.read_self_keys(account('a@x', root)))
+    def tearDown(self):
+        if hasattr(self, 'saved_key_storage'):
+            escrow._key_storage = self.saved_key_storage
 
 
-class WriteRuleTests(unittest.TestCase):
+class WriteRuleTests(StorageTestCase):
     def setUp(self):
         self.directory = tempfile.mkdtemp()
         self.private = os.path.join(self.directory, 'a@x.privkey')
@@ -102,48 +111,50 @@ class WriteRuleTests(unittest.TestCase):
             f.write('PUB-A\n')
 
     def tearDown(self):
+        super().tearDown()
         shutil.rmtree(self.directory)
 
     def test_blockers(self):
-        self.assertTrue(escrow.escrow_write_blockers(account('a@x', None, password=''), accounts={}))
-        root = document(('c1', ['b@x'], None))
-        blockers = escrow.escrow_write_blockers(account('a@x', root, self.private, self.public), accounts={})
-        self.assertIn('no contact carries the URI', blockers[0])
+        self.use(FakeStorage('absent'))
+        self.assertTrue(escrow.escrow_write_blockers(account('a@x', password=''), accounts={}))
+        self.assertEqual(escrow.escrow_write_blockers(account('a@x', self.private, self.public), accounts={}), [])
 
-    def test_contact_shared_with_another_account_is_refused(self):
-        root = document(('c1', ['a@x', 'b@x'], None))
-        blockers = escrow.escrow_write_blockers(account('a@x', root, self.private, self.public), accounts={'a@x': self.public, 'b@x': None})
-        self.assertEqual(len(blockers), 1)
-        self.assertIn('also carries b@x', blockers[0])
+    def test_storage_not_answered_is_refused(self):
+        for state in (None, 'pending', 'failed', 'invalid', 'unsupported'):
+            self.use(FakeStorage(state))
+            blockers = escrow.escrow_write_blockers(account('a@x', self.private, self.public), accounts={})
+            self.assertEqual(len(blockers), 1, state)
+            self.assertIn('cannot be written', blockers[0])
+            self.assertFalse(escrow.escrow_is_missing(account('a@x', self.private, self.public)), state)
 
     def test_escrow_of_another_account_is_refused(self):
         other = os.path.join(self.directory, 'b@x.pubkey')
         with open(other, 'w') as f:
             f.write('PUB-B')
-        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': record(public_key='PUB-B')}}))
-        blockers = escrow.escrow_write_blockers(account('a@x', root, self.private, self.public), accounts={'a@x': self.public, 'b@x': other})
+        self.use(FakeStorage('present', record(public_key='PUB-B')))
+        blockers = escrow.escrow_write_blockers(account('a@x', self.private, self.public), accounts={'a@x': self.public, 'b@x': other})
         self.assertIn('key of b@x', blockers[0])
 
     def test_actions(self):
         accounts = {'a@x': self.public}
-        mine = account('a@x', document(('c1', ['a@x'], None)), self.private, self.public)
+        mine = account('a@x', self.private, self.public)
+        self.use(FakeStorage('absent'))
         self.assertEqual(escrow.escrow_write_action(mine, accounts=accounts), (True, None))
         self.assertTrue(escrow.escrow_is_missing(mine))
 
-        saved = account('a@x', document(('c1', ['a@x'], {SIPSIMPLE: {'keys': record(public_key='PUB-A')}})), self.private, self.public)
-        ok, reason = escrow.escrow_write_action(saved, accounts=accounts)
+        self.use(FakeStorage('present', record(public_key='PUB-A')))
+        ok, reason = escrow.escrow_write_action(mine, accounts=accounts)
         self.assertFalse(ok)
         self.assertIn('already saved', reason)
-        self.assertFalse(escrow.escrow_is_missing(saved))
+        self.assertFalse(escrow.escrow_is_missing(mine))
+        self.assertIsNone(escrow.foreign_escrow(mine))
 
-        partial = account('a@x', document(('c1', ['a@x'], {SIPSIMPLE: {'keys': record(public_key='PUB-A')}}), ('c2', ['a@x'], None)), self.private, self.public)
-        self.assertEqual(escrow.escrow_write_action(partial, accounts=accounts), (True, None))
-
-        foreign = account('a@x', document(('c1', ['a@x'], {SIPSIMPLE: {'keys': record(public_key='PUB-OLD')}})), self.private, self.public)
-        ok, reason = escrow.escrow_write_action(foreign, accounts=accounts)
+        self.use(FakeStorage('present', record(public_key='PUB-OLD')))
+        ok, reason = escrow.escrow_write_action(mine, accounts=accounts)
         self.assertFalse(ok)
         self.assertIn('does not hold', reason)
-        self.assertEqual(escrow.escrow_write_action(foreign, force=True, accounts=accounts), (True, None))
+        self.assertEqual(escrow.escrow_write_action(mine, force=True, accounts=accounts), (True, None))
+        self.assertIsNotNone(escrow.foreign_escrow(mine))
 
     def test_path_settings(self):
         class DataPath(str):
@@ -154,8 +165,28 @@ class WriteRuleTests(unittest.TestCase):
         self.assertFalse(escrow._has_file(None))
 
 
+class OldAttributeTests(StorageTestCase):
+    def test_finds_own_contacts_with_keys(self):
+        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': json.dumps(record())}}),
+                        ('c2', ['a@x'], None),
+                        ('c3', ['b@x'], {SIPSIMPLE: {'keys': json.dumps(record())}}))
+        self.assertEqual(escrow._own_contacts_with_keys(account('a@x', root=root)), ['c1'])
+
+    def test_nil_attribute_is_not_an_escrow(self):
+        root = document(('c1', ['a@x'], None))
+        bag = etree.SubElement(root.find('.//{%s}contact' % AB), '{%s}attributes' % SIPSIMPLE)
+        etree.SubElement(bag, '{%s}attribute' % SIPSIMPLE, name='keys', nil='true')
+        self.assertEqual(escrow._own_contacts_with_keys(account('a@x', root=root)), [])
+
+    def test_never_cleared_while_the_storage_keeps_none(self):
+        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': json.dumps(record())}}))
+        for state in (None, 'absent', 'failed'):
+            self.use(FakeStorage(state))
+            self.assertEqual(escrow.strip_contact_escrow(account('a@x', root=root)), [], state)
+
+
 @unittest.skipIf(pgpy is None, 'pgpy is not installed')
-class KeyMaterialTests(unittest.TestCase):
+class KeyMaterialTests(StorageTestCase):
     @classmethod
     def setUpClass(cls):
         from pgpy.constants import PubKeyAlgorithm, KeyFlags, HashAlgorithm, SymmetricKeyAlgorithm
@@ -170,6 +201,7 @@ class KeyMaterialTests(unittest.TestCase):
         escrow.keys_directory = lambda: self.directory
 
     def tearDown(self):
+        super().tearDown()
         escrow.keys_directory = self.saved_directory
         shutil.rmtree(self.directory)
 
@@ -181,30 +213,40 @@ class KeyMaterialTests(unittest.TestCase):
             f.write(self.public_key)
         return private, public
 
-    def test_record_round_trip_and_restore(self):
+    def test_write_and_restore(self):
         private, public = self._write_local()
-        built = escrow.escrow_record(account('a@x', None, private, public))
+        self.use(FakeStorage('absent'))
+        self.assertEqual(escrow.write_escrow(account('a@x', private, public), accounts={'a@x': public}), (True, None))
+        built = self.storage.stored[-1]
         self.assertIn('BEGIN PGP MESSAGE', built['private_key'])
         self.assertTrue(built['timestamp'].endswith('Z'))
         self.assertIn('(Blink Qt)', built['device'])
         os.unlink(private)
         os.unlink(public)
 
-        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': json.dumps(built)}}))
-        fresh = account('a@x', root)
-        self.assertEqual(escrow.restore_from_own_contact(fresh), (True, None))
+        fresh = account('a@x')
+        self.assertEqual(escrow.restore_from_storage(fresh), (True, None))
         self.assertEqual(fresh.sms.private_key, os.path.join(self.directory, 'a@x.privkey'))
         with open(fresh.sms.private_key) as f:
             self.assertEqual(f.read(), self.private_key.replace('\r', '').strip())
-        ok, reason = escrow.restore_from_own_contact(fresh)
+        ok, reason = escrow.restore_from_storage(fresh)
         self.assertFalse(ok)
         self.assertIn('already holds', reason)
 
+    def test_reencrypt_after_password_change(self):
+        private, public = self._write_local()
+        mine = account('a@x', private, public, password='old')
+        self.use(FakeStorage('present', escrow.escrow_record(mine)))
+        self.assertEqual(escrow.escrow_password_check(mine), (False, None))
+        mine.auth.password = 'new'
+        self.assertEqual(escrow.escrow_password_check(mine), (True, None))
+        self.assertEqual(escrow.reencrypt_escrow(mine, accounts={'a@x': public}), (True, None))
+        self.assertEqual(escrow.escrow_password_check(mine), (False, None))
+
     def test_wrong_password_is_not_called_wrong(self):
         private, public = self._write_local()
-        built = escrow.escrow_record(account('a@x', None, private, public, password='old'))
-        root = document(('c1', ['a@x'], {SIPSIMPLE: {'keys': json.dumps(built)}}))
-        ok, reason = escrow.restore_from_own_contact(account('a@x', root, password='new'))
+        self.use(FakeStorage('present', escrow.escrow_record(account('a@x', private, public, password='old'))))
+        ok, reason = escrow.restore_from_storage(account('a@x', password='new'))
         self.assertFalse(ok)
         self.assertIn('password changed', reason)
 
@@ -212,13 +254,13 @@ class KeyMaterialTests(unittest.TestCase):
         path = os.path.join(self.directory, 'a@x.privkey')
         with open(path, 'w') as f:
             f.write(self.private_key.replace('PRIVATE KEY BLOCK-----\n', 'PRIVATE KEY BLOCK-----\n\n', 1) + 'X')
-        escrow.install_keypair(account('a@x', None), self.private_key, self.public_key)
+        escrow.install_keypair(account('a@x'), self.private_key, self.public_key)
         kept = [name for name in os.listdir(self.directory) if name.startswith('a@x.privkey.')]
         self.assertEqual(len(kept), 1)
 
     def test_install_refuses_non_keys(self):
         with self.assertRaises(ValueError):
-            escrow.install_keypair(account('a@x', None), 'nope', self.public_key)
+            escrow.install_keypair(account('a@x'), 'nope', self.public_key)
 
 
 if __name__ == '__main__':

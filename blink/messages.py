@@ -2306,8 +2306,8 @@ class MessageManager(object, metaclass=Singleton):
     def _offer_key_generation(self, account, scenario, session=None):
         """This device has no key for the account. Generating one while the account already has
         a key elsewhere orphans every message encrypted to it, so nothing happens before
-        KeyEscrowManager knows: the addressbook (escrow) has been fetched and the server has
-        answered the public key lookup. Only when both say there is no key is one generated
+        KeyEscrowManager knows: the account storage has said whether it keeps an escrow and the
+        server has answered the public key lookup. Only when both say there is no key is one generated
         without asking; in every other case the user is asked."""
         KeyEscrowManager().when_answered(account, lambda: self._key_generation_decided(account, scenario, session))
 
@@ -2331,14 +2331,14 @@ class MessageManager(object, metaclass=Singleton):
             return
         silent, reason = KeyEscrowManager().may_generate_silently(account)
         if silent:
-            ActivityLog().info(f'[pgp] No PGP key for account {account.id} in the addressbook or on the server, generating one')
+            ActivityLog().info(f'[pgp] No PGP key for account {account.id} in the account storage or on the server, generating one')
             self._generate_keys(account, session)
             return
         declined = self.__dict__.setdefault('_key_generation_declined', set())
         if account.id in declined:
             return      # asked already this run and the user said no
         ActivityLog().info(f'[pgp] Not generating a PGP key for account {account.id} without asking: {reason}')
-        if KeyEscrowManager().server_key.get(account.id) == 'present' and not key_escrow.self_escrow_records(account):
+        if KeyEscrowManager().server_key.get(account.id) == 'present' and key_escrow.read_escrow(account) is None:
             scenario = 2        # on another device: say so
         self._show_generate_dialog(account, scenario, session)
 
@@ -3725,17 +3725,16 @@ class MessageManager(object, metaclass=Singleton):
 
 @implementer(IObserver)
 class KeyEscrowManager(object, metaclass=Singleton):
-    """The PGP key escrow on our own XCAP contact, as Blink for macOS keeps it (blink.key_escrow).
+    """The PGP key escrow in the SylkServer account storage, as Blink for macOS keeps it
+    (blink.key_escrow, blink.key_storage; SylkServer docs/PRIVATE-KEY-STORAGE.md).
 
-    On every addressbook reload, per account:
-    - restore: no local private key and an escrow on our own contact -> adopt it
+    The escrow pass runs once the account storage has answered (or failed), and again
+    whenever what it keeps changes, per account:
+    - restore: no local private key and an escrow in the storage -> adopt it
       (decrypted with the account password). Latched on success, and a failure is
       not repeated for the same escrow and password.
-    - report what our own contact carries, when it changed.
-    - repair: a local key and no escrow anywhere -> write one, once per session.
-      With no contact carrying our own address there is nowhere to write it, so
-      that contact is created first (as Sylk Mobile does), once per session.
-      With nothing escrowed nobody's key is displaced.
+    - repair: a local key and the storage keeps no escrow -> write one, once per
+      session. With nothing escrowed nobody's key is displaced.
     - re-encrypt: an escrow of OUR key that does not open with the account password
       (changed here, on the web or on another device) is written again, encrypted
       with the current password -- but only once the server has accepted that
@@ -3745,22 +3744,14 @@ class KeyEscrowManager(object, metaclass=Singleton):
       password check at once, not on some later reload; an escrow of ANOTHER key is
       replaced only when the user says so, since it is that key's only server copy.
     Every other difference between the local key and an escrow is the user's call.
-    Nothing written here is announced to the other devices: it is this device
-    catching up with the document it was handed.
+    - the old escrow on our own XCAP contact (the `keys` attribute) is no longer read or
+      written; once the storage keeps an escrow it is cleared, once per run.
 
-    The escrow the SylkServer account storage keeps (blink.key_storage) is one more
-    escrow record (key_escrow.STORAGE_ID): the pass waits for the storage to answer
-    (or fail), and runs again whenever what it keeps changes -- a key escrowed by
-    another device is restored here without waiting for an addressbook reload.
-    While both are kept (Phase 1) the pass also keeps them equal: the newest record
-    is copied as it is to the side that lacks it or holds an older one (copy_escrow).
-
-    Generating a key waits for the answer (when_answered): the addressbook has
-    loaded (or the account has no XCAP, or 15 seconds have passed) AND the server
-    has answered a public key lookup for the account itself (or it failed).
-    A key is generated without asking only when the addressbook was really
-    fetched and carries no escrow, and the server said it keeps no public key
-    (may_generate_silently); otherwise the user is asked.
+    Generating a key waits for the answer (when_answered): the account storage has
+    answered (or 15 seconds have passed) AND the server has answered a public key
+    lookup for the account itself (or it failed). A key is generated without asking
+    only when the storage said it keeps no escrow and the server said it keeps no
+    public key (may_generate_silently); otherwise the user is asked.
 
     The lookup is the usual sylk-api-pgp-key-lookup, to our own address. SylkServer
     answers it with 200 when it keeps a public key (the key follows as a
@@ -3774,11 +3765,11 @@ class KeyEscrowManager(object, metaclass=Singleton):
 
     def __init__(self):
         self._started = False
-        self.checked = set()            # accounts whose addressbook has answered
+        self.checked = set()            # accounts whose addressbook has been fetched
         self.restore_done = set()
         self.restore_failed = {}        # account id -> the escrow and password it failed against
         self.repaired = set()
-        self.self_contact_created = set()
+        self.stripped = set()           # accounts whose old escrow on the own contact was cleared in this run
         self._first_asked = {}
         self._waiting = {}              # account id -> callbacks held until the answer
         self.server_key = {}            # account id -> 'pending' | 'present' | 'absent' | 'failed' | 'unsupported' (no SylkServer)
@@ -3791,7 +3782,6 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.password_checked = {}      # account id -> the escrow and password last checked (escrow_password_check)
         self.imported = set()           # accounts whose imported key has not been compared with the escrow yet
         self.storage_waiting = set()    # accounts whose escrow pass waits for the account storage
-        self.copied = {}                # account id -> the last escrow copy sent (copy_escrow), not repeated
 
     def start(self):
         if not self._started:
@@ -3822,8 +3812,9 @@ class KeyEscrowManager(object, metaclass=Singleton):
             ActivityLog().exception(f'[pgp] Checking the private key of the accounts failed: {e!r}')
 
     def check_key_status(self, account):
-        """Log the account's key status once, when it is known (log_key_status). Asked at
-        start, on each addressbook reload and on registration, whichever comes first."""
+        """Log the account's key status once, when it is known (log_key_status), and start the
+        escrow pass. Asked at start, on each addressbook reload and on registration, whichever
+        comes first."""
         if account.id in self._status_asked or not account.enabled:
             return
         if account is not BonjourAccount():
@@ -3835,6 +3826,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
             ActivityLog().info(f'[pgp] Private key of {account.id}: PGP is disabled for the account')
             return
         ActivityLog().info(f'[pgp] Checking the private key of {account.id}')
+        if account is not BonjourAccount():
+            self.escrow_pass_when_ready(account)
         try:
             self.when_answered(account, lambda: self.log_key_status(account))
         except Exception as e:
@@ -3854,7 +3847,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
             self.server_key[account.id] = 'present'     # the key itself may arrive before the 200
 
     def log_key_status(self, account, waited=False):
-        """Three lines: the key on this device, the escrow on our own XCAP contact and the
+        """Three lines: the key on this device, the escrow in the account storage and the
         public key the server keeps, each compared with this device's."""
         if account.id in self._status_logged:
             return
@@ -3888,22 +3881,6 @@ class KeyEscrowManager(object, metaclass=Singleton):
                 activity.info(f'[pgp] Private key of {account.id}: this device: {here}')
                 return
 
-            if not account.xcap.enabled:
-                escrow = 'the account has no XCAP addressbook'
-            elif account.id not in self.checked:
-                escrow = f'unknown, the addressbook was not fetched within {self.answer_timeout:.0f}s'
-            else:
-                record = key_escrow.read_self_keys(account, storage=False)
-                contacts = key_escrow.self_contact_elements(account)
-                if record is not None:
-                    escrow = (f"present on contact {record.get('contact_id')} ({record.get('namespace')}), written {record.get('timestamp') or '?'} "
-                              f"by \"{record.get('device') or '?'}\", {compared(key_fingerprint(record.get('public_key')))}"
-                              + ('' if record.get('private_key') else ', WITHOUT the private key'))
-                elif contacts:
-                    escrow = f"none, on {len(contacts)} contact(s) with our address ({', '.join(str(element.get('id')) for element in contacts)})"
-                else:
-                    escrow = 'none, no contact carries our address'
-
             state = self.server_key.get(account.id)
             if state == 'absent':
                 server = 'no public key'
@@ -3916,7 +3893,6 @@ class KeyEscrowManager(object, metaclass=Singleton):
                 server = 'unknown, the public key lookup was not answered'
 
             activity.info(f'[pgp] Private key of {account.id}: this device: {here}')
-            activity.info(f'[pgp] Private key of {account.id}: addressbook escrow: {escrow}')
             from blink.key_storage import KeyStorage
             stored = KeyStorage().entry(account)
             if not KeyStorage._wanted(account) or stored is None:
@@ -3942,12 +3918,25 @@ class KeyEscrowManager(object, metaclass=Singleton):
             return
         self.checked.add(account.id)
         self.check_key_status(account)
+        from blink.contacts import AddressbookNotifier
+        try:
+            with AddressbookNotifier().quiet():
+                self.strip_contact_escrow(account)
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Key escrow: clearing the old escrow on the own contact of {account.id} failed: {e!r}')
+        self.escrow_pass_when_ready(account)
+
+    def escrow_pass_when_ready(self, account):
+        """Run the escrow pass now if the account storage has answered, else ask it: its
+        answer (BlinkKeyStorageDidChange) runs the pass."""
+        if not account.enabled or not account.sms.enable_pgp or not MessageManager._pgp_messaging_possible(account):
+            return
         if not self._storage_answered(account):
             from blink.key_storage import KeyStorage
             if account.id not in self.storage_waiting:
                 self.storage_waiting.add(account.id)
                 ActivityLog().info(f'[pgp] Key escrow: waiting for the account storage of {account.id} before the escrow pass')
-            KeyStorage().fetch(account, 'addressbook loaded')
+            KeyStorage().fetch(account, 'escrow pass')
             return
         self._escrow_pass(account)
 
@@ -3955,7 +3944,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         account = notification.data.account
         waited = account.id in self.storage_waiting
         self.storage_waiting.discard(account.id)
-        if account.id in self.checked and (waited or notification.data.state in ('present', 'absent')):
+        if waited or notification.data.state in ('present', 'absent'):
             self._escrow_pass(account)
         else:
             self._release(account)
@@ -3968,8 +3957,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         return not storage._wanted(account) or storage.state(account) in ('present', 'absent', 'invalid', 'unsupported', 'failed')
 
     def _escrow_pass(self, account):
-        """Restore, report, repair and the password check, once the addressbook and the account
-        storage have answered."""
+        """Restore, repair and the password check, once the account storage has answered."""
         from blink.contacts import AddressbookNotifier
         with AddressbookNotifier().quiet():
             # restore before reporting, so one pass tells one story
@@ -3978,14 +3966,6 @@ class KeyEscrowManager(object, metaclass=Singleton):
             except Exception as e:
                 ActivityLog().exception(f'[pgp] Key escrow restore failed for {account.id}: {e!r}')
             try:
-                self.copy_escrow(account)
-            except Exception as e:
-                ActivityLog().exception(f'[pgp] Key escrow copy failed for {account.id}: {e!r}')
-            try:
-                key_escrow.log_self_contact(account)
-            except Exception as e:
-                ActivityLog().error(f'[pgp] Key escrow inspection failed for {account.id}: {e!r}')
-            try:
                 self.repair(account)
             except Exception as e:
                 ActivityLog().exception(f'[pgp] Key escrow repair failed for {account.id}: {e!r}')
@@ -3993,17 +3973,30 @@ class KeyEscrowManager(object, metaclass=Singleton):
                 self.check_password(account)
             except Exception as e:
                 ActivityLog().exception(f'[pgp] Key escrow password check failed for {account.id}: {e!r}')
+            try:
+                self.strip_contact_escrow(account)
+            except Exception as e:
+                ActivityLog().exception(f'[pgp] Key escrow: clearing the old escrow on the own contact of {account.id} failed: {e!r}')
         try:
             self._escrow_imported_key(account)      # may ask: outside the quiet stretch
         except Exception as e:
             ActivityLog().exception(f'[pgp] Key escrow of the imported key of {account.id} failed: {e!r}')
         self._release(account)
 
-    # A key imported from another device goes onto our own contact at once
+    def strip_contact_escrow(self, account):
+        """Clear the escrow formerly kept on our own XCAP contact, once the account storage
+        keeps one. Once per run and account: an older client may put it back, and the two
+        must not bounce the contact between them."""
+        if account.id in self.stripped or not account.xcap.enabled:
+            return
+        if key_escrow.strip_contact_escrow(account):
+            self.stripped.add(account.id)
+
+    # A key imported from another device goes into the account storage at once
 
     def key_imported(self, account):
-        if not isinstance(account, Account) or not account.xcap.enabled or not MessageManager._pgp_messaging_possible(account):
-            return      # no addressbook on the server to keep a backup in
+        if not isinstance(account, Account) or not MessageManager._pgp_messaging_possible(account):
+            return      # no SylkServer to keep a backup on
         self.imported.add(account.id)
         self.repaired.discard(account.id)
         self.password_checked.pop(account.id, None)
@@ -4012,14 +4005,16 @@ class KeyEscrowManager(object, metaclass=Singleton):
     def _escrow_imported_key(self, account):
         if account.id not in self.imported:
             return
-        if key_escrow._resource_lists_element(account) is None:
-            ActivityLog().info(f'[pgp] Key escrow: the addressbook of {account.id} has not been fetched yet, '
-                               f'the imported key is saved on the server once it is')
+        from blink.key_storage import KeyStorage
+        if not KeyStorage().writable(account):
+            ActivityLog().info(f'[pgp] Key escrow: the account storage of {account.id} has not answered yet, '
+                               f'the imported key is saved on the server once it has')
+            KeyStorage().fetch(account, 'key imported')
             return
         self.imported.discard(account.id)
         from blink.contacts import AddressbookNotifier
-        foreign = key_escrow.foreign_escrows(account)
-        if not foreign:
+        record = key_escrow.foreign_escrow(account)
+        if record is None:
             # none, or the same key: write what is missing, re-encrypt what does not open
             with AddressbookNotifier().quiet():
                 self.repair(account)
@@ -4027,7 +4022,6 @@ class KeyEscrowManager(object, metaclass=Singleton):
             return
 
         from blink.pgp_keyids import key_fingerprint
-        contact_id, record = foreign[0]
         old = key_fingerprint(record.get('public_key'))
         try:
             with open(account.sms.public_key.normalized, 'rb') as f:
@@ -4036,7 +4030,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
             new = None
         old_id = old[-16:].upper() if old else translate('pgp_key_escrow', 'unknown')
         new_id = new[-16:].upper() if new else translate('pgp_key_escrow', 'unknown')
-        ActivityLog().info(f'[pgp] Key escrow: {key_escrow.escrow_location(contact_id)} of {account.id} keeps a backup of key {old_id}, '
+        ActivityLog().info(f'[pgp] Key escrow: the account storage of {account.id} keeps a backup of key {old_id}, '
                            f'saved {record.get("timestamp", "?")} by "{record.get("device", "?")}", not of the imported key {new_id}: asking')
 
         main_window = getattr(QApplication.instance(), 'main_window', None)
@@ -4057,8 +4051,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
             ActivityLog().info(f'[pgp] Key escrow: the user kept the backup of key {old_id} for {account.id}')
             return
         ActivityLog().info(f'[pgp] Key escrow: the user chose to replace the backup of key {old_id} for {account.id} with the imported key {new_id}')
-        # announced: the other devices learn of the new backup on their next reload
-        written, reason = key_escrow.write_self_keys(account, force=True)
+        # announced: the storage tells the other devices (application/sylk-storage-changed)
+        written, reason = key_escrow.write_escrow(account, force=True)
         if not written:
             QMessageBox.warning(main_window, translate('pgp_key_escrow', 'Replace PGP key backup'),
                                 translate('pgp_key_escrow', 'The backup of %s was not replaced: %s') % (account.id, reason or ''))
@@ -4103,17 +4097,16 @@ class KeyEscrowManager(object, metaclass=Singleton):
         password = (account.auth.password or '').strip()
         if not password or self.accepted_passwords.get(account.id) != password:
             return      # not accepted by the server (yet): never encrypt the escrow with it
-        if key_escrow._resource_lists_element(account) is None:
-            return      # the addressbook has not been fetched yet; its reload checks again
+        if not self._storage_answered(account):
+            return      # the account storage has not answered yet; the escrow pass checks again
         if account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized):
             return
         import hashlib
-        records = key_escrow.self_escrow_records(account)
-        if not records:
+        record = key_escrow.read_escrow(account)
+        if record is None:
             return      # nothing escrowed: repair writes it, with this password
         signature = (hashlib.sha256(password.encode()).hexdigest(),
-                     tuple(sorted((str(contact_id), str(record.get('timestamp')), len(record.get('private_key') or ''))
-                                  for contact_id, _label, record in records)))
+                     str(record.get('timestamp')), len(record.get('private_key') or ''))
         if self.password_checked.get(account.id) == signature:
             return
         self.password_checked[account.id] = signature
@@ -4124,14 +4117,14 @@ class KeyEscrowManager(object, metaclass=Singleton):
             return
         if account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
             return
-        record = key_escrow.read_self_keys(account)
+        record = key_escrow.read_escrow(account)
         if record is None:
             return
         password = (account.auth.password or '').strip()
         signature = '%s#%s#%d#%d' % (account.id, record.get('timestamp', '?'), len(record.get('private_key') or ''), len(password))
         if self.restore_failed.get(account.id) == signature:
             return
-        restored, reason = key_escrow.restore_from_own_contact(account)
+        restored, reason = key_escrow.restore_from_storage(account)
         if restored:
             self.restore_done.add(account.id)
             self.restore_failed.pop(account.id, None)
@@ -4147,77 +4140,20 @@ class KeyEscrowManager(object, metaclass=Singleton):
             return
         if account.id in self.repaired:
             return
-        if not key_escrow.self_contact_elements(account):
-            # the escrow is also kept on our own contact, as Sylk Mobile keeps it: create it, and
-            # the contacts get the escrow on the reload that brings it back from the server
-            self.create_self_contact(account)
-            if not key_escrow.escrow_write_targets(account):
-                return      # and no account storage to write meanwhile
         self.repaired.add(account.id)
-        ActivityLog().info(f'[pgp] Key escrow: {account.id} holds a key but the server carries no escrow for it, saving it there')
-        written, reason = key_escrow.write_self_keys(account)
+        ActivityLog().info(f'[pgp] Key escrow: {account.id} holds a key but the account storage keeps no escrow for it, saving it there')
+        written, reason = key_escrow.write_escrow(account)
         if not written:
             ActivityLog().info(f'[pgp] Key escrow: could not save the key of {account.id} on the server: {reason}')
 
-    def copy_escrow(self, account):
-        """Keep the account storage and our contacts equal: copy the newest escrow record, as
-        it is, to the side that lacks it or holds an older one. Each copy is sent once per run."""
-        if not account.enabled or not account.sms.enable_pgp or not MessageManager._pgp_messaging_possible(account):
-            return
-        direction, record, detail = key_escrow.escrow_copy_action(account)
-        if direction is None:
-            if detail:
-                ActivityLog().debug(f'[pgp] Key escrow: nothing copied for {account.id}: {detail}')
-            return
-        signature = (direction, record.get('timestamp'), len(record.get('private_key') or ''))
-        if self.copied.get(account.id) == signature:
-            return
-        self.copied[account.id] = signature
-        where = (f'from contact {detail} to the account storage' if direction == 'storage'
-                 else f'from the account storage to contact(s) {", ".join(str(item) for item in detail)}')
-        ActivityLog().info(f'[pgp] Key escrow: copying the escrow of {account.id} written {record.get("timestamp") or "?"} '
-                           f'by "{record.get("device") or "?"}" {where}')
-        sent = key_escrow.copy_escrow(account, direction, record, detail)
-        if not sent:
-            self.copied.pop(account.id, None)
-            ActivityLog().info(f'[pgp] Key escrow: the copy for {account.id} could not be sent, tried again on the next pass')
-
-    def create_self_contact(self, account):
-        if account.id in self.self_contact_created:
-            return
-        if key_escrow._resource_lists_element(account) is None:
-            return      # the document has not been fetched yet
-        if not (account.auth.password or '').strip():
-            return      # nothing to encrypt the escrow with, so no reason for the contact either
-        account_id = str(account.id).lower()
-        manager = AddressbookManager()
-        if any(str(uri.uri).lower().removeprefix('sip:') == account_id for contact in manager.get_contacts() for uri in contact.uris):
-            return      # saved here, not on the server yet
-        self.self_contact_created.add(account.id)
-        from sipsimple import addressbook
-        from blink import addressbook_origin
-        contact = addressbook.Contact()
-        contact.name = account.display_name or str(account.id)
-        contact.uris = [addressbook.ContactURI(uri=str(account.id), type='sip')]
-        with addressbook_origin.reason('key-escrow'):
-            contact.save()
-        ActivityLog().info(f'[pgp] Key escrow: no contact carries {account.id}, created one ({contact.id}) to keep the key on')
-
-    def _addressbook_answered(self, account):
-        if account.id in self.checked or not account.xcap.enabled:
-            return True
-        first = self._first_asked.setdefault(account.id, time.time())
-        return time.time() - first > self.answer_timeout
-
     def answered(self, account):
-        """Whether we know enough to decide: the addressbook has loaded (or will not), the
-        account storage has said what escrow it keeps (or failed, or the wait is over) and the
-        server has answered the public key lookup (or it failed)."""
-        storage = self._storage_answered(account) or not self._addressbook_answered_in_time(account)
-        return (self._addressbook_answered(account) and storage
-                and self.server_key.get(account.id) in ('present', 'absent', 'failed', 'unsupported'))
+        """Whether we know enough to decide: the account storage has said what escrow it keeps
+        (or failed, or the wait is over) and the server has answered the public key lookup
+        (or it failed)."""
+        storage = self._storage_answered(account) or not self._storage_answered_in_time(account)
+        return storage and self.server_key.get(account.id) in ('present', 'absent', 'failed', 'unsupported')
 
-    def _addressbook_answered_in_time(self, account):
+    def _storage_answered_in_time(self, account):
         """False once the answer_timeout has passed since the first question: past it, nothing
         is waited for any longer."""
         first = self._first_asked.setdefault(account.id, time.time())
@@ -4227,16 +4163,12 @@ class KeyEscrowManager(object, metaclass=Singleton):
         """(True, None) when a key may be generated without asking, else (False, why not)."""
         if account is BonjourAccount():
             return True, None
-        if not account.xcap.enabled:
-            return False, 'the account has no addressbook on the server to look for its key in'
-        if account.id not in self.checked:
-            return False, 'the addressbook has not been fetched from the server'
-        try:
-            escrowed = bool(key_escrow.self_escrow_records(account))
-        except Exception as e:
-            return False, f'the addressbook could not be searched for a key ({e!r})'
-        if escrowed:
-            return False, 'the addressbook or the account storage keeps a key for it that this device could not restore'
+        from blink.key_storage import KeyStorage
+        stored = KeyStorage().state(account)
+        if stored == 'present':
+            return False, 'the account storage keeps a key for it that this device could not restore'
+        if stored != 'absent':
+            return False, f'the account storage did not say whether it keeps a key for it ({stored or "not asked"})'
         state = self.server_key.get(account.id)
         if state == 'present':
             return False, 'the server keeps a public key for it'
@@ -4296,15 +4228,16 @@ class KeyEscrowManager(object, metaclass=Singleton):
         waiting = self._waiting.get(account.id)
         if waiting is None:
             waiting = self._waiting[account.id] = []
-            if not self._addressbook_answered(account):
-                elapsed = time.time() - self._first_asked[account.id]
-                ActivityLog().info(f'[pgp] Waiting for the addressbook of {account.id} before generating a PGP key: it may carry one')
-                call_later(max(0.5, self.answer_timeout - elapsed + 0.1), self._release, account)
+            if not self._storage_answered(account):
+                first = self._first_asked.setdefault(account.id, time.time())
+                ActivityLog().info(f'[pgp] Waiting for the account storage of {account.id} before generating a PGP key: it may keep one')
+                self.escrow_pass_when_ready(account)
+                call_later(max(0.5, self.answer_timeout - (time.time() - first) + 0.1), self._release, account)
         waiting.append(callback)
 
     def _release(self, account):
         if not self.answered(account):
-            return      # still waiting for the addressbook or for the server's answer
+            return      # still waiting for the account storage or for the server's answer
         for callback in self._waiting.pop(account.id, []):
             try:
                 callback()
