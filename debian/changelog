@@ -1,3 +1,12 @@
+blink (7.2.3) unstable; urgency=medium
+
+  * Added devices to data manager
+  * Show file upload progress in message pane
+  * Make Preferences toolbar look better in Dark theme
+  * Added UI preference for Enter on search
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Wed, 28 Oct 2026 06:41:47 -0300
+
 blink (7.2.2) unstable; urgency=medium
 
   * Key escrow: write the escrow to the account storage as well as to our own contacts
