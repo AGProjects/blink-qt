@@ -18,7 +18,7 @@ from sys import exc_info
 from blink.event import CallFunctionEvent
 
 
-__all__ = ['QSingleton', 'UniqueFilenameGenerator', 'call_in_gui_thread', 'call_later', 'copy_transfer_file', 'run_in_gui_thread', 'translate']
+__all__ = ['QSingleton', 'UniqueFilenameGenerator', 'bring_to_front', 'call_in_gui_thread', 'call_later', 'copy_transfer_file', 'run_in_gui_thread', 'translate']
 
 translate = QCoreApplication.translate
 
@@ -67,6 +67,29 @@ def copy_transfer_file(link, directory):
 
 def call_later(interval, function, *args, **kw):
     QTimer.singleShot(int(interval*1000), lambda: function(*args, **kw))
+
+
+def bring_to_front(window, full_screen=False):
+    """Show a window (out of the taskbar, from behind others) in front of the rest. Raised outside
+    a user action of ours (sharing stopped from the desktop's indicator, say), GNOME refuses the
+    focus and leaves the window where it is: kept above the others for a moment, it comes up anyway."""
+    from PyQt6.QtCore import Qt
+    if window.isMinimized() or not window.isVisible():
+        if full_screen:
+            window.showFullScreen()
+        else:
+            window.showNormal()
+    window.raise_()
+    window.activateWindow()
+    handle = window.windowHandle()
+    if handle is None or QApplication.platformName() != 'xcb' or handle.flags() & Qt.WindowType.WindowStaysOnTopHint:
+        return
+    handle.setFlags(handle.flags() | Qt.WindowType.WindowStaysOnTopHint)
+
+    def release():
+        if window.windowHandle() is handle:
+            handle.setFlags(handle.flags() & ~Qt.WindowType.WindowStaysOnTopHint)
+    QTimer.singleShot(500, release)
 
 
 def call_in_gui_thread(function, *args, **kw):

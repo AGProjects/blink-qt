@@ -1528,15 +1528,12 @@ class VideoroomWindow(QWidget):
                 self._minimized_for_screen = not self.isMinimized()
                 self._full_screen_before = self.isFullScreen()
                 self.showMinimized()
-            elif getattr(self, '_minimized_for_screen', False):
+            elif not screen:
+                # back in front, minimized or not (behind other windows, restored by hand meanwhile)
+                full_screen = getattr(self, '_minimized_for_screen', False) and getattr(self, '_full_screen_before', False)
                 self._minimized_for_screen = False
-                if self.isMinimized():
-                    if self._full_screen_before:
-                        self.showFullScreen()
-                    else:
-                        self.showNormal()
-                    self.raise_()
-                    self.activateWindow()
+                from blink.util import bring_to_front
+                bring_to_front(self, full_screen=full_screen)
 
     def _update_auto_speakers(self):
         """While our screen is shared with nobody chosen as speaker: the screen is the speaker, and with one

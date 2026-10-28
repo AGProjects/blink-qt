@@ -362,6 +362,7 @@ class ScreenShareManager(object, metaclass=Singleton):
         self.wanted_screen = None           # the screen device asked for by share_screen()
         self.saved_token = None
         self.unwanted_ready = False         # a picked screen nobody wants, seen at the last poll
+        self.polled_state = None            # the capture state at the last poll, logged when it changes
         self.poll_timer = QTimer()
         self.poll_timer.setInterval(POLL_INTERVAL)
         self.poll_timer.timeout.connect(self._SH_PollTimerTimeout)
@@ -587,7 +588,14 @@ class ScreenShareManager(object, metaclass=Singleton):
     def _SH_PollTimerTimeout(self):
         info = screen_capture_info()
         state = info['state']
+        if state != self.polled_state:
+            log('capture %s -> %s (%s)' % (self.polled_state, state, 'on the wire' if _local_on_screen() else 'wanted' if self.capture_wanted else 'not wanted'))
+            self.polled_state = state
         unwanted_ready, self.unwanted_ready = self.unwanted_ready, False
+        if state in ('idle', 'failed') and not self.capture_wanted and _local_on_screen():
+            # on the wire but the desktop's session is gone (stopped from its indicator without
+            # the SDK seeing the stream end): as ended, else the frozen screen goes on being sent
+            state = 'ended'
         if state == 'ready':
             if self.capture_wanted and not _local_on_screen():
                 devices = _screen_devices()
@@ -628,6 +636,7 @@ class ScreenShareManager(object, metaclass=Singleton):
                 self.stop_sharing()
         if not self.capture_wanted and not _local_on_screen():
             self.poll_timer.stop()
+            self.polled_state = None
 
     def _share_failed(self, text):
         for session, call_state in self.calls.items():
