@@ -347,16 +347,17 @@ class BubbleDelegate(QStyledItemDelegate):
         document.setDocumentMargin(0)
         caption_height = 0
         text = item.caption
-        if item.upload is not None and item.upload['state'] != 'uploaded':
-            text = upload_note(item.upload)
+        note = upload_note(item.upload) if item.upload is not None and item.upload['state'] != 'uploaded' else ''
+        if note:
+            text = note
         if pdf:
             from blink.messagepane.files import file_info
             info = file_info(item) or {}
-            text = info.get('name') or os.path.basename(path)
+            text = (info.get('name') or os.path.basename(path)) + ('\n' + note if note else '')
         if not layout.image_path:
             # what the box stands for until the picture is here
             from blink.messagepane.format import file_name
-            text = (file_name(item.content) or translate('message_pane', 'Picture')) + ('\n' + (translate('message_pane', 'downloading %d%%') % progress) if progress is not None and progress < 100 else '')
+            text = (file_name(item.content) or translate('message_pane', 'Picture')) + ('\n' + note if note else '\n' + (translate('message_pane', 'downloading %d%%') % progress) if progress is not None and progress < 100 else '')
         if text:
             document.setDefaultFont(font if layout.image_path else small)
             option = QTextOption(Qt.AlignmentFlag.AlignLeft if layout.image_path else Qt.AlignmentFlag.AlignHCenter)
@@ -588,10 +589,12 @@ class BubbleDelegate(QStyledItemDelegate):
         clock = format_clock(duration) if duration else ''
         if fraction is not None:
             clock = format_clock(player.position()) + (' / ' + format_clock(duration) if duration else '')
+        if item.upload is not None and item.upload['state'] != 'uploaded':
+            clock = upload_note(item.upload)      # being sent: how far, in place of the length
         if clock:
             painter.setPen(secondary)
             painter.drawText(QRectF(wave.left(), bubble.bottom() - self.padding_v - small_metrics.height(), wave.width(), small_metrics.height()),
-                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, clock)
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, small_metrics.elidedText(clock, Qt.TextElideMode.ElideRight, wave.width()))
 
     def _paint_call(self, painter, layout, bubble, font, small, secondary, text_colour):
         metrics, small_metrics = QFontMetricsF(font), QFontMetricsF(small)
@@ -844,7 +847,7 @@ class BubbleDelegate(QStyledItemDelegate):
             painter.fillPath(badge_path, QColor(0, 0, 0, 120))
             painter.setPen(QColor('#ffffff'))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, text)
-        if layout.image_path and (item.caption or layout.kind == 'pdf'):
+        if layout.image_path and (item.caption or layout.kind == 'pdf' or (item.upload is not None and item.upload['state'] != 'uploaded')):
             context = QAbstractTextDocumentLayout.PaintContext()
             context.palette = self._text_palette(palette, self._colours(palette, item.outgoing)[1])
             painter.save()

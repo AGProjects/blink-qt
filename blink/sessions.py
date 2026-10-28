@@ -4988,24 +4988,25 @@ class FileSizeFormatter(object):
 @implementer(IObserver)
 
 class _UploadBody(object):
-    """The body of an upload, read by requests as it sends it: reports the progress
+    """The body of an upload, read from the file by requests as it sends it (in the
+    file-transfer thread, never all of it in memory): reports the progress
     (BlinkFileTransferProgress, at most once per percent) and stops the POST when the
     transfer is cancelled."""
-    def __init__(self, data, transfer):
-        self.data, self.transfer = data, transfer
+    def __init__(self, fd, size, transfer):
+        self.fd, self.size, self.transfer = fd, size, transfer
         self.position = 0
         self.reported = -1
 
     def __len__(self):
-        return len(self.data)
+        return self.size
 
     def read(self, size=-1):
         if getattr(self.transfer, '_upload_cancelled', False):
             raise IOError('upload cancelled')
-        end = len(self.data) if size is None or size < 0 else min(len(self.data), self.position + size)
-        chunk = self.data[self.position:end]
-        self.position = end
-        total = len(self.data)
+        wanted = self.size - self.position if size is None or size < 0 else min(size, self.size - self.position)
+        chunk = self.fd.read(wanted) if wanted > 0 else b''
+        self.position += len(chunk)
+        total = self.size
         percent = int(self.position * 100 / total) if total else 100
         if percent != self.reported:
             self.reported = percent
@@ -5266,8 +5267,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.state = 'connecting'
         fd = self.file_selector.fd
         fd.seek(0)
-        data = fd.read()
-        size = len(data)
+        size = os.fstat(fd.fileno()).st_size
         encrypted = name.endswith('.asc')
         ActivityLog().info(f"[transfer] Uploading {name} ({size} bytes{', PGP encrypted' if encrypted else ''}) for {receiver} to {url}")
         if not token:
@@ -5275,7 +5275,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self.state = 'connected'
         self._upload_cancelled = False
         NotificationCenter().post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(stage='uploading', bytes=0, total_bytes=size))
-        self._post_file(url, _UploadBody(data, self), content_type, token, size, name)
+        self._post_file(url, _UploadBody(fd, size, self), content_type, token, size, name)
 
     @run_in_thread('file-transfer')
     def _post_file(self, url, body, content_type, token, size, name):
@@ -5286,7 +5286,7 @@ class BlinkFileTransfer(BlinkSessionBase):
             headers.update(device_headers())
         try:
             response = requests.post(url, data=body, headers=headers, timeout=(15, 600))
-        except (requests.RequestException, IOError) as e:
+        except (requests.RequestException, OSError, ValueError) as e:
             self._upload_finished(None, 'cancelled' if self._upload_cancelled else str(e), size, name)
         else:
             self._upload_finished(response.status_code, response.reason, size, name)

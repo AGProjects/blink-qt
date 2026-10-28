@@ -174,6 +174,20 @@ class MessagePane(QWidget):
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')     # BlinkSettings cannot be made yet: the configuration is not started
         self._last_read_sound = 0.0
 
+    @staticmethod
+    def _upload_shown(item):
+        """What the Info panel says of a file being sent: its state, stage and how far, and the file."""
+        upload = item.upload
+        if upload is None:
+            return None
+        if upload['state'] == 'failed':
+            return f"failed: {upload.get('reason') or 'unknown'} ({upload.get('path')})"
+        if upload['state'] == 'uploaded':
+            return f"done ({upload.get('path')})"
+        progress = upload.get('progress')
+        how_far = f'{int(progress * 100)}%' if progress is not None else 'starting'
+        return f"{upload.get('stage') or 'uploading'}, {how_far} ({upload.get('path')})"
+
     def apply_theme(self):
         palette = self.empty_label.palette()
         for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive, QPalette.ColorGroup.Disabled):
@@ -1028,6 +1042,7 @@ class MessagePane(QWidget):
                      'Delivery mark': delivery_mark(item)[0] or '—',
                      'File here': local_file(item) if item.category in ('image', 'audio', 'video', 'other') else None,
                      'Downloading': f'{int(progress * 100)}%' if progress is not None else None,
+                     'Uploading': self._upload_shown(item),
                      'Unread here': 'yes' if item.direction == 'incoming' and not item.read else None}
             show_message_info(self, item, shown)
         elif action == 'reply':
