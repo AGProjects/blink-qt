@@ -524,6 +524,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.history_name_and_uri_button.clicked.connect(self._SH_HistoryNameAndUriButtonClicked)
         self.mangle_contacts_button.clicked.connect(self._SH_MangleContactsButtonClicked)
         self.language_button.activated[int].connect(self._SH_LanguageButtonActivated)
+        self.search_enter_action_button.activated[int].connect(self._SH_SearchEnterActionButtonActivated)
 
         # Setup initial state (show the accounts page right after start)
         self.accounts_action.trigger()
@@ -598,6 +599,10 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.replace_leading_zero_editor.setValidator(DigitsValidator(self))
 
         # Languages
+        self.search_enter_action_button.clear()
+        self.search_enter_action_button.addItem(translate('preferences_window', 'Start call'), 'audio')
+        self.search_enter_action_button.addItem(translate('preferences_window', 'Open message pane'), 'messages')
+
         self.language_button.clear()
         languages_path = Resources.get('i18n')
         self.language_button.addItem(translate('preferences_window', 'Automatic (Default)'), Language('default'))
@@ -995,6 +1000,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
 
         self.history_name_and_uri_button.setChecked(blink_settings.interface.show_history_name_and_uri)
         self.mangle_contacts_button.setChecked(blink_settings.interface.mangle_contacts)
+        search_enter_index = self.search_enter_action_button.findData(blink_settings.interface.search_enter_action)
+        self.search_enter_action_button.setCurrentIndex(search_enter_index if search_enter_index != -1 else self.search_enter_action_button.findData('audio'))
 
         language_index = self.language_button.findText(Language.mapping[blink_settings.interface.language])
         if language_index == -1:
@@ -2180,6 +2187,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         invalidate()
         if self.selected_account is not None:
             self.load_account_settings(self.selected_account)     # the account fields, shown again
+
+    def _SH_SearchEnterActionButtonActivated(self, index):
+        settings = BlinkSettings()
+        settings.interface.search_enter_action = self.search_enter_action_button.itemData(index)
+        settings.save()
 
     def _SH_LanguageButtonActivated(self, index):
         data = self.language_button.itemData(index)

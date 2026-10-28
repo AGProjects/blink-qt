@@ -6798,6 +6798,11 @@ class ContactModel(QAbstractListModel):
     def addContact(self, contact):
         if contact in self.items:
             return
+        try:
+            if contact.settings in self.items[GroupContacts, contact.group]:
+                return      # already shown in this group (a new wrapper of the same contact is not 'in' the items)
+        except KeyError:
+            pass
         self._add_contact(contact)
         self.itemsAdded.emit([contact])
 

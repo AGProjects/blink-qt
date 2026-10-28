@@ -3772,6 +3772,60 @@
              </layout>
             </item>
             <item row="13" column="0">
+             <widget class="QLabel" name="search_enter_label">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">margin-top: 20px;</string>
+              </property>
+              <property name="text">
+               <string>Contacts search</string>
+              </property>
+             </widget>
+            </item>
+            <item row="14" column="0">
+             <widget class="Line" name="line_search_enter">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
+            </item>
+            <item row="15" column="0">
+             <layout class="QHBoxLayout" name="search_enter_layout">
+              <item>
+               <widget class="QLabel" name="search_enter_action_label">
+                <property name="text">
+                 <string>Enter on Search:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="search_enter_action_button">
+                <property name="toolTip">
+                 <string>What Enter in the search bar does with the selected contact, the first result or the typed address</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="search_enter_spacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item row="16" column="0">
              <spacer name="verticalSpacer_5">
               <property name="orientation">
                <enum>Qt::Vertical</enum>

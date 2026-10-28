@@ -1626,13 +1626,14 @@ class MainWindow(base_class, ui_class):
         settings.save()
 
     def _SH_SearchBoxReturnPressed(self):
-        """Enter in the search box does what Enter on a contact does (its preferred media:
-        messages, audio or video): the selected result, else the first one, else the typed
-        address (which opens a conversation)."""
+        """Enter in the search box. A contact matching the typed text exactly (its name or one of
+        its addresses) gets what Enter on a contact does, its preferred media. Otherwise the
+        selected result, else the first one, else the typed address gets an audio call or the
+        message pane, as set in Preferences > Advanced > Interface (interface.search_enter_action)."""
         address = self.search_box.text().strip()
         if not address:
             return
-        from blink.contacts import DELETED_GROUP_ID, start_contact_conversation
+        from blink.contacts import DELETED_GROUP_ID, is_conference_uri, start_contact_conversation
         selected = self.search_list.selectionModel().selectedIndexes()
         index = selected[0] if len(selected) == 1 else self.contact_search_model.index(0, 0)
         item = index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
@@ -1641,11 +1642,37 @@ class MainWindow(base_class, ui_class):
             if isinstance(item, Contact):
                 self._follow_selection([index], search=address)
             return
-        if isinstance(item, Contact) and item.uri is not None and getattr(item.group.settings, 'id', None) != DELETED_GROUP_ID:
-            start_contact_conversation(item, item.uri)
+
+        def usable(contact):
+            return isinstance(contact, Contact) and contact.uri is not None and getattr(contact.group.settings, 'id', None) != DELETED_GROUP_ID
+
+        # an exact contact: the contact's preference decides
+        wanted = address.casefold()
+        results = (self.contact_search_model.index(row, 0).data(Qt.ItemDataRole.UserRole) for row in range(self.contact_search_model.rowCount()))
+        exact = next((contact for contact in results if usable(contact) and (contact.name or '').strip().casefold() == wanted), None)
+        if exact is not None:
+            start_contact_conversation(exact, exact.uri)
             return
-        contact, contact_uri = URIUtils.find_contact(address)
-        start_contact_conversation(contact, contact_uri)
+        try:
+            contact, contact_uri = URIUtils.find_contact(address)
+        except Exception:
+            contact, contact_uri = None, None
+        if contact is not None and contact.type != 'dummy':
+            start_contact_conversation(contact, contact_uri)
+            return
+
+        # no exact contact: the search bar setting decides
+        if usable(item):
+            contact, contact_uri = item, item.uri
+        elif contact is None:
+            contact, contact_uri = URIUtils.find_contact(address)
+        uri = str(getattr(contact_uri, 'uri', contact_uri) or '')
+        if is_conference_uri(uri):
+            start_contact_conversation(contact, contact_uri)    # a room has no message conversation, its chat window opens
+        elif BlinkSettings().interface.search_enter_action == 'audio':
+            SessionManager().create_session(contact, contact_uri, [StreamDescription('audio')])
+        else:
+            self.show_conversation_in_pane(contact, contact_uri)
 
     def _SH_SearchBoxModeChanged(self, messages):
         self.contact_search_model.set_messages_mode(messages)
