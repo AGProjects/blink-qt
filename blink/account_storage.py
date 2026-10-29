@@ -29,7 +29,7 @@ Precedence when a contact is drawn (contact_picture):
 """
 
 __all__ = ['STORAGE_CHANGED_CONTENT_TYPE', 'AVATARS_NAMESPACE', 'AccountStorage', 'contact_picture',
-           'storage_url', 'storage_account', 'encode_avatar', 'valid_name', 'device_name', 'device_headers']
+           'storage_url', 'storage_account', 'encode_avatar', 'valid_name', 'device_name', 'device_headers', 'user_agent']
 
 import json
 import os
@@ -118,10 +118,19 @@ def device_name():
     return f'Blink Qt on {host} ({system})'
 
 
-def device_headers():
-    """X-Sylk-Device-Id and X-Sylk-Device-Name for a request carrying the API token: the
-    server records the devices that use the account (SylkServer devices.py)."""
+def user_agent():
+    """The SIP/WebRTC User-Agent of this client: 'Blink 7.2.3 (Linux)'."""
+    return ' '.join(str(SIPSimpleSettings().user_agent or '').split()) or 'Blink'
+
+
+def device_headers(http=True):
+    """X-Sylk-Device-Id, X-Sylk-Device-Name and, for HTTP, X-Sylk-User-Agent for a request carrying
+    the API token: the server records the devices that use the account (SylkServer devices.py).
+    Over HTTP the User-Agent is python-requests', so the SIP one goes in X-Sylk-User-Agent; a SIP
+    request (http=False) already has it as its User-Agent."""
     headers = {'X-Sylk-Device-Name': urllib.parse.quote(device_name(), safe=" '()")}
+    if http:
+        headers['X-Sylk-User-Agent'] = user_agent()
     device_id = this_device_id()
     if device_id:
         headers['X-Sylk-Device-Id'] = device_id

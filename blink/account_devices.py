@@ -45,6 +45,11 @@ def _when(milliseconds):
         return ''
 
 
+def _name(device):
+    """The user agent of the device, else the name it gave itself (recorded before clients sent one)."""
+    return device.get('user_agent') or device.get('device_name') or ''
+
+
 def _accounts():
     """The enabled accounts with a SylkServer account storage."""
     return [account for account in AccountManager().get_accounts()
@@ -52,7 +57,7 @@ def _accounts():
 
 
 class DevicesPanel(QWidget):
-    columns = ('Id', 'Name', 'First used', 'Last used', 'Last address', 'Via')
+    columns = ('Id', 'User Agent', 'First used', 'Last used', 'Last address', 'Via')
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -205,7 +210,7 @@ class DevicesPanel(QWidget):
         for device in devices:
             this_one = bool(mine) and device.get('device_id') == mine
             identifier = device.get('device_id') or device.get('object_id') or ''
-            name = device.get('device_name') or ''
+            name = _name(device)
             if this_one:
                 name = _tr('%s (this computer)') % (name or _tr('This computer'))
             item = QTreeWidgetItem(self.tree, [identifier, name, _when(device.get('first_seen')), _when(device.get('last_seen')),
@@ -236,11 +241,8 @@ class DevicesPanel(QWidget):
         if device is None:
             self.detail.clear()
         else:
-            shown = {key: value for key, value in device.items() if key not in ('object_id', 'user_agent')}
-            for key in ('first_seen', 'last_seen'):
-                if key in shown:
-                    shown[key] = f'{shown[key]} ({_when(shown[key])})'
-            self.detail.setPlainText(json.dumps(shown, indent=2, sort_keys=True, ensure_ascii=False))
+            row = {key: value for key, value in device.items() if key != 'object_id'}     # object_id is ours, the server row has it as id
+            self.detail.setPlainText(json.dumps(row, indent=2, ensure_ascii=False))
         self.refresh_controls()
 
     def refresh_controls(self):
@@ -257,7 +259,7 @@ class DevicesPanel(QWidget):
         device, account = self._current(), self._account()
         if device is None or account is None:
             return
-        name = device.get('device_name') or device.get('device_id') or device['object_id']
+        name = _name(device) or device.get('device_id') or device['object_id']
         question = _tr('Remove %s from the devices of the account on the server? It is listed again, as new, the next time it uses the account.') % name
         if QMessageBox.question(self, _tr('Forget device'), question) != QMessageBox.StandardButton.Yes:
             return
