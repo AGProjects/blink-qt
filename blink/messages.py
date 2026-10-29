@@ -969,7 +969,7 @@ class MessageManager(object, metaclass=Singleton):
                 self._token_retry_pending.add(account.id)
                 delay = self.token_request_interval - elapsed
                 log.debug(f'API token for {account.id} requested {elapsed:.0f}s ago, asking again in {delay:.0f}s')
-                call_later(delay, self._retry_token_request, account, reason)
+                call_later(delay, self._retry_token_request, account, reason, account.sms.history_synchronization_token)
             return
         self._token_requested[account.id] = now
         ActivityLog().info(f'[journal] Requesting an API token for account {account.id} ({reason})')
@@ -981,8 +981,11 @@ class MessageManager(object, metaclass=Singleton):
                                            extra_sip_headers=[Header(name, value) for name, value in device_headers(http=False).items()])
         self._send_message(outgoing_message)
 
-    def _retry_token_request(self, account, reason):
+    def _retry_token_request(self, account, reason, token=None):
         self._token_retry_pending.discard(account.id)
+        if account.sms.history_synchronization_token and account.sms.history_synchronization_token != token:
+            log.debug(f'API token for {account.id} received meanwhile, not asking again ({reason})')
+            return      # the token the retry was for arrived (or replaced the refused one) meanwhile
         self._request_history_synchronization_token(account, reason)
 
     def note_own_upload(self, transfer_id):
@@ -2315,6 +2318,24 @@ class MessageManager(object, metaclass=Singleton):
         without asking; in every other case the user is asked."""
         KeyEscrowManager().when_answered(account, lambda: self._key_generation_decided(account, scenario, session))
 
+    def _generate_if_nobody_has_one(self, account):
+        """At start, with no key on this device: generate one silently when the account storage
+        keeps no escrow and the server keeps no public key; otherwise do nothing now -- the
+        escrow pass restores the key, or the user is asked once a key is needed."""
+        def decided():
+            if not account.sms.enable_pgp or (account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized)):
+                return      # restored from the escrow meanwhile, or PGP turned off
+            if not self._pgp_messaging_possible(account):
+                return
+            silent, reason = KeyEscrowManager().may_generate_silently(account)
+            if silent:
+                ActivityLog().info(f'[pgp] No PGP key for account {account.id} in the account storage or on the server, generating one')
+                self._generate_keys(account)
+            else:
+                ActivityLog().info(f'[pgp] No PGP key for account {account.id} on this device ({reason}): '
+                                   f'the user is asked when a key is needed')
+        KeyEscrowManager().when_answered(account, decided)
+
     @staticmethod
     def _pgp_messaging_possible(account):
         """PGP messaging needs SylkServer (key lookup, escrow, journal): Bonjour aside, no key
@@ -2382,6 +2403,10 @@ class MessageManager(object, metaclass=Singleton):
         account.sms.private_key = private_file
         account.sms.public_key = public_file
         account.save()
+        try:
+            key_escrow.record_key_provenance(account, 'generated')
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Cannot record where the key of {account.id} came from: {e!r}')
         for request in list(self.pgp_requests[account, GeneratePGPKeyRequest]):
             request.dialog.hide()
             self.pgp_requests.remove(request)
@@ -2435,6 +2460,14 @@ class MessageManager(object, metaclass=Singleton):
             if (account is not BonjourAccount() and account.enabled and account.id.domain == notification.data.domain
                     and account.id in self._token_not_asked and not account.sms.history_synchronization_token):
                 self._request_history_synchronization_token(account, 'SylkServer found')
+        # and the key check, which waits for SylkServer: found after registration (started
+        # offline, looked up again once registered) it would wait for the next one
+        for account in AccountManager().get_accounts():
+            if account is not BonjourAccount() and account.enabled and account.id.domain == notification.data.domain:
+                try:
+                    KeyEscrowManager().check_key_status(account)
+                except Exception as e:
+                    ActivityLog().exception(f'[pgp] Checking the private key of {account.id} failed: {e!r}')
 
     def _NH_SIPAccountRegistrationDidSucceed(self, notification):
         try:
@@ -3788,8 +3821,14 @@ class KeyEscrowManager(object, metaclass=Singleton):
       written; once the storage keeps an escrow it is cleared, once per run.
 
     Generating a key waits for the answer (when_answered): the account storage has
-    answered (or 15 seconds have passed) AND the server has answered a public key
-    lookup for the account itself (or it failed). A key is generated without asking
+    answered (or 15 seconds have passed; while it waits for the API token of a fresh
+    profile, 60 seconds counted from the first registration) AND the server has answered
+    a public key lookup for the account itself (or it failed). At start no question is
+    asked: the user is asked only once a key is needed.
+
+    A local key that differs from the escrow is reconciled (reconcile): a key generated
+    before the storage answered gives way to the escrow, otherwise the newer key wins
+    when it is the escrow's and the user is asked when it is ours. A key is generated without asking
     only when the storage said it keeps no escrow and the server said it keeps no
     public key (may_generate_silently); otherwise the user is asked.
 
@@ -3800,6 +3839,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
     """
 
     answer_timeout = 15.0
+    token_timeout = 60.0                # how long after registration the storage may wait for the API token
     lookup_timeout = 40.0               # longer than a SIP transaction (32 s)
     no_key_reason = 'no public key'
 
@@ -3822,6 +3862,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
         self.password_checked = {}      # account id -> the escrow and password last checked (escrow_password_check)
         self.imported = set()           # accounts whose imported key has not been compared with the escrow yet
         self.storage_waiting = set()    # accounts whose escrow pass waits for the account storage
+        self.registered_at = {}         # account id -> when it first registered in this run
+        self.reconciled = set()         # (account id, local fingerprint, escrow fingerprint) settled in this run
 
     def start(self):
         if not self._started:
@@ -3873,10 +3915,10 @@ class KeyEscrowManager(object, metaclass=Singleton):
         except Exception as e:
             ActivityLog().exception(f'[pgp] Checking the private key of {account.id} failed: {e!r}')
         if account is not BonjourAccount() and (account.sms.private_key is None or not os.path.exists(account.sms.private_key.normalized)):
-            # no key here: decided at start, not when the first encrypted message arrives. Generated
-            # silently when nobody has one; otherwise the user is told to export it from the device
-            # that has it (or to generate one, having lost them all)
-            MessageManager()._offer_key_generation(account, 1)
+            # no key here: at start only what needs no question -- the escrow pass restores
+            # the account's key, or one is generated silently when nobody has one. The user
+            # is asked only when a key is needed (_offer_key_generation)
+            MessageManager()._generate_if_nobody_has_one(account)
 
     def server_public_key_received(self, account, data):
         if isinstance(data, (bytes, bytearray)):
@@ -4021,7 +4063,95 @@ class KeyEscrowManager(object, metaclass=Singleton):
             self._escrow_imported_key(account)      # may ask: outside the quiet stretch
         except Exception as e:
             ActivityLog().exception(f'[pgp] Key escrow of the imported key of {account.id} failed: {e!r}')
+        try:
+            self.reconcile(account)                 # may ask: outside the quiet stretch
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Reconciling the key of {account.id} with the escrow failed: {e!r}')
         self._release(account)
+
+    def reconcile(self, account):
+        """This device holds a key and the account storage an escrow of another one: decide
+        which is the account's key (key_escrow.reconcile_decision), adopting the escrowed one
+        or asking. Once per pair of keys per run; an imported key waiting for its own
+        question (_escrow_imported_key) is left to it."""
+        if account.id in self.imported:
+            return
+        action, reason, details = key_escrow.reconcile_decision(account)
+        if details is None:
+            return
+        pair = (account.id, details['local_fingerprint'], details['escrow_fingerprint'])
+        if pair in self.reconciled:
+            return
+        self.reconciled.add(pair)
+        local_id = details['local_fingerprint'][-16:]
+        escrow_id = details['escrow_fingerprint'][-16:]
+        if action is None:
+            ActivityLog().info(f'[pgp] {account.id}: the escrow keeps key {escrow_id}, this device uses key {local_id}: {reason}, left as it is')
+            return
+        ActivityLog().info(f'[pgp] {account.id}: the escrow keeps key {escrow_id}, this device uses key {local_id}: {reason} -> {action}')
+        if action == 'adopt':
+            self._adopt_escrowed_key(account, local_id)
+            return
+
+        unknown = translate('pgp_key_escrow', 'unknown')
+        def created(when):
+            return when.strftime('%Y-%m-%d %H:%M') if when else unknown
+        from blink.pgp_keyids import key_fingerprint
+        server_fp = key_fingerprint(self.server_public_keys.get(account.id))
+        server_fp = server_fp.upper() if server_fp else None
+        if server_fp == details['escrow_fingerprint']:
+            published = translate('pgp_key_escrow', 'The server publishes the key on the server to your contacts.')
+        elif server_fp == details['local_fingerprint']:
+            published = translate('pgp_key_escrow', 'The server publishes the key of this device to your contacts.')
+        else:
+            published = translate('pgp_key_escrow', 'It is not known which key the server publishes to your contacts.')
+        main_window = getattr(QApplication.instance(), 'main_window', None)
+        box = QMessageBox(QMessageBox.Icon.Question, translate('pgp_key_escrow', 'Two PGP keys'),
+                          translate('pgp_key_escrow', 'The server keeps a backup of another PGP key for %s than the one this device uses.\n\n'
+                                                      'Key on the server: %s, created %s, saved %s by %s\n'
+                                                      'Key of this device: %s, created %s\n\n%s\n\n'
+                                                      'Messages encrypted to the key that is not used cannot be read. '
+                                                      'The key not used is kept on this device, not deleted.')
+                          % (account.id, escrow_id, created(details['escrow_created']),
+                             details.get('escrow_timestamp') or '?', details.get('escrow_device') or '?',
+                             local_id, created(details['local_created']), published),
+                          parent=main_window)
+        server_button = box.addButton(translate('pgp_key_escrow', 'Use the Key on the Server'), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(translate('pgp_key_escrow', "Keep This Device's Key"), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(server_button)
+        box.exec()
+        if box.clickedButton() is server_button:
+            ActivityLog().info(f'[pgp] {account.id}: the user chose the key on the server ({escrow_id})')
+            self._adopt_escrowed_key(account, local_id)
+            return
+        ActivityLog().info(f'[pgp] {account.id}: the user kept the key of this device ({local_id}), replacing the backup of key {escrow_id}')
+        key_escrow.record_key_provenance(account, 'kept')
+        # announced: the storage tells the other devices (application/sylk-storage-changed)
+        written, why = key_escrow.write_escrow(account, force=True)
+        if not written:
+            QMessageBox.warning(main_window, translate('pgp_key_escrow', 'Replace PGP key backup'),
+                                translate('pgp_key_escrow', 'The backup of %s was not replaced: %s') % (account.id, why or ''))
+
+    def _adopt_escrowed_key(self, account, local_id):
+        restored, why = key_escrow.restore_from_storage(account, replace=True)
+        if not restored:
+            ActivityLog().error(f'[pgp] {account.id}: the key on the server could not be adopted: {why}')
+            return
+        self.restore_done.add(account.id)
+        ActivityLog().info(f'[pgp] {account.id}: the private key was replaced by the one on the server; the previous key {local_id} is kept on this device')
+        manager = MessageManager()
+        manager._keys_installed(account)
+        # the files changed under the same paths: the streams and the background decryption read them again
+        for blink_session in [session for session in manager.sessions if session.account is account]:
+            stream = blink_session.fake_streams.get('messages')
+            if stream is not None:
+                stream._load_pgp_keys()
+        try:
+            from blink.pgp_decryptor import BackgroundDecryptor
+            BackgroundDecryptor()._failed.clear()
+            BackgroundDecryptor().run(f'private key of {account.id} replaced by the escrowed one')
+        except Exception as e:
+            ActivityLog().exception(f'[pgp] Restarting the background decryption for {account.id} failed: {e!r}')
 
     def strip_contact_escrow(self, account):
         """Clear the escrow formerly kept on our own XCAP contact, once the account storage
@@ -4038,6 +4168,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         if not isinstance(account, Account) or not MessageManager._pgp_messaging_possible(account):
             return      # no SylkServer to keep a backup on
         self.imported.add(account.id)
+        key_escrow.record_key_provenance(account, 'imported')
         self.repaired.discard(account.id)
         self.password_checked.pop(account.id, None)
         self._escrow_imported_key(account)
@@ -4052,6 +4183,9 @@ class KeyEscrowManager(object, metaclass=Singleton):
             KeyStorage().fetch(account, 'key imported')
             return
         self.imported.discard(account.id)
+        # the storage has answered: the imported key is now one installed knowing the escrow,
+        # so whatever is decided below is not decided again by reconcile
+        key_escrow.record_key_provenance(account, 'imported')
         from blink.contacts import AddressbookNotifier
         record = key_escrow.foreign_escrow(account)
         if record is None:
@@ -4114,6 +4248,7 @@ class KeyEscrowManager(object, metaclass=Singleton):
         account = notification.sender
         if not isinstance(account, Account):
             return
+        self.registered_at.setdefault(account.id, time.time())
         password = (account.auth.password or '').strip()
         if self.accepted_passwords.get(account.id) == password:
             return      # a refresh: nothing new is known about the password
@@ -4195,7 +4330,13 @@ class KeyEscrowManager(object, metaclass=Singleton):
 
     def _storage_answered_in_time(self, account):
         """False once the answer_timeout has passed since the first question: past it, nothing
-        is waited for any longer."""
+        is waited for any longer. While the storage waits for the API token (a fresh profile)
+        the wait runs only once the account has registered -- offline the token cannot even be
+        asked for -- and then for token_timeout."""
+        from blink.key_storage import KeyStorage
+        if KeyStorage().awaiting_token(account):
+            registered = self.registered_at.get(account.id)
+            return registered is None or time.time() - registered <= self.token_timeout
         first = self._first_asked.setdefault(account.id, time.time())
         return time.time() - first <= self.answer_timeout
 
@@ -4277,6 +4418,8 @@ class KeyEscrowManager(object, metaclass=Singleton):
 
     def _release(self, account):
         if not self.answered(account):
+            if account.id in self._waiting and not self._storage_answered(account):
+                call_later(self.answer_timeout, self._release, account)     # the wait can end by itself: look again
             return      # still waiting for the account storage or for the server's answer
         for callback in self._waiting.pop(account.id, []):
             try:

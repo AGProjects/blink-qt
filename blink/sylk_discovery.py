@@ -148,6 +148,7 @@ class SylkServerDiscovery(object, metaclass=Singleton):
         self.configurations = {}        # domain: {'configurationUrl', 'fetched', 'configuration'}
         self.checked = {}               # domain: when it was last looked up (time.monotonic) in this run
         self.running = set()            # domains being looked up now
+        self.unreachable = set()        # domains whose last lookup failed for the network, not for the answer
         self.lock = threading.Lock()
         self._started = False
         self._timer = None
@@ -177,6 +178,7 @@ class SylkServerDiscovery(object, metaclass=Singleton):
         self._load()
         notification_center = NotificationCenter()
         notification_center.add_observer(self, name='SIPAccountDidActivate')
+        notification_center.add_observer(self, name='SIPAccountRegistrationDidSucceed')
         notification_center.add_observer(self, name='SIPApplicationWillEnd')
         from PyQt6.QtCore import QTimer
         self._timer = QTimer()
@@ -315,6 +317,19 @@ class SylkServerDiscovery(object, metaclass=Singleton):
             return
         ActivityLog().info(f"[sylkserver] {what} of {account.id} set to {value or 'none'} ({source} of {account.id.domain}, was {current or 'not set'})")
 
+    def _NH_SIPAccountRegistrationDidSucceed(self, notification):
+        # A registration proves the network is back: a domain that could not be looked up
+        # (started offline) and has no cached configuration is looked up again now, not at
+        # the daily refresh -- otherwise a fresh profile started offline has no PGP (nor key
+        # escrow restore) for the whole run
+        account = notification.sender
+        if account is BonjourAccount():
+            return
+        domain = str(account.id.domain).lower()
+        if domain in self.unreachable and not self.configuration(domain):
+            ActivityLog().info(f'[sylkserver] {domain}: the account registered, looking up the SylkServer configuration again')
+            self.discover(domain, force=True)
+
     def _NH_SIPApplicationWillEnd(self, notification):
         if self._timer is not None:
             self._timer.stop()
@@ -366,7 +381,9 @@ class SylkServerDiscovery(object, metaclass=Singleton):
             except Exception as e:
                 activity.warning(f'[sylkserver] TXT record {name} not found: DNS and dns.google failed ({e}); keeping the cached configuration' if domain in self.configurations
                                  else f'[sylkserver] TXT record {name} not found: DNS and dns.google failed ({e})')
+                self.unreachable.add(domain)
                 return
+        self.unreachable.discard(domain)
         urls = [record.strip() for record in records if record.strip()]
         if not urls:
             activity.info(f'[sylkserver] {domain} publishes no SylkServer configuration (no TXT record {name}, by {how})')
@@ -387,6 +404,7 @@ class SylkServerDiscovery(object, metaclass=Singleton):
             configuration = response.json()
         except Exception as e:
             activity.warning(f'[sylkserver] Cannot download the configuration of {domain} from {url}: {e}' + ('; keeping the cached one' if domain in self.configurations else ''))
+            self.unreachable.add(domain)
             return
         if not isinstance(configuration, dict):
             activity.warning(f'[sylkserver] The configuration of {domain} from {url} is not a JSON object')

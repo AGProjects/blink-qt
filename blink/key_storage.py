@@ -58,6 +58,9 @@ KEY_OBJECT = 'pgp-private'
 KEY_PATH = f'{KEYS_NAMESPACE}/{KEY_OBJECT}'
 KEY_CONTENT_TYPE = 'application/json'
 
+AWAITING_TOKEN = 'waiting for the API token'
+KNOWN = ('present', 'absent', 'invalid')     # a new token cannot change these
+
 ANSWERED = ('present', 'absent', 'invalid', 'unsupported')
 
 
@@ -145,10 +148,16 @@ class KeyStorage(object, metaclass=Singleton):
 
     @run_in_thread('account-storage')
     def _fetch(self, account, etag):
-        from blink.account_storage import AccountStorage, storage_url
+        from blink.account_storage import AccountStorage, storage_url, _token
         try:
             if not storage_url(account):
                 self._answer(account, 'unsupported', reason='no SylkServer storage for the account')
+                return
+            if not _token(account):
+                # a fresh profile: no API token yet. A request now would be refused (401)
+                # and recorded as 'failed', which the key question takes for an answer --
+                # stay pending instead and fetch again when the token arrives
+                self._await_token(account)
                 return
             headers = {'If-None-Match': f'"{etag}"'} if etag else {}
             response = AccountStorage()._request(account, 'GET', KEY_PATH, headers=headers)
@@ -170,6 +179,22 @@ class KeyStorage(object, metaclass=Singleton):
         finally:
             with self.lock:
                 self.in_flight.discard(account.id)
+
+    def awaiting_token(self, account):
+        """Whether the fetch waits for the API token the account storage needs."""
+        with self.lock:
+            entry = self.entries.get(account.id)
+            return bool(entry) and entry['state'] == 'pending' and entry['reason'] == AWAITING_TOKEN
+
+    def _await_token(self, account):
+        with self.lock:
+            entry = self.entries.setdefault(account.id, dict(state=None, record=None, etag=None, device_id=None, modified=None, reason=None))
+            first = entry['reason'] != AWAITING_TOKEN
+            entry.update(state='pending', reason=AWAITING_TOKEN)
+        if first:
+            ActivityLog().info(f'[pgp] Key storage of {account.id}: waiting for the API token before reading the escrow')
+        from blink.account_storage import AccountStorage
+        AccountStorage()._ask_token(account, 'key escrow')
 
     def _answer(self, account, state, record=None, etag=None, device_id=None, reason=None, unchanged=False):
         note = reason if state == 'failed' else None
@@ -291,10 +316,13 @@ class KeyStorage(object, metaclass=Singleton):
         account = notification.sender
         if self.state(account) in (None, 'failed'):
             self.fetch(account, 'registered')
+        elif self.awaiting_token(account):
+            # the token request sent before (offline) may never have gone out
+            self._await_token(account)
 
     def _NH_CFGSettingsObjectDidChange(self, notification):
         account = notification.sender
         modified = getattr(notification.data, 'modified', None) or {}
         if 'sms.history_synchronization_token' in modified and isinstance(account, Account):
-            if self.state(account) in (None, 'failed'):
+            if self.state(account) not in KNOWN:
                 self.fetch(account, 'new API token')

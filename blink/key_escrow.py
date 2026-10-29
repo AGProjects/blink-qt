@@ -30,7 +30,8 @@ the addressbook.
 __all__ = ['SIPSIMPLE_ATTRIBUTES_NS',
            'read_escrow', 'escrow_write_blockers', 'escrow_write_action', 'escrow_is_missing',
            'escrow_record', 'write_escrow', 'foreign_escrow', 'escrow_password_check',
-           'reencrypt_escrow', 'install_keypair', 'restore_from_storage', 'strip_contact_escrow']
+           'reencrypt_escrow', 'install_keypair', 'restore_from_storage', 'strip_contact_escrow',
+           'record_key_provenance', 'key_provenance', 'key_created', 'reconcile_decision']
 
 import datetime
 import json
@@ -478,19 +479,21 @@ def install_keypair(account, private_key, public_key):
     return private_key_path
 
 
-def restore_from_storage(account):
+def restore_from_storage(account, replace=False):
     """Adopt the keypair escrowed in the account storage. Returns (ok, reason).
 
     Only where there is nothing to lose: an account that already holds a private
     key is left alone, because choosing between a local key and a different
     escrowed one decides which messages stay readable, and that is the user's call.
+    replace=True is that call made (reconcile_decision, or the user): the local key
+    is moved aside by install_keypair, never deleted.
 
     Every failure is a reason string, never an exception -- the caller is a
     notification handler and a sign-in must not fail because a backup did.
     """
     logger = BlinkLogger()
 
-    if _has_file(account.sms.private_key):
+    if not replace and _has_file(account.sms.private_key):
         return False, 'this device already holds a private key for %s' % account.id
 
     record = read_escrow(account)
@@ -527,6 +530,7 @@ def restore_from_storage(account):
         install_keypair(account, private_key, public_key)
     except Exception as e:
         return False, 'the escrow decrypted but could not be installed: %s' % e
+    record_key_provenance(account, 'restored')
 
     logger.log_info('Key escrow: restored the keypair of %s from the account storage, written %s by "%s"'
                     % (account.id, record.get('timestamp', '?'), record.get('device', '?')))
@@ -605,3 +609,135 @@ def _describe_key_file(path):
         return 'unreadable as a PGP key (%s)' % e
     uids = ', '.join(str(uid.name or uid.email or '') for uid in key.userids) or '-'
     return 'fingerprint %s uid "%s"' % (key.fingerprint, uids)
+
+
+# Where the local key came from, and what the account storage held when it did
+#
+# <keys directory>/<account>.keyinfo, written whenever this device installs a key:
+#
+#   {"fingerprint": ..., "source": "generated" | "restored" | "imported" | "kept",
+#    "escrow_known": true | false, "escrow_fingerprint": <fp> | null, "at": <iso>}
+#
+# escrow_known says whether the storage had answered when the key was installed;
+# escrow_fingerprint is the key it kept then (null: none). A key generated while
+# the storage had not answered was made blind: a different escrow found later is
+# the account's real key, not an older one to be replaced. "kept" records that
+# the user chose this device's key over an escrow, so the question is not asked
+# again for the same pair.
+
+def _provenance_path(account):
+    return '%s/%s.keyinfo' % (keys_directory(), account.id)
+
+
+def _fingerprint(armored):
+    pgpy = _pgpy()
+    if pgpy is None or not armored:
+        return None
+    try:
+        key, _ = pgpy.PGPKey.from_blob(armored.encode() if isinstance(armored, str) else armored)
+        return str(key.fingerprint).replace(' ', '').upper()
+    except Exception:
+        return None
+
+
+def _local_fingerprint(account):
+    return _fingerprint(_local_public_key(account))
+
+
+def record_key_provenance(account, source):
+    """Note where the key this device now holds came from, and what the storage held then."""
+    fingerprint = _local_fingerprint(account)
+    if not fingerprint:
+        return
+    state = _storage_state(account)
+    known = state in ('present', 'absent')
+    record = read_escrow(account) if state == 'present' else None
+    info = {'fingerprint': fingerprint,
+            'source': source,
+            'escrow_known': known,
+            'escrow_fingerprint': _fingerprint((record or {}).get('public_key')) if known else None,
+            'at': datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z'}
+    path = _provenance_path(account)
+    try:
+        with open(path + '.tmp', 'w') as fd:
+            json.dump(info, fd)
+        os.replace(path + '.tmp', path)
+    except OSError as e:
+        BlinkLogger().log_error('Cannot write %s: %s' % (path, e))
+        return
+    BlinkLogger().log_info('%s: key %s %s, the account storage %s'
+                           % (account.id, fingerprint[-16:], source,
+                              ('kept key %s' % info['escrow_fingerprint'][-16:]) if info['escrow_fingerprint']
+                              else ('kept no key' if known else 'had not answered (%s)' % (state or 'not asked'))))
+
+
+def key_provenance(account):
+    """The provenance of the key this device holds now, or None (unknown, or of another key)."""
+    try:
+        with open(_provenance_path(account)) as fd:
+            info = json.load(fd)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(info, dict) or info.get('fingerprint') != _local_fingerprint(account):
+        return None
+    return info
+
+
+def key_created(public_key):
+    """When an armored key was created (aware UTC datetime), or None."""
+    pgpy = _pgpy()
+    if pgpy is None or not public_key:
+        return None
+    try:
+        key, _ = pgpy.PGPKey.from_blob(public_key.encode() if isinstance(public_key, str) else public_key)
+        created = key.created
+    except Exception:
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=datetime.timezone.utc)
+    return created
+
+
+def reconcile_decision(account):
+    """What to do when this device holds a key and the account storage keeps an escrow of
+    another one: (action, reason, details), action one of
+
+      None      nothing to reconcile (same key, no key, no escrow), or already decided
+      'adopt'   install the escrowed key, the local one moved aside
+      'ask'     the user decides
+
+    The local key is kept only by the user ('ask'). In order:
+      1. a key this device generated before the storage answered was made blind:
+         the escrow is the account's key -> adopt
+      2. a key installed knowing that very escrow (the user kept it) -> already decided
+      3. otherwise (a key without provenance, or an escrow written after ours):
+         the key created later wins if it is the escrow's -> adopt, else ask
+    """
+    ours = _local_public_key(account)
+    record = read_escrow(account)
+    if not _has_file(account.sms.private_key) or ours is None or record is None or not record.get('public_key'):
+        return None, None, None
+    local_fp = _fingerprint(ours)
+    escrow_fp = _fingerprint(record.get('public_key'))
+    if not local_fp or not escrow_fp or local_fp == escrow_fp:
+        return None, None, None
+
+    local_created = key_created(ours)
+    escrow_created = key_created(record.get('public_key'))
+    info = key_provenance(account)
+    details = {'local_fingerprint': local_fp, 'escrow_fingerprint': escrow_fp,
+               'local_created': local_created, 'escrow_created': escrow_created,
+               'escrow_timestamp': record.get('timestamp'), 'escrow_device': record.get('device'),
+               'provenance': info}
+
+    if info and info.get('source') == 'generated' and not info.get('escrow_known'):
+        return 'adopt', 'the key of this device was generated before the account storage had answered', details
+    if info and info.get('escrow_known') and info.get('escrow_fingerprint') == escrow_fp:
+        return None, 'the key of this device was installed knowing the escrow of key %s' % escrow_fp[-16:], details
+    if local_created and escrow_created:
+        if escrow_created > local_created:
+            return 'adopt', 'the escrowed key is newer (created %s, the key of this device %s)' % (
+                escrow_created.strftime('%Y-%m-%d'), local_created.strftime('%Y-%m-%d')), details
+        return 'ask', 'the key of this device is newer (created %s, the escrowed key %s)' % (
+            local_created.strftime('%Y-%m-%d'), escrow_created.strftime('%Y-%m-%d')), details
+    return 'ask', 'the creation date of a key could not be read', details
