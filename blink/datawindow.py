@@ -6,7 +6,8 @@ metadata sidecar, ...), contact and year/month/day, look at any one of them,
 and remove a selection here and from the journal on the server
 (blink.data_manage). File Transfers: the same drill down over the file
 transfers whose file is on the server and not on this computer, and Download
-for the selection. Import from device and Export to device: history copied
+for the selection. Contacts: the disk space the files of the file transfers take here,
+per contact, type and age (blink.data_usage), and Delete to free it, the messages kept. Import from device and Export to device: history copied
 between devices of the account (blink.data_devices). Devices: the devices
 that use the account, as the server records them (blink.account_devices).
 
@@ -26,7 +27,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from functools import partial
 
-from application.notification import IObserver, NotificationCenter
+from application.notification import IObserver, NotificationCenter, NotificationData
 from application.python import Null
 from zope.interface import implementer
 
@@ -44,6 +45,8 @@ from blink.data_manage import (with_related, CATEGORY_LABELS, ENCRYPTED, bulk_de
                                aggregate_days, build_rows, count_by, remove_from_journal, row_label, select, type_label,
                                DOWNLOADABLE, FAILED, FILE_KINDS, build_file_rows, scan_transfer_storage, status_label,
                                COMPACTION_RULES, JournalScanError, compaction_content_types, compaction_ids, compaction_rule, contact_breakdown, purge_journal, scan_journal)
+from blink.data_usage import (AGES, LEFTOVER, ON_SERVER_TOO, age_label, build_local_rows, files_purge_payload, local_status_label, remove_local_files, scan_local_folders,
+                              select_local, size_by, total_size)
 from blink.history import MessageHistory
 from blink.message_envelopes import this_device_id
 from blink.messages import MessageManager
@@ -1692,6 +1695,498 @@ class FileTransfersPanel(QWidget):
             self._ended(False, translate('data_window', 'cannot decrypt: %s') % getattr(notification.data, 'error', ''))
 
 
+class _SizeItem(QTreeWidgetItem):
+    """A row of the Contacts list that sorts its Time and Size columns by value, not by text."""
+
+    def __lt__(self, other):
+        column = self.treeWidget().sortColumn() if self.treeWidget() is not None else 0
+        mine, theirs = self.data(column, Qt.ItemDataRole.UserRole + 1), other.data(column, Qt.ItemDataRole.UserRole + 1)
+        if mine is not None and theirs is not None:
+            return mine < theirs
+        return super().__lt__(other)
+
+
+class ContactsPanel(QWidget):
+    """Disk space taken by the files of the file transfers, per contact (blink.data_usage): contacts,
+    types and ages listed largest first, each narrowed by the others, and Delete for the whole
+    selection. Only the files go: the messages stay, and a file the server still has can be downloaded
+    again from the conversation. The other devices of a SylkServer account are told the criteria
+    (application/sylk-files-purge) and remove the same files on their own disks."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.accounts = []          # [(account id, transfers)]
+        self.account_id = None
+        self.rows = []              # data_usage.LocalRow of the account
+        self.kind = None
+        self.action = None          # the status: also on the server, only here, leftover
+        self.contact = None
+        self.age = None             # older than so many days
+        self.use_devices = True     # the user's choice, applied when the account replicates to other devices
+        self.announced = False      # the last purge was told to the other devices
+        self.loading = False
+        self.loaded = False
+        self.busy = False
+        self.cancelled = False
+        self.progress = None
+        self.result = None
+        self.error = None
+        self.seq = 0
+        self._build()
+        self.refresh_controls()
+
+    # -- the panel ---------------------------------------------------------------
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        layout.addLayout(form)
+
+        self.account_box = QComboBox(self)
+        self.account_box.activated.connect(self._SH_AccountChanged)
+        form.addRow(translate('data_window', 'Account'), self.account_box)
+
+        self.contact_box = QComboBox(self)
+        self.contact_box.setMaxVisibleItems(30)
+        self.contact_box.activated.connect(self._SH_ContactChanged)
+        form.addRow(translate('data_window', 'Contact'), self.contact_box)
+
+        self.kind_box = QComboBox(self)
+        self.kind_box.activated.connect(self._SH_KindChanged)
+        form.addRow(translate('data_window', 'Type'), self.kind_box)
+
+        self.age_box = QComboBox(self)
+        self.age_box.activated.connect(self._SH_AgeChanged)
+        form.addRow(translate('data_window', 'Age'), self.age_box)
+
+        self.action_box = QComboBox(self)
+        self.action_box.activated.connect(self._SH_ActionChanged)
+        form.addRow(translate('data_window', 'Status'), self.action_box)
+
+        self.headline = QLabel(self)
+        self.headline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.headline.setWordWrap(True)
+        font = QFont(self.headline.font())
+        font.setBold(True)
+        self.headline.setFont(font)
+        layout.addWidget(self.headline)
+
+        self.preview = QTreeWidget(self)
+        self.preview.setRootIsDecorated(False)
+        self.preview.setUniformRowHeights(True)
+        self.preview.setAlternatingRowColors(True)
+        self.preview.setHeaderLabels([translate('data_window', 'Time'), translate('data_window', 'Direction'), translate('data_window', 'Contact'),
+                                      translate('data_window', 'Type'), translate('data_window', 'Size'), translate('data_window', 'Status'),
+                                      translate('data_window', 'File')])
+        header = self.preview.header()
+        for column in range(6):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(True)
+        self.preview.setSortingEnabled(True)
+        self.preview.sortByColumn(4, Qt.SortOrder.DescendingOrder)
+        self.preview.currentItemChanged.connect(self._SH_PreviewItemChanged)
+
+        self.detail = QPlainTextEdit(self)
+        self.detail.setReadOnly(True)
+        self.detail.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.detail.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.detail.setPlaceholderText(translate('data_window', 'Click a file to see where it is'))
+
+        self.folder_button = QPushButton(translate('data_window', 'Show in Folder'), self)
+        self.folder_button.clicked.connect(self._SH_FolderClicked)
+        self.folder_button.setVisible(False)
+        detail_box = QWidget(self)
+        detail_layout = QVBoxLayout(detail_box)
+        detail_layout.setContentsMargins(0, DETAIL_GAP, 0, 0)
+        detail_layout.addWidget(self.detail, 1)
+        detail_buttons = QHBoxLayout()
+        detail_buttons.addStretch(1)
+        detail_buttons.addWidget(self.folder_button)
+        detail_layout.addLayout(detail_buttons)
+
+        self.splitter = QSplitter(Qt.Orientation.Vertical, self)
+        self.splitter.addWidget(self.preview)
+        self.splitter.addWidget(detail_box)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 1)
+        layout.addWidget(self.splitter, 1)
+
+        self.devices_box = QCheckBox(translate('data_window', 'Also delete them from my other devices'), self)
+        self.devices_box.setChecked(True)
+        self.devices_box.clicked.connect(self._SH_DevicesClicked)
+        self.devices_box.setToolTip(translate('data_window', 'Your other devices remove the files of the same messages from their disks; the messages stay everywhere'))
+        layout.addWidget(self.devices_box)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
+
+        self.status = QLabel(self)
+        self.status.setWordWrap(True)
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status)
+
+        buttons = QHBoxLayout()
+        self.refresh_button = QPushButton(translate('data_window', 'Refresh'), self)
+        self.refresh_button.clicked.connect(lambda: self.refresh())
+        buttons.addWidget(self.refresh_button)
+        self.reset_button = QPushButton(translate('data_window', 'Reset filters'), self)
+        self.reset_button.clicked.connect(self._SH_ResetClicked)
+        buttons.addWidget(self.reset_button)
+        buttons.addStretch(1)
+        self.stop_button = QPushButton(translate('data_window', 'Stop'), self)
+        self.stop_button.clicked.connect(self._SH_StopClicked)
+        buttons.addWidget(self.stop_button)
+        self.delete_button = QPushButton(self)
+        self.delete_button.clicked.connect(self._SH_DeleteClicked)
+        buttons.addWidget(self.delete_button)
+        layout.addLayout(buttons)
+
+    # -- what is selected ----------------------------------------------------------
+
+    def _announceable(self):
+        """Whether the purge can be told to the other devices: a SylkServer account, and not leftovers only."""
+        return bool(self.account_id) and self.action != LEFTOVER and _replicating_account(self.account_id) is not None
+
+    def selection(self):
+        return select_local(self.rows, self.kind, self.action, self.contact, self.age)
+
+    @staticmethod
+    def _sized(title, size, files):
+        return f'{title}  ({format_size(size) or "0 bytes"}, {files})'
+
+    def refresh_controls(self):
+        idle = not self.busy and not self.loading
+        fill = ManagePanel._fill
+
+        fill(self.account_box, [(account_id, mangled_account_label(account_id)) for account_id, count in self.accounts], self.account_id)
+        self.account_box.setEnabled(idle and len(self.accounts) > 1)
+
+        # each filter lists what is left once every other filter is applied, largest first
+        scoped = select_local(self.rows, self.kind, self.action, older_than=self.age)
+        contacts = size_by(scoped, 'contact')
+        items = [(None, self._sized(translate('data_window', 'All contacts'), total_size(scoped), len(scoped)))]
+        items += [(contact, self._sized(mangled_uri(contact) or translate('data_window', '(no contact)'), size, files)) for contact, size, files in contacts]
+        fill(self.contact_box, items, self.contact)
+        self.contact_box.setEnabled(idle and bool(contacts))
+
+        scoped = select_local(self.rows, action=self.action, contact=self.contact, older_than=self.age)
+        kinds = size_by(scoped, 'type')
+        items = [(None, self._sized(translate('data_window', 'All types'), total_size(scoped), len(scoped)))]
+        items += [(kind, self._sized(type_label(kind), size, files)) for kind, size, files in kinds]
+        fill(self.kind_box, items, self.kind)
+        self.kind_box.setEnabled(idle and bool(kinds))
+
+        scoped = select_local(self.rows, self.kind, self.action, self.contact)
+        items = []
+        for days, label in AGES:
+            older = select_local(scoped, older_than=days)
+            if days is None or older or days == self.age:
+                items.append((days, self._sized(translate('data_window', label), total_size(older), len(older))))
+        fill(self.age_box, items, self.age)
+        self.age_box.setEnabled(idle and bool(scoped))
+
+        scoped = select_local(self.rows, self.kind, contact=self.contact, older_than=self.age)
+        statuses = size_by(scoped, 'action')
+        items = [(None, self._sized(translate('data_window', 'Any status'), total_size(scoped), len(scoped)))]
+        items += [(status, self._sized(translate('data_window', local_status_label(status)), size, files)) for status, size, files in statuses]
+        fill(self.action_box, items, self.action)
+        self.action_box.setEnabled(idle and (len(statuses) > 1 or self.action is not None))
+
+        selected = self.selection()
+        size = total_size(selected)
+        line = f'{type_label(self.kind) if self.kind else translate("data_window", "All files")} · {translate("data_window", age_label(self.age))}'
+        if self.action is not None:
+            line += f' · {translate("data_window", local_status_label(self.action))}'
+        if self.contact:
+            line += f' · {mangled_uri(self.contact)}'
+        if self.loading:
+            detail = translate('data_window', 'Measuring the files of the file transfers…')
+        elif not self.rows:
+            detail = translate('data_window', 'No file of a file transfer is stored on this computer')
+        else:
+            detail = translate('data_window', '%d files, %s') % (len(selected), format_size(size) or '0 bytes')
+            lost = [row for row in selected if row.action != ON_SERVER_TOO]
+            if lost:
+                detail += translate('data_window', ' (%d, %s, only here)') % (len(lost), format_size(total_size(lost)) or '0 bytes')
+            everything = total_size(self.rows)
+            if everything != size:
+                detail += translate('data_window', ' of %s in all') % format_size(everything)
+        self.headline.setText(f'{line}\n{detail}' if self.rows and not self.loading else detail)
+
+        if not self.busy:
+            self._fill_preview(selected if not self.loading else [])
+
+        if self.busy and self.progress:
+            done, total = self.progress
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setRange(0, max(total, 1))
+            self.progress_bar.setValue(done)
+        else:
+            self.progress_bar.setVisible(False)
+
+        if self.busy:
+            status = translate('data_window', 'Stopping…') if self.cancelled else (translate('data_window', 'Removing %d of %d…') % self.progress if self.progress else '')
+            color = None
+        elif self.error:
+            status, color = (f'{self.result}\n{self.error}' if self.result else self.error), '#e53935'
+        else:
+            status, color = self.result or '', None
+        self.status.setText(status)
+        self.status.setStyleSheet(f'color: {color};' if color else '')
+
+        announceable = self._announceable()
+        self.devices_box.setEnabled(idle and announceable)
+        self.devices_box.setChecked(self.use_devices and announceable)
+        if not self.account_id or _replicating_account(self.account_id) is None:
+            self.devices_box.setText(translate('data_window', 'Deleted on this computer only: this account has no SylkServer journal (Bonjour or another server)'))
+        elif self.action == LEFTOVER:
+            self.devices_box.setText(translate('data_window', 'Deleted on this computer only: leftovers belong to no message other devices know'))
+        else:
+            self.devices_box.setText(translate('data_window', 'Also delete them from my other devices'))
+
+        self.refresh_button.setEnabled(idle)
+        self.reset_button.setEnabled(idle and any(value is not None for value in (self.kind, self.action, self.contact, self.age)))
+        self.stop_button.setVisible(self.busy)
+        self.stop_button.setEnabled(self.busy and not self.cancelled)
+        self.delete_button.setText(translate('data_window', 'Delete %d Files (%s)…') % (len(selected), format_size(size) or '0 bytes') if selected
+                                   else translate('data_window', 'Delete Files'))
+        self.delete_button.setEnabled(idle and bool(selected))
+        self.delete_button.setToolTip(translate('data_window', 'Remove the files of the selection from this computer; the messages stay'))
+
+    def _fill_preview(self, selected):
+        self.preview.blockSignals(True)
+        self.preview.setSortingEnabled(False)
+        self.preview.clear()
+        self.preview.blockSignals(False)
+        self.detail.clear()
+        self.folder_button.setVisible(False)
+        largest = sorted(selected, key=lambda row: (row.size, row.timestamp), reverse=True)[:PREVIEW_ROWS]
+        items = []
+        for row in largest:
+            item = _SizeItem([_local_time(row.timestamp), row.direction, mangled_uri(row.contact) or '', type_label(row.type),
+                              format_size(row.size), translate('data_window', local_status_label(row.action)), row.name])
+            item.setData(0, Qt.ItemDataRole.UserRole, row.folder)
+            item.setData(0, Qt.ItemDataRole.UserRole + 1, row.time.timestamp())
+            item.setData(4, Qt.ItemDataRole.UserRole + 1, row.size)
+            item.setTextAlignment(4, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            items.append(item)
+        self.preview.addTopLevelItems(items)
+        self.preview.setSortingEnabled(True)
+        if len(selected) > PREVIEW_ROWS:
+            rest = sorted(selected, key=lambda row: (row.size, row.timestamp), reverse=True)[PREVIEW_ROWS:]
+            self.preview.setToolTip(translate('data_window', 'The %d largest are listed; %d smaller (%s) are in the selection too')
+                                    % (PREVIEW_ROWS, len(rest), format_size(total_size(rest))))
+        else:
+            self.preview.setToolTip('')
+
+    def _SH_PreviewItemChanged(self, current, previous):
+        folder = current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        row = next((row for row in self.rows if row.folder == folder), None) if folder is not None else None
+        self.folder_button.setVisible(row is not None)
+        if row is None:
+            self.detail.clear()
+            return
+        fields = [('file', row.name), ('size', format_size(row.size)), ('status', translate('data_window', local_status_label(row.action))),
+                  ('contact', row.contact), ('time', _local_time(row.timestamp)), ('direction', row.direction), ('message_id', row.message_id),
+                  ('url', row.url), ('until', row.until), ('folder', row.folder)]
+        lines = [f'{name}: {value}' for name, value in fields if value not in (None, '')]
+        lines += ['', '-- files --'] + [f'{format_size(size):>10}  {name}' for name, size in row.files]
+        self.detail.setPlainText(mangled_text('\n'.join(lines), uri=row.contact))
+
+    def _SH_FolderClicked(self):
+        current = self.preview.currentItem()
+        folder = current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        if folder and os.path.isdir(folder):
+            from PyQt6.QtCore import QUrl
+            from PyQt6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+
+    # -- loading -------------------------------------------------------------------
+
+    def refresh(self, keep_status=False):
+        if self.busy:
+            return
+        self.loading = True
+        if not keep_status:
+            self.error = self.result = None
+        self.refresh_controls()
+        MessageHistory().data_file_transfer_accounts(self._got_accounts)
+
+    @run_in_gui_thread
+    def _got_accounts(self, accounts):
+        self.accounts = accounts
+        ids = [account_id for account_id, count in accounts]
+        if self.account_id not in ids:
+            self.account_id = ids[0] if ids else None
+            self.kind = self.action = self.contact = self.age = None
+        if self.account_id is None:
+            self.rows = []
+            self.loading = False
+            self.refresh_controls()
+            return
+        self._load(self.account_id)
+
+    def _load(self, account_id):
+        self.seq += 1
+        self.loading = True
+        self.refresh_controls()
+        MessageHistory().data_file_transfers(account_id, partial(self._transfers_read, self.seq, account_id))
+
+    def _transfers_read(self, seq, account_id, db_rows):
+        # in the db thread: the folders are measured in a thread of their own
+        self._measure(seq, account_id, db_rows)
+
+    @run_in_thread('data-manage')
+    def _measure(self, seq, account_id, db_rows):
+        started = time.monotonic()
+        folders = scan_local_folders(ApplicationData.get('file_transfers'), ApplicationData.get('downloads'), account_id)
+        rows = build_local_rows(db_rows, folders)
+        leftovers = sum(1 for row in rows if row.action == LEFTOVER)
+        _log(f'{len(rows)} file transfer folders of {account_id} take {total_size(rows)} bytes here ({leftovers} without a message)'
+             f' in {time.monotonic() - started:.1f}s')
+        self._got_rows(seq, rows)
+
+    @run_in_gui_thread
+    def _got_rows(self, seq, rows):
+        if seq != self.seq:
+            return
+        self.rows = rows
+        self.loading = False
+        self.loaded = True
+        # keep what was chosen as long as there is something left in it
+        if self.contact is not None and not select_local(rows, contact=self.contact):
+            self.contact = None
+        if self.kind is not None and not select_local(rows, self.kind, contact=self.contact):
+            self.kind = None
+        if self.action is not None and not select_local(rows, self.kind, self.action, self.contact):
+            self.action = None
+        self.refresh_controls()
+
+    # -- the controls ----------------------------------------------------------------
+
+    def _SH_AccountChanged(self, index):
+        account_id = self.account_box.itemData(index)
+        if account_id == self.account_id:
+            return
+        self.account_id = account_id
+        self.kind = self.action = self.contact = self.age = None
+        self.result = self.error = None
+        self._load(account_id)
+
+    def _SH_ContactChanged(self, index):
+        self.contact = self.contact_box.itemData(index)
+        self.result = None
+        self.refresh_controls()
+
+    def _SH_KindChanged(self, index):
+        self.kind = self.kind_box.itemData(index)
+        self.result = None
+        self.refresh_controls()
+
+    def _SH_AgeChanged(self, index):
+        self.age = self.age_box.itemData(index)
+        self.result = None
+        self.refresh_controls()
+
+    def _SH_ActionChanged(self, index):
+        self.action = self.action_box.itemData(index)
+        self.result = None
+        self.refresh_controls()
+
+    def _SH_ResetClicked(self):
+        self.kind = self.action = self.contact = self.age = None
+        self.result = None
+        self.refresh_controls()
+
+    def _SH_DevicesClicked(self, checked):
+        self.use_devices = checked
+
+    # -- the removal -------------------------------------------------------------------
+
+    def _selection_text(self):
+        return (f'{type_label(self.kind) if self.kind else "all types"}, {age_label(self.age).lower()}, {local_status_label(self.action).lower()},'
+                f' {self.contact or "all contacts"}')
+
+    def _SH_DeleteClicked(self):
+        selected = self.selection()
+        if not selected or self.busy or self.loading:
+            return
+        size = total_size(selected)
+        lost = [row for row in selected if row.action != ON_SERVER_TOO]
+        text = translate('data_window', 'Delete %d files (%s) from this computer?') % (len(selected), format_size(size) or '0 bytes')
+        kept = len(selected) - len(lost)
+        if kept:
+            text += '\n\n' + translate('data_window', '%d of them are still on the server: their messages stay, and a click in the conversation downloads them again.') % kept
+        if lost:
+            text += '\n\n' + translate('data_window', '%d of them (%s) are only on this computer (expired or gone from the server, sent over MSRP, or left without a message): they are lost for good.') \
+                % (len(lost), format_size(total_size(lost)) or '0 bytes')
+        announce = self.devices_box.isChecked() and self._announceable()
+        if announce:
+            text += '\n\n' + translate('data_window', 'Your other devices are asked to remove the files of the same messages too.')
+        box = QMessageBox(QMessageBox.Icon.Warning if lost else QMessageBox.Icon.Question, translate('data_window', 'Delete Files'), text,
+                          QMessageBox.StandardButton.Cancel, self)
+        delete = box.addButton(translate('data_window', 'Delete'), QMessageBox.ButtonRole.DestructiveRole)
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        if box.clickedButton() is not delete:
+            return
+        self.busy = True
+        self.cancelled = False
+        self.result = self.error = None
+        self.progress = (0, len(selected))
+        self.refresh_controls()
+        _log(f'Deleting {len(selected)} files ({size} bytes, {len(lost)} only here) of {self.account_id} from this computer: {self._selection_text()}')
+        # the other devices are told first, as for a bulk delete: whatever happens here next
+        self.announced = False
+        if announce:
+            payload = files_purge_payload(self.kind, self.action, self.contact, self.age, this_device_id())
+            account = _replicating_account(self.account_id)
+            self.announced = payload is not None and account is not None and MessageManager().send_files_purge(account, payload)
+        self._remove(self.account_id, selected)
+
+    def _SH_StopClicked(self):
+        self.cancelled = True
+        self.refresh_controls()
+
+    @run_in_thread('data-manage')
+    def _remove(self, account_id, rows):
+        roots = [ApplicationData.get('file_transfers'), ApplicationData.get('downloads')]
+        message_ids, removed, freed, errors = remove_local_files(rows, roots, stop=lambda: self.cancelled, progress=self._progress)
+        for path, error in errors[:20]:
+            ActivityLog().warning(f'[data] Cannot remove {path}: {error}')
+        _log(f'Deleted {removed} files ({freed} bytes) of {len(rows)} file transfers of {account_id} from this computer'
+             + (f', {len(errors)} errors' if errors else '') + (' (stopped)' if self.cancelled else ''))
+        self._removed(message_ids, removed, freed, len(rows), errors)
+
+    @run_in_gui_thread
+    def _progress(self, done, total):
+        self.progress = (done, total)
+        self.progress_bar.setRange(0, max(total, 1))
+        self.progress_bar.setValue(done)
+        if not self.cancelled:
+            self.status.setText(translate('data_window', 'Removing %d of %d…') % (done, total))
+
+    @run_in_gui_thread
+    def _removed(self, message_ids, removed, freed, total, errors):
+        if message_ids:
+            NotificationCenter().post_notification('BlinkLocalFilesDidRemove', sender=self, data=NotificationData(message_ids=message_ids))
+        stopped = self.cancelled
+        self.busy = False
+        self.cancelled = False
+        self.progress = None
+        self.result = translate('data_window', 'Deleted %d files, %s freed') % (removed, format_size(freed) or '0 bytes') + (translate('data_window', ', stopped') if stopped else '')
+        if self.announced:
+            self.result += translate('data_window', '; your other devices were asked to delete the same')
+        if errors:
+            shown = '; '.join(f'{os.path.basename(path)}: {error}' for path, error in errors[:3])
+            self.error = translate('data_window', '%d could not be removed: %s') % (len(errors), shown)
+        else:
+            self.error = None
+        self.refresh(keep_status=True)
+
+
 class DataWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
@@ -1701,6 +2196,8 @@ class DataWindow(QWidget):
         self.tabs = QTabWidget(self)
         self.manage_panel = ManagePanel(self.tabs)
         self.tabs.addTab(self.manage_panel, translate('data_window', 'Messages'))
+        self.contacts_panel = ContactsPanel(self.tabs)
+        self.tabs.addTab(self.contacts_panel, translate('data_window', 'Contacts'))
         self.files_panel = FileTransfersPanel(self.tabs)
         self.tabs.addTab(self.files_panel, translate('data_window', 'Server Files'))
         self.compact_panel = CompactJournalPanel(self.tabs)
@@ -1726,6 +2223,8 @@ class DataWindow(QWidget):
         self.manage_panel.refresh()
         if self.tabs.currentWidget() is self.files_panel:
             self.files_panel.refresh()
+        if self.tabs.currentWidget() is self.contacts_panel and not self.contacts_panel.busy:
+            self.contacts_panel.refresh(keep_status=True)
         if self.tabs.currentWidget() is self.devices_panel and not self.devices_panel.loading:
             self.devices_panel.refresh()
 
@@ -1746,6 +2245,8 @@ class DataWindow(QWidget):
         # the storage is listed when the tab is looked at, not every time the window opens
         if self.tabs.widget(index) is self.files_panel and not self.files_panel.busy and not self.files_panel.loading:
             self.files_panel.refresh(keep_status=True)
+        if self.tabs.widget(index) is self.contacts_panel and not self.contacts_panel.busy and not self.contacts_panel.loading:
+            self.contacts_panel.refresh(keep_status=True)
 
     def closeEvent(self, event):
         ui_settings().setValue('data_window/geometry', self.saveGeometry())

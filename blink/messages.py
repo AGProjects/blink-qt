@@ -46,6 +46,7 @@ from sipsimple.util import ISOTimestamp
 from blink.configuration.datatypes import File
 from blink.file_transfer import FILE_TRANSFER_PATH, base_url_from_transfer, derive_base_url, upload_url
 from blink.message_envelopes import API_MESSAGES_BULK_DELETE_CONTENT_TYPE, DATA_EXPORT_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE
+from blink.message_envelopes import API_FILES_PURGE_CONTENT_TYPE, FILES_PURGE_CONTENT_TYPE
 from blink.message_envelopes import ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, call_recording_envelope, FILE_TRANSFER_CONTENT_TYPES, file_transfer_envelope, LOCATION_CONTENT_TYPE, METADATA_CONTENT_TYPE, conversation_read_envelope, conversation_read_marker, foreign_call_record, metadata_link, this_device_id
 from blink.location import storage_fields as location_storage_fields
 from blink import key_escrow
@@ -977,7 +978,7 @@ class MessageManager(object, metaclass=Singleton):
         # who we are: the server records the devices that use the account (SylkServer devices.py)
         from blink.account_storage import device_headers
         outgoing_message = OutgoingMessage(account, contact, 'Token request', 'application/sylk-api-token', use_cpim=False,
-                                           extra_sip_headers=[Header(name, value) for name, value in device_headers().items()])
+                                           extra_sip_headers=[Header(name, value) for name, value in device_headers(http=False).items()])
         self._send_message(outgoing_message)
 
     def _retry_token_request(self, account, reason):
@@ -1457,7 +1458,7 @@ class MessageManager(object, metaclass=Singleton):
     journal_progress_every = 250    # entries between progress lines, and between short pauses
     # events of a snapshot have nothing to act on; public keys are asked from the server when the
     # whole snapshot is in (_fetch_public_keys_once), not taken from old journal entries
-    journal_snapshot_skipped = frozenset(('receipt', 'conversation_remove', 'message_remove', 'messages_bulk_delete', 'conversation_read', 'public_key'))
+    journal_snapshot_skipped = frozenset(('receipt', 'conversation_remove', 'message_remove', 'messages_bulk_delete', 'files_purge', 'conversation_read', 'public_key'))
     journal_throttle = 0.05         # seconds to pause, so the GUI and the db thread keep up
 
     def _apply_snapshot_page(self, account, cache, name, contacts, progress=None, **pace):
@@ -2085,6 +2086,9 @@ class MessageManager(object, metaclass=Singleton):
     def _journal_messages_bulk_delete(self, account, message, content_type, first_sync, contacts):
         return self.apply_messages_bulk_delete(account, message.get('content'), 'from the journal')
 
+    def _journal_files_purge(self, account, message, content_type, first_sync, contacts):
+        return self.apply_files_purge(account, message.get('content'), 'from the journal')
+
     def _journal_conversation_read(self, account, message, content_type, first_sync, contacts):
         # the conversation is in the payload; the entry's own contact is the fallback
         contact, device = conversation_read_marker(message.get('content'))
@@ -2700,6 +2704,12 @@ class MessageManager(object, metaclass=Singleton):
             # a Data manager deletion on another device of ours (the journal brings it again: applying twice erases nothing more)
             if account is not BonjourAccount():
                 self.apply_messages_bulk_delete(account, body, 'live')
+            return
+
+        if content_type.lower() == FILES_PURGE_CONTENT_TYPE:
+            # files removed on another device of ours to free disk space (the journal brings it again: applying twice removes nothing more)
+            if account is not BonjourAccount():
+                self.apply_files_purge(account, body, 'live')
             return
 
         if content_type.lower() == DATA_EXPORT_CONTENT_TYPE:
@@ -3470,6 +3480,36 @@ class MessageManager(object, metaclass=Singleton):
         # no conversation (session) carries it: sent straight to the account's proxy, or OutgoingMessage.send drops it
         self._send_message(OutgoingMessage(account, contact, json.dumps(payload), API_MESSAGES_BULK_DELETE_CONTENT_TYPE, use_cpim=False, sessionless=True))
         return True
+
+    def send_files_purge(self, account, payload):
+        """Ask the other devices of the account to remove the files a purge in the Data manager removed
+        here, the messages kept (docs/messaging/files-purge.md). Sent to the server API from the account
+        to itself, as a bulk delete is: journalled and sent to every device, this one included (skipped
+        by its device id)."""
+        if account is BonjourAccount() or not account.enabled:
+            return False
+        from blink.contacts import URIUtils
+        from blink.data_usage import files_purge_criteria, purge_label
+        ActivityLog().info(f'[data] Announcing the files purge {payload["files_purge_id"]} ({purge_label(files_purge_criteria(payload))}) to the other devices of {account.id}')
+        contact, contact_uri = URIUtils.find_contact(account.uri)
+        self._send_message(OutgoingMessage(account, contact, json.dumps(payload), API_FILES_PURGE_CONTENT_TYPE, use_cpim=False, sessionless=True))
+        return True
+
+    def apply_files_purge(self, account, body, source):
+        """Remove the files a purge on another device of the account asks for. Returns the journal outcome."""
+        from blink.data_usage import files_purge_criteria, purge_label
+        from blink.history import MessageHistory
+        payload = parse_payload(body)
+        criteria = files_purge_criteria(payload)
+        if criteria is None:
+            ActivityLog().warning(f'[data] Files purge for {account.id} ({source}) ignored, its criteria are missing or wrong: {str(body)[:300]!r}')
+            return 'failed'
+        if payload.get('device_id') == this_device_id():
+            log.debug(f'Ignoring our own files purge {payload.get("files_purge_id")}')
+            return 'own files purges'
+        device = payload.get('device_id') or 'another device'
+        MessageHistory().purge_files(str(account.id), criteria, source=f'on request of {device}, {source}', label=purge_label(criteria))
+        return 'files purges'
 
     # Data export and import between devices of the account (blink.data_import, blink.data_export)
 

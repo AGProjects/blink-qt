@@ -5,7 +5,8 @@ what auto_fetch_reason allows (pictures to 8 MiB, PDFs to 10 MiB, videos to 20
 MiB and audio to 10 MiB when a week old at most; other files never). Skipped too: a file already
 here, one from a contact not granted auto_download_media (shared contact attribute,
 false by default; one's own files always), one that failed before (its folder keeps .failure.json; a click retries
-it), one being fetched, and an encrypted one without a key to open it.
+it), one removed in the Data window to free disk space (.removed.json), one being fetched, and an
+encrypted one without a key to open it.
 Downloads go through SessionManager.get_file_from_url, which also decrypts;
 progress is kept here (progress(id) -> 0..1 or None) for the bubble to show,
 and the row is refreshed when the file is in place.
@@ -148,6 +149,10 @@ class AutoFetcher(QObject):
         if automatic and os.path.exists(failure):
             self.requested.add(item.id)
             return          # failed before: only a click tries again
+        from blink.file_transfer import REMOVED_MARKER
+        if automatic and os.path.exists(os.path.join(os.path.dirname(file.name), REMOVED_MARKER)):
+            self.requested.add(item.id)
+            return          # removed here to free disk space: only a click fetches it again
         self.requested.add(item.id)
         self._files[file] = item.id
         self._progress[item.id] = 0.0

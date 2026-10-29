@@ -16,7 +16,7 @@ from collections import Counter, OrderedDict, defaultdict
 
 from blink.message_envelopes import (ADDRESSBOOK_UPDATE_CONTENT_TYPE, CALL_CONTENT_TYPE, CONTACT_UPDATE_CONTENT_TYPE, CONVERSATION_READ_CONTENT_TYPE,
                                      CONVERSATION_REMOVE_CONTENT_TYPE, DATA_EXPORT_CONTENT_TYPE, FILE_TRANSFER_CONTENT_TYPE, LOCATION_CONTENT_TYPE,
-                                     MESSAGE_REMOVE_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE, METADATA_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE, PGP_PUBLIC_KEY_CONTENT_TYPE,
+                                     MESSAGE_REMOVE_CONTENT_TYPE, MESSAGES_BULK_DELETE_CONTENT_TYPE, FILES_PURGE_CONTENT_TYPE, METADATA_CONTENT_TYPE, PGP_PRIVATE_KEY_CONTENT_TYPE, PGP_PUBLIC_KEY_CONTENT_TYPE,
                                      RCS_FILE_TRANSFER_CONTENT_TYPE, STORAGE_CHANGED_CONTENT_TYPE)
 
 
@@ -63,6 +63,7 @@ def journal_action(content_type):
     'conversation_remove'  hide a conversation up to the removal time
     'message_remove'       hide one message (kept until it arrives if it is not stored yet)
     'messages_bulk_delete' erase what matches the criteria of a Data manager deletion on another device
+    'files_purge'          remove the files (not the messages) that match a Data manager purge on another device
     'conversation_read'    mark a conversation read
     'public_key'           save a peer's PGP public key
     'file_transfer'        store a Sylk file transfer
@@ -81,6 +82,8 @@ def journal_action(content_type):
         return 'message_remove'
     if content_type == MESSAGES_BULK_DELETE_CONTENT_TYPE:
         return 'messages_bulk_delete'
+    if content_type == FILES_PURGE_CONTENT_TYPE:
+        return 'files_purge'
     if content_type == CONVERSATION_READ_CONTENT_TYPE:
         return 'conversation_read'
     if content_type == PGP_PUBLIC_KEY_CONTENT_TYPE:

@@ -22,7 +22,7 @@ from urllib.parse import unquote
 
 __all__ = ['FILE_TRANSFER_PATH', 'MAX_ENCRYPT_BYTES', 'upload_url', 'normalized_url', 'base_url_from_transfer', 'derive_base_url',
            'FAILURE_PERMANENT', 'FAILURE_TRANSIENT', 'FAILURE_GONE', 'GONE_STATUS', 'safe_component', 'transfer_filename',
-           'transfer_folder', 'classify_download_failure']
+           'transfer_folder', 'classify_download_failure', 'REMOVED_MARKER']
 
 
 # The path SylkServer serves file transfers from, appended to the API root.
@@ -111,6 +111,11 @@ def transfer_filename(name):
 
 def transfer_folder(root, account, peer, transfer_id):
     return os.path.join(root, safe_component(account), safe_component(peer), safe_component(transfer_id))
+
+
+# Left in a transfer's folder when its file was removed to free disk space (the Data window's Contacts
+# tab): the message stays, the file is not fetched again on its own, only when asked for.
+REMOVED_MARKER = '.removed.json'
 
 
 # Whether asking for the same transfer again could give a different answer. GONE: the server

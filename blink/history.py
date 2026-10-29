@@ -868,6 +868,8 @@ class DownloadHistory(object, metaclass=Singleton):
             return
         log.info(f'== Removing file from cache: {file.file_id} {cached_file}')
         unlink(cached_file)
+        from blink.file_transfer import REMOVED_MARKER
+        unlink(os.path.join(os.path.dirname(cached_file), REMOVED_MARKER))
         try:
             os.rmdir(os.path.dirname(cached_file))
         except OSError:
@@ -2104,6 +2106,41 @@ class MessageHistory(object, metaclass=Singleton):
             ids = self._with_related_rows(account_id, ids)
         removed = self._erase_rows(account_id, ids, files=files, source=source) if ids else 0
         ActivityLog().info(f'[data] Bulk delete of {removed} rows of {account_id} ({label or criteria})' + (f' {source}' if source else ''))
+
+    @run_in_thread('db')
+    def purge_files(self, account_id, criteria, source=None, label=None):
+        """Remove from this computer the files of the file transfers of an account that match a purge from
+        another device (blink.data_usage.files_purge_criteria), the messages kept."""
+        table = Message.sqlmeta.table
+        types = ', '.join(self.db.sqlrepr(content_type) for content_type in FILE_TRANSFER_CONTENT_TYPES)
+        where = [f'account_id = {self.db.sqlrepr(str(account_id))}', f'content_type in ({types})', NOT_DELETED_SQL]
+        if criteria.get('contact'):
+            keys = self._conversation_keys(criteria['contact'])
+            where.append(f"remote_uri in ({', '.join(self.db.sqlrepr(key) for key in keys)})")
+        try:
+            where.append(f'timestamp < {self.db.sqlrepr(self._storage_time(criteria["until"]))}')
+            if criteria.get('from'):
+                where.append(f'timestamp >= {self.db.sqlrepr(self._storage_time(criteria["from"]))}')
+            rows = self.db.queryAll(f"select id, message_id, remote_uri, date(timestamp, 'localtime'), timestamp, direction, category, content"
+                                    f" from {table} where {' and '.join(where)}")
+        except Exception as e:
+            ActivityLog().error(f'[db] Files purge for {account_id} failed: {e}')
+            return
+        self._purge_files_on_disk(account_id, criteria, list(rows), source, label)
+
+    @run_in_thread('file-io')
+    def _purge_files_on_disk(self, account_id, criteria, db_rows, source, label):
+        from blink.data_usage import build_local_rows, purge_matches, remove_local_files, scan_local_folders
+        roots = [ApplicationData.get('file_transfers'), ApplicationData.get('downloads')]
+        folders = scan_local_folders(roots[0], roots[1], account_id)
+        rows = purge_matches(build_local_rows(db_rows, folders), criteria)
+        message_ids, removed, freed, errors = remove_local_files(rows, roots) if rows else ([], 0, 0, [])
+        for path, error in errors[:20]:
+            ActivityLog().warning(f'[data] Cannot remove {path}: {error}')
+        ActivityLog().info(f'[data] Files purge removed {removed} files ({freed} bytes) of {len(rows)} file transfers of {account_id} ({label or criteria})'
+                           + (f', {len(errors)} errors' if errors else '') + (f' {source}' if source else ''))
+        if message_ids:
+            call_in_gui_thread(NotificationCenter().post_notification, 'BlinkLocalFilesDidRemove', sender=self, data=NotificationData(message_ids=message_ids))
 
     def _with_related_rows(self, account_id, row_ids):
         """These rows and the rows filed against them by related_msg_id, all the way down. Caller is in the db thread."""

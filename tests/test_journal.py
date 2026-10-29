@@ -51,6 +51,8 @@ class DispatchTests(unittest.TestCase):
                  'application/im-iscomposing+xml': 'ignored',
                  'application/sylk-api-token': 'ignored',
                  'application/sylk-api-conversation-read': 'ignored',
+                 'application/sylk-files-purge': 'files_purge',
+                 'application/sylk-api-files-purge': 'ignored',
                  'application/sylk-file-transfer': 'file_transfer',
                  'text/plain': 'text',
                  'TEXT/HTML': 'text',

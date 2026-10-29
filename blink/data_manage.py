@@ -646,7 +646,7 @@ def scan_transfer_storage(file_transfers_root, downloads_root):
                             failure = None
                         if not isinstance(failure, dict):
                             failure = {}
-                    elif not entry.name.endswith('.download') and entry.is_file():
+                    elif not entry.name.startswith('.') and not entry.name.endswith('.download') and entry.is_file():
                         names.add(entry.name)
         except OSError:
             return

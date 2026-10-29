@@ -9069,6 +9069,9 @@ class SessionManager(object, metaclass=Singleton):
         file.name = full_filepath
         tmp_path = "%s.download" % full_filepath
         failure_path = os.path.join(directory, '.failure.json')
+        # removed here to free disk space: asked for again, so it is fetched and kept again
+        from blink.file_transfer import REMOVED_MARKER
+        unlink(os.path.join(directory, REMOVED_MARKER))
 
         if not os.path.exists(full_filepath) and os.path.exists(failure_path):
             if force:

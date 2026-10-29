@@ -171,6 +171,7 @@ class MessagePane(QWidget):
         notification_center.add_observer(self, name='BlinkMessageHistoryMessageDidStore')
         notification_center.add_observer(self, name='SIPAccountManagerDidChangeDefaultAccount')
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
+        notification_center.add_observer(self, name='BlinkLocalFilesDidRemove')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')     # BlinkSettings cannot be made yet: the configuration is not started
         self._last_read_sound = 0.0
 
@@ -458,6 +459,11 @@ class MessagePane(QWidget):
         keys = notification.data.keys
         if self.view_key is not None and (keys is None or any(key in keys for key in self.view_key)):
             self.header.update_info()
+
+    def _NH_BlinkLocalFilesDidRemove(self, notification):
+        # files removed in the Data window to free disk space: their bubbles show them as not here
+        for message_id in notification.data.message_ids:
+            self._SH_DownloadChanged(message_id)
 
     def _NH_BlinkMessageHistoryMessageDidStore(self, notification):
         if self.view_key is not None and str(notification.data.remote_uri) in self.view_key:
