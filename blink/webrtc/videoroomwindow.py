@@ -351,10 +351,14 @@ class ParticipantTile(QWidget):
             if self.degraded is None:
                 self.degraded = now
                 ActivityLog().info(f'[videoroom] {uri} video lost ({self.bitrate / 1000:.0f} kbit/s)')
+                from blink.webrtc.videoroom import rtp_log
+                rtp_log(f'[videoroom] {uri} video lost ({self.bitrate / 1000:.0f} kbit/s)')
                 self.update()
             elif not self.demoted and not self.pinned and now - self.degraded > VIDEO_DEGRADE_GRACE:
                 self.demoted = True
                 ActivityLog().info(f'[videoroom] {uri} has no video for {VIDEO_DEGRADE_GRACE} s, moved to the carousel')
+                from blink.webrtc.videoroom import rtp_log
+                rtp_log(f'[videoroom] {uri} has no video for {VIDEO_DEGRADE_GRACE} s, moved to the carousel')
                 self.placementChanged()
         elif self.degraded is not None:
             self.degraded = None
@@ -1917,7 +1921,7 @@ class AddVideoDialog(QDialog):
         saved_row.addWidget(self.saved_combo, 1)
         find_button = QPushButton('Find on network...', self)
         find_button.setAutoDefault(False)
-        find_button.setToolTip('Cameras on your network (ONVIF, Bonjour), tested before they are added')
+        find_button.setToolTip('Cameras on your network (ONVIF, Bonjour), to test and add')
         find_button.clicked.connect(self._find_camera)
         saved_row.addWidget(find_button)
         layout.addRow('Used before', saved_row)
@@ -1928,6 +1932,8 @@ class AddVideoDialog(QDialog):
         layout.addRow('User', self.user_edit)
         self.password_edit = QLineEdit(self)
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        from blink.widgets.lineedit import add_password_reveal
+        add_password_reveal(self.password_edit)
         layout.addRow('Password', self.password_edit)
         self.resolution_combo = QComboBox(self)
         from blink.webrtc.extravideo import DEFAULT_RESOLUTION, RESOLUTIONS
@@ -1948,6 +1954,7 @@ class AddVideoDialog(QDialog):
         for widget in (self.camera_radio, self.rtsp_radio):
             widget.toggled.connect(self._update)
         self.url_edit.textChanged.connect(self._update)
+        self.url_edit.editingFinished.connect(self._take_credentials)
         (self.rtsp_radio if self.saved or not self.cameras else self.camera_radio).setChecked(True)
         if self.saved:
             self.saved_combo.setCurrentIndex(1)
@@ -1999,14 +2006,26 @@ class AddVideoDialog(QDialog):
         self.camera_combo.setEnabled(not rtsp)
         for widget in (self.saved_combo, self.url_edit, self.user_edit, self.password_edit):
             widget.setEnabled(rtsp)
-        self.ok_button.setEnabled(self.url_edit.text().strip().lower().startswith(('rtsp://', 'rtsps://')) if rtsp else bool(self.cameras))
+        from blink.webrtc.camerasetup import rtsp_address
+        self.ok_button.setEnabled(bool(rtsp_address(self.url_edit.text())) if rtsp else bool(self.cameras))
+
+    def _take_credentials(self):
+        """rtsp://user:password@host/...: the user and password go into their fields."""
+        from blink.webrtc.camerasetup import split_credentials
+        url, user, password = split_credentials(self.url_edit.text())
+        if user is not None:
+            self.url_edit.setText(url)
+            self.user_edit.setText(user)
+            self.password_edit.setText(password)
 
     def label(self):
         return self.label_edit.text().strip() or self.label_edit.placeholderText()
 
     def source(self):
         if self.rtsp_radio.isChecked():
-            return dict(kind='rtsp', url=self.url_edit.text().strip(), user=self.user_edit.text().strip(), password=self.password_edit.text(),
+            from blink.webrtc.camerasetup import rtsp_address
+            self._take_credentials()
+            return dict(kind='rtsp', url=rtsp_address(self.url_edit.text()), user=self.user_edit.text().strip(), password=self.password_edit.text(),
                         resolution=self.resolution_combo.currentData())
         name, device = self.cameras[self.camera_combo.currentIndex()]
         return dict(kind='camera', name=name, device=device, resolution=self.resolution_combo.currentData())

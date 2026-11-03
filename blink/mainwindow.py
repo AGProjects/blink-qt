@@ -362,6 +362,12 @@ class MainWindow(base_class, ui_class):
 
         # Devices menu
         self.devices_menu.aboutToShow.connect(self.refresh_devices)
+        # RTSP cameras, under the video camera: the saved network cameras, each opening the manager with it selected
+        self.rtsp_cameras_menu = QMenu(translate('main_window', 'RTSP cameras'), self.devices_menu)
+        self.rtsp_cameras_menu.setIcon(QIcon(Resources.get('icons/camera.svg')))
+        self.rtsp_cameras_menu.setToolTipsVisible(True)
+        self.rtsp_cameras_menu.aboutToShow.connect(self._load_rtsp_cameras)
+        self.devices_menu.insertMenu(self.devices_menu.actions()[self.devices_menu.actions().index(self.video_camera_menu.menuAction()) + 1], self.rtsp_cameras_menu)
 
         # Window menu actions
         self.chat_window_action.triggered.connect(self._AH_ChatWindowActionTriggered)
@@ -832,6 +838,44 @@ class MainWindow(base_class, ui_class):
         settings.save()
         ActivityLog().info(f'[audio] {device} selected for both input and output')
         self._update_combined_audio_devices()
+
+    def _load_rtsp_cameras(self):
+        """Devices -> RTSP cameras: the network cameras saved, each opening Manage cameras... with it selected,
+        then Manage cameras... (blink.webrtc.camerasetup)."""
+        self.rtsp_cameras_menu.clear()
+        missing = None
+        try:
+            from blink.webrtc.videoroom import _has, _init
+            if not _init():
+                missing = translate('main_window', 'GStreamer is not available (install gir1.2-gstreamer-1.0)')
+            elif not _has('rtspsrc'):
+                missing = translate('main_window', 'GStreamer rtspsrc is not installed (install gstreamer1.0-plugins-good)')
+            from blink.webrtc.extravideo import saved_sources
+            sources = saved_sources()
+        except Exception as e:
+            ActivityLog().warning(f'[cameras] Cannot list the RTSP cameras: {e}')
+            missing = missing or str(e)
+            sources = []
+        from urllib.parse import urlsplit
+        for source in sources:
+            try:
+                host = urlsplit(source['url']).hostname or ''
+            except ValueError:
+                host = ''
+            action = self.rtsp_cameras_menu.addAction(('\u2713 ' if source.get('verified') else '') + (source.get('label') or host or source['url']))
+            action.setToolTip(missing or (host + (f' ({source["user"]})' if source.get('user') else '') + ('' if source.get('verified') else translate('main_window', ', not verified'))))
+            action.setEnabled(missing is None)
+            action.triggered.connect(partial(self._AH_ManageRtspCameras, source['url']))
+        if sources:
+            self.rtsp_cameras_menu.addSeparator()
+        action = self.rtsp_cameras_menu.addAction(translate('main_window', 'Manage cameras...'))
+        action.setToolTip(missing or translate('main_window', 'Find the cameras on the network, test them and save them, with their passwords'))
+        action.setEnabled(missing is None)
+        action.triggered.connect(partial(self._AH_ManageRtspCameras, ''))
+
+    def _AH_ManageRtspCameras(self, url, checked=False):
+        from blink.webrtc.camerasetup import manage_cameras
+        manage_cameras(url, parent=self)
 
     def load_video_devices(self):
         settings = SIPSimpleSettings()

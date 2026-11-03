@@ -217,6 +217,79 @@ def _sdp_message(text):
     return message
 
 
+# SDP, for the RTP tab of the Logs window: the lines below carry the same markers as the SIP
+# calls' ("Proposed video codecs:", "Video codec negotiated:", ...)
+
+_AUXILIARY_CODECS = ('RTX', 'RED', 'ULPFEC', 'FLEXFEC-03')
+# lines of the room also shown in the RTP tab
+RTP_LOG_MARKERS = ('codecs:', 'codec negotiated:', 'the room takes no video from us', ' video stalled, asking for it again',
+                   ' video lost (', ' has no video for ')
+
+
+def rtp_log(text):
+    """A video room line also in the RTP tab of the Logs window (and logs/rtp_trace.txt)."""
+    from datetime import datetime
+    try:
+        from blink.rtp_log import RTPLog
+        RTPLog().write(f'{datetime.now()} {text}')
+    except Exception:
+        pass
+
+
+def _sdp_sections(sdp):
+    """(media, port, payload types, section text) of every m= line of an SDP."""
+    sections = []
+    for match in re.finditer(r'^m=(\w+) (\d+) [^ ]+ ([^\r\n]*)', sdp, re.M):
+        section_end = re.search(r'^m=', sdp[match.end():], re.M)
+        section = sdp[match.end():match.end() + section_end.start()] if section_end else sdp[match.end():]
+        sections.append((match.group(1), match.group(2), match.group(3).split(), section))
+    return sections
+
+
+def _codec_description(section, pt):
+    """'H264/90000 (PT 96, profile-level-id=42e01f;packetization-mode=1)', or None for RTX, RED and FEC."""
+    rtpmap = re.search(r'^a=rtpmap:%s ([^\r\n]+)' % re.escape(pt), section, re.M)
+    name = rtpmap.group(1).strip() if rtpmap else f'PT {pt}'
+    if name.partition('/')[0].upper() in _AUXILIARY_CODECS:
+        return None
+    fmtp = re.search(r'^a=fmtp:%s ([^\r\n]+)' % re.escape(pt), section, re.M)
+    return f'{name} (PT {pt}, {fmtp.group(1).strip()})' if fmtp else f'{name} (PT {pt})'
+
+
+def _section_direction(section):
+    match = re.search(r'^a=(sendrecv|sendonly|recvonly|inactive)\s*$', section, re.M)
+    return match.group(1) if match else 'sendrecv'
+
+
+def rtp_offer_lines(sdp):
+    """'Proposed audio codecs: ...', 'Proposed video codecs: ...' of an offer, every codec with its fmtp."""
+    lines = []
+    for media, port, payloads, section in _sdp_sections(sdp):
+        if media not in ('audio', 'video'):
+            continue
+        if port == '0' and 'a=bundle-only' not in section:
+            lines.append(f'Proposed {media} codecs: none, {media} disabled')
+            continue
+        codecs = [codec for codec in (_codec_description(section, pt) for pt in payloads) if codec]
+        lines.append(f'Proposed {media} codecs: {", ".join(codecs) or "none"}, {_section_direction(section)}')
+    return lines
+
+
+def rtp_answer_lines(sdp):
+    """'Audio codec negotiated: ...', 'Video codec negotiated: ...' of an answer: its first codec, with its fmtp."""
+    lines = []
+    for media, port, payloads, section in _sdp_sections(sdp):
+        if media not in ('audio', 'video'):
+            continue
+        label = media.capitalize()
+        if port == '0' and 'a=bundle-only' not in section:
+            lines.append(f'{label} codec negotiated: none, {media} rejected (no codec in common?)')
+            continue
+        codec = next((codec for codec in (_codec_description(section, pt) for pt in payloads) if codec), None)
+        lines.append(f'{label} codec negotiated: {codec or "none"}, {_section_direction(section)}')
+    return lines
+
+
 def _media_summary(sdp):
     """'audio OPUS/48000, video VP9/90000' from an SDP, for the Activity log."""
     parts = []
@@ -543,6 +616,8 @@ class VideoroomSession(QObject):
 
     def log(self, text, level='info'):
         getattr(ActivityLog(), level)(f'[videoroom] {self.room}: {text}')
+        if any(marker in text for marker in RTP_LOG_MARKERS):
+            rtp_log(f'[videoroom] {self.room}: {text}')
 
     # Joining and leaving
 
@@ -746,6 +821,8 @@ class VideoroomSession(QObject):
         if _video_ssrc(sdp) is None:
             self.log('the offer has no SSRC for our video: the server may drop it', 'warning')
         ActivityLog().debug(f'[videoroom] {self.room}: offer\n{sdp}')
+        for line in rtp_offer_lines(sdp):
+            self.log(f'publishing: {line}')
         request = dict(sylkrtc='videoroom-join', account=self.identity, session=self.id, uri=self.room, sdp=sdp, audio=True, video=True)
         if not self._guest:
             # our MSRP chat leg to the room carries this +sip.instance: the gateway then knows it is us
@@ -764,6 +841,8 @@ class VideoroomSession(QObject):
     def _on_answer(self, sdp):
         self.log(f'answer: {_media_summary(sdp)}')
         ActivityLog().debug(f'[videoroom] {self.room}: answer\n{sdp}')
+        for line in rtp_answer_lines(sdp):
+            self.log(f'publishing: {line}')
         codec = _chosen_video_codec(sdp)
         if codec is not None:
             try:
@@ -1413,6 +1492,8 @@ class VideoroomSession(QObject):
         participant.changed.emit()
         self.log(f'offer from {participant.uri}: {_media_summary(sdp)}')
         ActivityLog().debug(f'[videoroom] {self.room}: offer from {participant.uri}\n{sdp}')
+        for line in rtp_offer_lines(sdp):
+            self.log(f'feed of {participant.uri}: {line}')
         # a mobile sends the camera as it is held and says how it is turned (CVO): the picture is turned here
         participant.cvo_id = _cvo_id(sdp)
         webrtcbin = _make('webrtcbin', 'feed-' + participant.feed, bundle_policy='max-bundle')
@@ -1452,6 +1533,8 @@ class VideoroomSession(QObject):
             return
         codec = _chosen_video_codec(sdp)
         participant.video_codec = codec[0] if codec else None
+        for line in rtp_answer_lines(sdp):
+            self.log(f'feed of {participant.uri}: {line}')
         self.connection.request(dict(sylkrtc='videoroom-feed-answer', session=self.id, feed=participant.feed, sdp=sdp))
         self._flush_trickle(participant.feed)
         if self.video_paused:

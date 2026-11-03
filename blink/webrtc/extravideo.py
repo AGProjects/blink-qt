@@ -10,8 +10,9 @@ publisher chose), so the offer carries its SSRC:
                                                                       └─► appsink ─► its tile here
 
 Sources: rtspsrc (location, user, password; video only) or a local camera from GStreamer's
-device monitor. An RTSP source that worked is remembered with its password in ui.conf
-(`videoroom/video_sources`) and offered again.
+device monitor. An RTSP source saved (tested or not), or that worked, is remembered with its
+password in ui.conf (`videoroom/video_sources`) and offered again; `verified` once a picture
+came from it with the address, user and password saved.
 """
 
 import json
@@ -27,7 +28,7 @@ from blink.util import call_in_gui_thread
 from blink.webrtc.videoroom import Gst, GstWebRTC, Participant, VIDEO_CODECS, _make, _has, _sdp_message, _video_ssrc
 
 
-__all__ = ['ExtraVideo', 'RESOLUTIONS', 'DEFAULT_RESOLUTION', 'local_cameras', 'saved_sources', 'remember_source', 'rename_source', 'set_source_resolution', 'forget_source']
+__all__ = ['ExtraVideo', 'RESOLUTIONS', 'DEFAULT_RESOLUTION', 'local_cameras', 'saved_sources', 'remember_source', 'mark_verified', 'rename_source', 'set_source_resolution', 'forget_source']
 
 
 FPS = 10
@@ -46,7 +47,8 @@ SOURCES_KEY = 'videoroom/video_sources'
 # Remembered sources
 
 def saved_sources():
-    """The RTSP sources that worked, newest first: [{label, url, user, password, resolution}]."""
+    """The RTSP cameras saved, newest first: [{label, url, user, password, resolution, verified}]; verified: a
+    picture came from it with these details (Test, or sent to a room)."""
     from blink.resources import ui_settings
     try:
         sources = json.loads(ui_settings().value(SOURCES_KEY, '[]') or '[]')
@@ -55,38 +57,63 @@ def saved_sources():
     return [source for source in sources if isinstance(source, dict) and source.get('url')]
 
 
-def remember_source(source):
+def _save_sources(sources):
     from blink.resources import ui_settings
-    previous = next((other for other in saved_sources() if other.get('url') == source.get('url')), {})
-    sources = [other for other in saved_sources() if other.get('url') != source.get('url')]
+    ui_settings().setValue(SOURCES_KEY, json.dumps(sources))
+
+
+def remember_source(source, replaces=None):
+    """Saved first; replaces: the address of the saved camera it is an edit of (its address may have changed)."""
+    gone = {source.get('url'), replaces} - {None}
+    previous = next((other for other in saved_sources() if other.get('url') in gone), {})
+    sources = [other for other in saved_sources() if other.get('url') not in gone]
     sources.insert(0, dict(label=source.get('label') or '', url=source['url'], user=source.get('user') or '', password=source.get('password') or '',
-                           resolution=source.get('resolution') or previous.get('resolution') or DEFAULT_RESOLUTION))
-    ui_settings().setValue(SOURCES_KEY, json.dumps(sources[:20]))
+                           resolution=source.get('resolution') or previous.get('resolution') or DEFAULT_RESOLUTION,
+                           verified=bool(source['verified']) if 'verified' in source else _still_verified(previous, source)))
+    _save_sources(sources[:20])
+
+
+def _details(source):
+    return source.get('url'), source.get('user') or '', source.get('password') or ''
+
+
+def _still_verified(previous, source):
+    """Saved again without a verdict (the room): verified as before while the address, user and password are those."""
+    return bool(previous.get('verified')) and _details(previous) == _details(source)
+
+
+def mark_verified(url, user=None, password=None):
+    """A picture came from the saved camera with its address, user and password (user given: only when those
+    are the ones saved)."""
+    sources = saved_sources()
+    changed = False
+    for source in sources:
+        if source.get('url') == url and not source.get('verified') and (user is None or _details(source)[1:] == (user or '', password or '')):
+            source['verified'] = changed = True
+    if changed:
+        _save_sources(sources)
 
 
 def rename_source(url, label):
     """A new name for a remembered source, where it is in the list."""
-    from blink.resources import ui_settings
     sources = saved_sources()
     for source in sources:
         if source.get('url') == url:
             source['label'] = label
-    ui_settings().setValue(SOURCES_KEY, json.dumps(sources))
+    _save_sources(sources)
 
 
 def set_source_resolution(url, resolution):
     """The resolution a remembered source is sent at, where it is in the list."""
-    from blink.resources import ui_settings
     sources = saved_sources()
     for source in sources:
         if source.get('url') == url:
             source['resolution'] = resolution
-    ui_settings().setValue(SOURCES_KEY, json.dumps(sources))
+    _save_sources(sources)
 
 
 def forget_source(url):
-    from blink.resources import ui_settings
-    ui_settings().setValue(SOURCES_KEY, json.dumps([source for source in saved_sources() if source.get('url') != url]))
+    _save_sources([source for source in saved_sources() if source.get('url') != url])
 
 
 def local_cameras():
@@ -135,6 +162,7 @@ class ExtraVideo(QObject):
         self.ssrc = random.randint(1, 0xffffffff)
         self.resolution = _resolution(source.get('resolution') or DEFAULT_RESOLUTION)[0]
         self._caps = self._encoder = self._encoder_factory = None
+        self._picture_came = False
         # the tile here: an ordinary participant of the window, its frames from this pipeline
         self.participant = Participant(dict(id=self.id, uri=session.identity, display_name=label, type='webrtc', parent=session.id, label=label))
         self.participant.session = session
@@ -370,6 +398,9 @@ class ExtraVideo(QObject):
             finally:
                 buffer.unmap(mapping)
             self.participant.frameReady.emit(image)
+            if not self._picture_came and self.source['kind'] == 'rtsp':
+                self._picture_came = True
+                call_in_gui_thread(mark_verified, self.source['url'], self.source.get('user') or '', self.source.get('password') or '')    # a picture came
         return Gst.FlowReturn.OK
 
     def _on_ice_connection_state(self, webrtcbin, spec):

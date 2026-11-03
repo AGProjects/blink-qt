@@ -322,12 +322,23 @@ picture (rtspsrc → decodebin → appsink, 12 s).
   RTSP camera. **One camera or screen always stays checked** with Video. **Changing the room
   unchecks the RTSP cameras** (a profile's room keeps its own). Extra feeds are named by
   their label, else "Camera N".
-- **Add network camera** (`camerasetup.py`): the cameras found on the network (ONVIF, Bonjour)
-  and those tested before (bold, ✓, under the name given, first; "not found now" when they do
-  not answer), filter and sort (name/address); picking one fills name, address and the user
-  and password used before with that host; **Test** pulls a picture (an ONVIF camera's RTSP
-  address is asked first) and shows it; **Add** only after a test of what is in the fields;
-  Send at; renaming a tested camera saves and refreshes the list. 520–720 px wide.
+- **Add network camera** (`camerasetup.py`), also **Devices → RTSP cameras → Manage cameras…**
+  (the saved cameras listed above it open it with that camera selected; one window, not modal,
+  Save keeps it open, Forget removes a saved camera, New empties the fields): the cameras found
+  on the network (ONVIF, Bonjour) and the saved ones (bold, first, under the name given; those
+  discovery does not list are "online" or "offline" by whether their RTSP port takes a TCP
+  connection, with their MAC address from the neighbour table), filter, sort (name/address) and
+  **Only my local network** (hosts on this computer's networks, from `ip -o addr`; remembered in
+  `ui.conf` `videoroom/rtsp_local_only`). A **Verified** column ticks the saved cameras a picture
+  came from with the address, user and password saved (Test, or sent to a room); "Editing “name”"
+  or "New camera" says what Save does. Picking one fills name, address, user and password of a
+  saved camera (another camera's user and password are not carried over to an unsaved one);
+  **Test** pulls a picture (an ONVIF camera's RTSP address is asked first, and so is the stream
+  of an address given as a bare IP; the first whole picture: from a key frame on, or after 3 s)
+  and shows it; **Add/Save** takes any rtsp:// address or bare IP, tested or not (the camera may
+  be offline now); rtsp://user:password@host/… typed or pasted puts the user and password in
+  their fields; the password field has an eye. Return does not add. Send at; renaming a saved
+  camera saves and refreshes the list. 560–760 px wide.
 - **Profiles** (left of Join): a saved composition: room, Audio, Video, the checked video lines
   (keys `camera:<device>`, `screen:<device>`, `rtsp:<url>`) and the invitees (address and
   name), in `ui.conf` `conference_dialog/profiles` (JSON, by name). Picking one fills the
