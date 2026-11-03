@@ -58,6 +58,31 @@ def _session_target(session):
     return target + (' (Call-ID %s)' % call_id if call_id else '')
 
 
+def offered_video_sdp_lines(sdp):
+    """'Proposed video SDP: H264/90000 (PT 100, profile-level-id=42e01e;packetization-mode=1), ...' for every
+    m=video of an SDP we send (sipsimple FrozenSDPSession): what the INVITE / re-INVITE really carries."""
+    lines = []
+    for media in getattr(sdp, 'media', None) or []:
+        if _text(media.media) != 'video' or not media.port:
+            continue
+        rtpmap, fmtp, direction = {}, {}, 'sendrecv'
+        for attribute in media.attributes:
+            name, value = _text(attribute.name), _text(attribute.value)
+            if name in ('rtpmap', 'fmtp'):
+                pt, _, rest = (value or '').partition(' ')
+                (rtpmap if name == 'rtpmap' else fmtp)[pt] = rest.strip()
+            elif name in ('sendrecv', 'sendonly', 'recvonly', 'inactive'):
+                direction = name
+        codecs = []
+        for pt in (_text(format) for format in media.formats):
+            name = rtpmap.get(pt, 'PT %s' % pt)
+            if name.partition('/')[0].upper() in ('RTX', 'RED', 'ULPFEC', 'FLEXFEC-03'):
+                continue
+            codecs.append('%s (PT %s, %s)' % (name, pt, fmtp[pt]) if pt in fmtp else '%s (PT %s)' % (name, pt))
+        lines.append('Proposed video SDP: %s, %s' % (', '.join(codecs) or 'no codecs', direction))
+    return lines
+
+
 def _candidate_type(candidate):
     kind = str(getattr(candidate, 'type', '') or '').lower()
     return ice_candidates.get(kind, kind or '?')
@@ -81,7 +106,7 @@ class RTPLog(object, metaclass=Singleton):
                      'RTPStreamICENegotiationDidSucceed', 'RTPStreamICENegotiationDidFail', 'RTPStreamICENegotiationStateDidChange',
                      'RTPStreamDidEnableEncryption', 'RTPStreamDidNotEnableEncryption', 'RTPStreamZRTPReceivedSAS',
                      'RTPStreamZRTPVerifiedStateChanged', 'RTPStreamZRTPLog', 'RTPStreamZRTPPeerNameChanged',
-                     'SIPSessionSylkZRTPStateChanged')
+                     'SIPSessionSylkZRTPStateChanged', 'SIPInvitationChangedState')
 
     def __init__(self):
         self._started = False
@@ -355,6 +380,21 @@ class RTPLog(object, metaclass=Singleton):
                 fmtp = value.partition(' ')[2]
         head = ('Video codec negotiated: %s (PT %s, from %s)' % (rtpmap, payload_type, source)) if rtpmap else ('Video codec negotiated: PT %s (no rtpmap, from %s)' % (payload_type, source))
         return '%s / fmtp: %s' % (head, fmtp or '(none)')
+
+    def _NH_SIPInvitationChangedState(self, notification):
+        # an INVITE or re-INVITE (video added, hold, ...) just sent: the video codecs exactly as in its SDP
+        data = notification.data
+        sent_invite = getattr(data, 'state', None) == 'outgoing' and getattr(data, 'prev_state', None) != 'outgoing'
+        sent_reinvite = getattr(data, 'sub_state', None) == 'sent_proposal' and getattr(data, 'prev_sub_state', None) != 'sent_proposal'
+        if not (sent_invite or sent_reinvite):
+            return
+        sdp = getattr(getattr(notification.sender, 'sdp', None), 'proposed_local', None)
+        if sdp is None:
+            return
+        call_id = _text(getattr(notification.sender, 'call_id', None))
+        where = (' (Call-ID %s)' % call_id) if call_id else ''
+        for line in offered_video_sdp_lines(sdp):
+            self.write('%s %s%s' % (notification.datetime, line, where))
 
     def _NH_RTPStreamDidChangeRTPParameters(self, notification):
         stream = notification.sender

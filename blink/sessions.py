@@ -8040,7 +8040,7 @@ class ConferenceDialog(base_class, ui_class):
         source_buttons = QHBoxLayout()
         self.video_source_add_button = QPushButton(translate('conference_dialog', 'Add network camera...'), self.video_sources_widget)
         self.video_source_add_button.setAutoDefault(False)
-        self.video_source_add_button.setToolTip(translate('conference_dialog', 'An RTSP camera: found on your network (ONVIF, Bonjour) or by its address, tested before it is added'))
+        self.video_source_add_button.setToolTip(translate('conference_dialog', 'An RTSP camera: found on your network (ONVIF, Bonjour) or by its address, tested or not'))
         self.video_source_remove_button = QPushButton(translate('conference_dialog', 'Forget'), self.video_sources_widget)
         self.video_source_remove_button.setAutoDefault(False)
         self.video_source_remove_button.setEnabled(False)
