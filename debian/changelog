@@ -1,3 +1,20 @@
+blink (7.2.5) unstable; urgency=medium
+
+  * Fixes for RTSP camera management
+  * Added support for temporary links for incoming calls
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 03 Nov 2026 11:20:52 -0300
+
+blink (7.2.4) unstable; urgency=medium
+
+  * Added bulk file purge for my own devices
+  * Rename Data manager tabs
+  * Conferencing fixes
+  * Raise msrp window if invite contained it
+  * Remove XCAP private key escrow
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Thu, 29 Oct 2026 09:45:05 -0300
+
 blink (7.2.3) unstable; urgency=medium
 
   * Added devices to data manager
