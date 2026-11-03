@@ -803,7 +803,18 @@ class BlinkSession(BlinkSessionBase):
             notification_center.post_notification('BlinkSessionNewIncoming', sender=self)
         notification_center.post_notification('BlinkSessionInfoUpdated', sender=self, data=NotificationData(elements={'session', 'media', 'statistics'}))
         notification_center.post_notification('BlinkSessionConnectionProgress', sender=self, data=NotificationData(stage='connecting'))
-        self.sip_session.accept(streams)
+        contact_parameters = None
+        if self.sip_session.remote_focus and self.sip_session.account is not BonjourAccount():
+            # a focus calling us (a REFER-initiated invitation into a room): the same device id as on
+            # connect (RFC 5626 +sip.instance), so the focus publishes it as this endpoint's
+            # participant_id and the video room's gateway, told the same on join, knows the leg is us
+            instance_id = SIPSimpleSettings().instance_id
+            if instance_id:
+                contact_parameters = {'+sip.instance': '"<%s>"' % instance_id}
+        if contact_parameters is not None:
+            self.sip_session.accept(streams, contact_parameters=contact_parameters)
+        else:
+            self.sip_session.accept(streams)
 
     def init_outgoing(self, account, contact, contact_uri, stream_descriptions, sibling=None, reinitialize=False, remote_instance_id=None):
         assert self.state in (None, 'initialized', 'ended')
