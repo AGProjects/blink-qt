@@ -2,6 +2,7 @@ blink (7.2.5) unstable; urgency=medium
 
   * Fixes for RTSP camera management
   * Added support for temporary links for incoming calls
+  * Fix using sip instance id for conferences
 
  -- Adrian Georgescu <ag@ag-projects.com>  Tue, 03 Nov 2026 11:20:52 -0300
 
