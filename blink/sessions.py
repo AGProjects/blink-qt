@@ -9481,7 +9481,7 @@ class SessionManager(object, metaclass=Singleton):
         settings = SIPSimpleSettings()
         if getattr(notification.sender, 'silent_media_end', False):
             return      # the audio moved to the video room: no hangup tone
-        if notification.data.stream.type in ('audio', 'video') and not self._hangup_tone_timer.isActive() and not settings.audio.silent:
+        if notification.data.stream.type == 'audio' and not self._hangup_tone_timer.isActive() and not settings.audio.silent:  # removing video keeps the call going: no hangup tone
             self._hangup_tone_timer.start()
             player = WavePlayer(SIPApplication.voice_audio_bridge.mixer, Resources.get('sounds/hangup_tone.wav'), volume=30)
             SIPApplication.voice_audio_bridge.add(player)
