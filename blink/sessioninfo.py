@@ -87,7 +87,9 @@ class SessionInfoPanel(base_class, ui_class):
             widget = layout.itemAt(index).widget()
             if column == 0 and column_span == 1 and isinstance(widget, QLabel):
                 widget.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                widget.setSizePolicy(QSizePolicy.Policy.Fixed, widget.sizePolicy().verticalPolicy())
+                # Preferred, not Fixed: the label fills the column so its background spans the full width, the
+                # column itself stays at the widest title because the value column takes all the stretch
+                widget.setSizePolicy(QSizePolicy.Policy.Preferred, widget.sizePolicy().verticalPolicy())
 
         self._apply_settings(scale=True)
 
