@@ -1347,6 +1347,8 @@ class BlinkSession(BlinkSessionBase):
             self._delete_when_done = False
         for stream in set(notification.data.removed_streams).intersection(self.streams):
             self.streams.remove(stream)
+            if stream.type in ('audio', 'video'):
+                self.info.streams[stream.type].reset()     # no more statistics for it: its traffic must not stay at the last values
             notification.center.post_notification('BlinkSessionDidRemoveStream', sender=self, data=NotificationData(stream=stream))
         if not self.streams:
             self.end()
