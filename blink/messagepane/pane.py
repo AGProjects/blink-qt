@@ -1004,6 +1004,11 @@ class MessagePane(QWidget):
             Uploads.instance().retry(item.id)
         elif action == 'discard_upload':
             Uploads.instance().discard(item.id)
+        elif action == 'send_again':
+            # a file of ours sent again as a new message (new transfer id): the server and the other
+            # party may already have the old id, a second upload under it could be taken as a duplicate
+            ActivityLog().info(f'[Message with {self.key}] Sending the file of message {item.id} again, asked for')
+            self._forward_to(self.key, [item])
         elif action == 'delete':
             self._delete_message(item)
         elif action == 'download_again':

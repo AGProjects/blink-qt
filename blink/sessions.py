@@ -5161,6 +5161,7 @@ class BlinkFileTransfer(BlinkSessionBase):
         self._uri = self._normalize_uri(contact_uri.uri)
 
         filename = self._own_copy(filename)
+        self._source = filename     # the plain file: after encryption the selector is an in-memory .asc
         self.file_selector = FileSelector.for_file(filename)
         self._stat = os.fstat(self.file_selector.fd.fileno())
 
@@ -5182,19 +5183,28 @@ class BlinkFileTransfer(BlinkSessionBase):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkFileTransferNewOutgoing', self)
 
-        # PGP is for files sent over HTTP only, as for messages; MSRP files go as they are
-        if self.route == 'http' and self._stat.st_size < MAX_ENCRYPT_BYTES:
-            stream = StreamDescription('messages')
-            message_stream = stream.create_stream()
-            message_stream.blink_session = self
-            if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
-                message_stream.enable_pgp()
+        self._encrypt(filename)
 
-            if message_stream.can_encrypt:
-                self.state = 'encrypting'
-                notification_center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(stage='encrypting', bytes=None, total_bytes=None))
-                notification_center.add_observer(self, name='PGPFileDidEncrypt')
-                message_stream.encrypt_file(filename, self)
+    def _encrypt(self, filename):
+        """Start encrypting the file when it goes over HTTP and the other party has a key (state
+        'encrypting'; PGPFileDidEncrypt connects). PGP is for files sent over HTTP only, as for
+        messages; MSRP files go as they are. True if it was started."""
+        if self.route != 'http' or self._stat.st_size >= MAX_ENCRYPT_BYTES:
+            return False
+        account = self.account
+        stream = StreamDescription('messages')
+        message_stream = stream.create_stream()
+        message_stream.blink_session = self
+        if account.sms.enable_pgp and account.sms.private_key is not None and os.path.exists(account.sms.private_key.normalized):
+            message_stream.enable_pgp()
+        if not message_stream.can_encrypt:
+            return False
+        notification_center = NotificationCenter()
+        self.state = 'encrypting'
+        notification_center.post_notification('BlinkFileTransferProgress', sender=self, data=NotificationData(stage='encrypting', bytes=None, total_bytes=None))
+        notification_center.add_observer(self, name='PGPFileDidEncrypt')
+        message_stream.encrypt_file(filename, self)
+        return True
 
     def init_outgoing_pull(self, account, contact, contact_uri, filename, hash, transfer_id=RandomID, conference_file=True, must_open=False):
         assert self.state is None
@@ -5229,7 +5239,8 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         if self.state == 'ended':
             # Reinitialize to retry
-            file_selector = FileSelector.for_file(self.filename)
+            source = getattr(self, '_source', None) or self.filename
+            file_selector = FileSelector.for_file(source)
             stat = os.fstat(file_selector.fd.fileno())
             if self._stat is not None and stat.st_mtime == self._stat.st_mtime:
                 file_selector.hash = self.file_selector.hash
@@ -5240,6 +5251,9 @@ class BlinkFileTransfer(BlinkSessionBase):
             self._stat = stat
             self.state = 'initialized'
             notification_center.post_notification('BlinkFileTransferWillRetry', self)
+            # the selector is the plain file again: encrypt it again (connects when done)
+            if self.transfer_type == 'push' and self._encrypt(source):
+                return
 
         if self.route == 'http' and self.transfer_type == 'push':
             self._upload()
@@ -5265,6 +5279,16 @@ class BlinkFileTransfer(BlinkSessionBase):
     # HTTP upload
 
     def _upload(self):
+        """Start the upload; one that cannot start (an exception before the POST) ends the transfer
+        as failed, so its bubble shows ⚠ and can be retried, and its message is failed-local
+        instead of left pending until the next run."""
+        try:
+            self._start_upload()
+        except Exception as e:
+            ActivityLog().exception(f'[transfer] Upload of {self.file_selector.name if self.file_selector else self.id} could not start: {e!r}')
+            self._terminate(failure_reason=str(e) or e.__class__.__name__)
+
+    def _start_upload(self):
         """POST the file to <base>/<sender>/<receiver>/<transfer id>/<name>: the POST is the send.
 
         SylkServer stores the file and emits the application/sylk-file-transfer message itself,
@@ -5279,8 +5303,9 @@ class BlinkFileTransfer(BlinkSessionBase):
         content_type = self.file_selector.type or 'application/octet-stream'
         self.state = 'connecting'
         fd = self.file_selector.fd
+        # after PGP encryption fd is an in-memory BytesIO (no fileno), so measure by seeking
+        size = fd.seek(0, os.SEEK_END)
         fd.seek(0)
-        size = os.fstat(fd.fileno()).st_size
         encrypted = name.endswith('.asc')
         ActivityLog().info(f"[transfer] Uploading {name} ({size} bytes{', PGP encrypted' if encrypted else ''}) for {receiver} to {url}")
         if not token:

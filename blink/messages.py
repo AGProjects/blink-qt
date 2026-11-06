@@ -3378,9 +3378,33 @@ class MessageManager(object, metaclass=Singleton):
             if not blink_session.fake_streams.get('messages').can_decrypt_with_others:
                 blink_session.fake_streams.get('messages').enable_pgp()
 
+        if message.content_type in FILE_TRANSFER_CONTENT_TYPES:
+            envelope = file_transfer_envelope(message.content) or {}
+            if not envelope.get('url') and not envelope.get('msrp'):
+                # the local copy of an HTTP upload (MessageHistory.add_own_upload) that never finished:
+                # the file must be uploaded, the server sends the message itself; sending this
+                # envelope (no URL) over SIP would give the other party a file it cannot fetch
+                return self._upload_again(message, account, contact, contact_uri, envelope)
+
         timestamp = message.timestamp.replace(tzinfo=timezone.utc).astimezone(tzlocal())
         outgoing_message = OutgoingMessage(account, contact, message.content, message.content_type, timestamp=timestamp, id=message.message_id, session=blink_session)
         self._send_message(outgoing_message)
+        return True
+
+    def _upload_again(self, message, account, contact, contact_uri, envelope):
+        """Upload again, under its own transfer id, a file whose upload an earlier run left unfinished,
+        from the copy it was being sent from (BlinkFileTransfer._own_copy). True if it was started."""
+        from blink.file_transfer import transfer_filename, transfer_folder
+        from blink.history import MessageHistory
+        name = envelope.get('filename')
+        path = os.path.join(transfer_folder(ApplicationData.get('file_transfers'), str(account.id), message.remote_uri, message.message_id),
+                            transfer_filename(name)) if name else None
+        if not path or not os.path.isfile(path):
+            ActivityLog().warning(f'[Message with {message.remote_uri}] Unfinished upload {message.message_id} ({name}) cannot be sent again: its file {path} is gone')
+            return False
+        ActivityLog().info(f'[Message with {message.remote_uri}] Uploading again {name} ({message.message_id}), left unfinished by an earlier run')
+        MessageHistory().update(message.message_id, 'pending')
+        SessionManager().send_file(contact, contact_uri, path, transfer_id=message.message_id, account=account)
         return True
 
     def generate_private_key(self, account):

@@ -408,7 +408,7 @@ class TranscriptView(QListView):
         self._show_menu(index, event.pos(), event.globalPos())
 
     def offers(self, action):
-        """Whether a message's menu offers an action: 'react', 'reply', 'edit', 'caption', 'forward', 'info',
+        """Whether a message's menu offers an action: 'react', 'reply', 'edit', 'caption', 'forward', 'send_again', 'info',
         'download', 'download_again' or 'delete' (a transcript without a conversation in history offers fewer)."""
         return self.menu_actions is None or action in self.menu_actions
 
@@ -474,6 +474,8 @@ class TranscriptView(QListView):
             from blink.messagepane.forward import forwardable
             if self.offers('forward') and forwardable(item):
                 menu.addAction(translate('message_pane', 'Forward…'), lambda: self.actionRequested.emit('forward', item))
+            if self.offers('send_again') and item.outgoing and path and item.category in ('image', 'audio', 'video', 'other'):
+                menu.addAction(translate('message_pane', 'Send Again'), lambda: self.actionRequested.emit('send_again', item))
             if self.extra_menu_actions is not None:
                 for label, callback in self.extra_menu_actions(item) or ():
                     menu.addAction(label, callback)
