@@ -1,3 +1,12 @@
+blink (7.2.6) unstable; urgency=medium
+
+  * Fix for upload files
+  * Fix call statistics after remove stream
+  * Fix call info panel bg color
+  * Don't play hangup tone when remove video
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Fri, 06 Nov 2026 18:00:22 -0300
+
 blink (7.2.5) unstable; urgency=medium
 
   * Fixes for RTSP camera management
