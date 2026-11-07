@@ -1097,8 +1097,9 @@ class VideoroomSession(QObject):
         self.connection.request(dict(sylkrtc='videoroom-mute-participant', session=self.id, participant_id=participant.id, muted=bool(muted)))
 
     def remove_participants(self, uris):
-        """Remove SIP participants from the room (the server asks the focus to end their sessions)."""
-        uris = [uri if uri.startswith('sip:') else 'sip:' + uri for uri in uris]
+        """Remove participants from the room: a SIP one by address (the server asks the focus to end its
+        sessions), a WebRTC one by its publisher id (the server kicks that one device, even one of ours)."""
+        uris = [uri if uri.startswith('sip:') or '@' not in uri else 'sip:' + uri for uri in uris]
         if not uris or self.connection is None or self.state != 'established':
             return
         self.log(f'removing {", ".join(uris)}')

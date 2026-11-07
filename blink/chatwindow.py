@@ -1141,7 +1141,7 @@ class ChatWidget(QWidget):
         uri = sender_key(item)
         if not uri or uri == str(blink_session.account.id) or uri == self._remote_uri().replace('sip:', ''):
             return None
-        participant = blink_session.server_conference.participants.get(uri)
+        participant = blink_session.server_conference.participant_for(uri)
         if participant is None or 'chat' not in participant.active_media:
             return None
         return participant

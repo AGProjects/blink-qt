@@ -68,6 +68,8 @@ from blink.pstn_normalize import pstn_dial_username
 from blink.file_transfer import MAX_ENCRYPT_BYTES
 from blink.uris import bare_instance_id, placeholder_instance_id
 from blink import radio_ptt     # registers <agp-conf:radio_ptt> with the conference-info parser
+from blink import conference_devices     # and <agp-conf:participant_id>, user_agent, instance_id
+from blink.conference_devices import normalize_id
 
 __all__ = ['ClientConference', 'ConferenceDialog', 'AudioSessionModel', 'AudioSessionListView', 'ChatSessionModel', 'ChatSessionListView', 'SessionManager']
 
@@ -1739,6 +1741,17 @@ class ConferenceParticipant(object):
         self.is_composing = False    # TODO: set this from the chat stream -Saul
         self.request_status = None
         self.radios = []             # radio_ptt.RadioEndpoint of each endpoint of it that can key a radio
+        # the device of the account it is (blink.conference_devices): an account in the room from
+        # several devices is a participant per device
+        self.key = self.uri          # what ServerConference.participants has it under
+        self.device_label = None     # its user agent ("Blink 7.2.6 (Linux)"), what tells it from the others
+        self.endpoint_ids = set()    # the participant_ids of its endpoints, to know it again on the next update
+        self.instance_ids = set()    # its device id (+sip.instance)
+        self.webrtc = False          # it is in the room's video room (SylkServer has a WebRTC leg for it)
+        self.webrtc_display_name = None
+        self.direct_ids = []         # the participant_ids of its own SIP legs (its MSRP chat)
+        self.this_device = False     # it is us, this Blink
+        self.multi_device = False    # its account is in the room from more than one device
 
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
@@ -1774,15 +1787,38 @@ class ConferenceParticipant(object):
     request_status = property(_get_request_status, _set_request_status)
     del _get_request_status, _set_request_status
 
+    def webrtc_publishers(self, videoroom):
+        """Its publishers in the room's video room (we are in it too), its extra videos left out."""
+        if videoroom is None or not self.webrtc:
+            return []
+        uri = self.uri.lower()
+        publishers = [publisher for publisher in getattr(videoroom, 'participants', {}).values()
+                      if publisher.uri.lower() == uri and not publisher.parent and publisher.type == 'webrtc']
+        if len(publishers) > 1 and self.webrtc_display_name:
+            publishers = [publisher for publisher in publishers if publisher.display_name == self.webrtc_display_name] or publishers
+        return publishers
+
     @property
     def radio_state(self):
         """The state of its radio (the most active of them), None when it has none."""
         return radio_ptt.combined_state(self.radios)
 
-    def update(self, data):
+    def update(self, data, multi_device=None, this_device=None):
+        """From its conference-info <user>, or the conference_devices.Device of it that it is."""
         old_values = dict(active_media=self.active_media.copy(), display_name=self.display_name, on_hold=self.on_hold,
-                          radio_key=[radio.key for radio in self.radios])
+                          radio_key=[radio.key for radio in self.radios], device_label=self.device_label, webrtc=self.webrtc,
+                          multi_device=self.multi_device, this_device=self.this_device)
         self.display_name = data.display_text.value if data.display_text else None
+        self.device_label = getattr(data, 'label', None)
+        self.endpoint_ids = set(getattr(data, 'ids', ()))
+        self.instance_ids = set(getattr(data, 'instance_ids', ()))
+        self.webrtc = bool(getattr(data, 'webrtc', False))
+        self.webrtc_display_name = getattr(data, 'webrtc_display_name', None)
+        self.direct_ids = list(getattr(data, 'direct_ids', ()))
+        if multi_device is not None:
+            self.multi_device = multi_device
+        if this_device is not None:
+            self.this_device = this_device
         self.active_media.clear()
         for media in chain(*data):
             if media.media_type.value == 'message':
@@ -1835,24 +1871,50 @@ class ServerConference(object):
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=session)
 
+    def participant_for(self, uri, prefer=()):
+        """A participant of the account uri (sip: stripped): one in prefer if any, else the first of its devices; None for none."""
+        uri = self.sip_prefix_re.sub('', str(uri)).split(';', 1)[0]
+        candidates = [participant for participant in self.participants.values() if participant.uri == uri]
+        return next((participant for participant in candidates if participant in prefer), candidates[0] if candidates else None)
+
     def add_participant(self, contact, contact_uri):
-        if contact_uri.uri in self.participants:
+        if self.participant_for(contact_uri.uri) is not None:
             return
         participant = ConferenceParticipant(contact, contact_uri)
         participant.request_status = 'Joining'
         self.session.sip_session.conference.add_participant(participant.uri)
-        self.participants[participant.uri] = participant
+        self.participants[participant.key] = participant
         self.pending_additions.add(participant)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
 
     def remove_participant(self, participant):
-        if participant.uri not in self.participants:
+        if participant not in self.participants.values():
             return
         if participant in self.pending_removals:
             return
-        participant.request_status = 'Leaving'
-        self.session.sip_session.conference.remove_participant(participant.uri)
+        if participant.multi_device:
+            # one device of an account in the room from several (maybe ours): end just its legs, never by
+            # the address alone, which ends them all (us too, when it is our account)
+            from blink.webrtc import active_videoroom
+            videoroom = active_videoroom(self.session.contact_uri.uri) if self.session.contact_uri is not None else None
+            publishers = participant.webrtc_publishers(videoroom)
+            if participant.webrtc and len(publishers) != 1:
+                publishers = []     # not one we can tell for sure
+            if not publishers and not participant.direct_ids:
+                ActivityLog().warning(f'[conference] Cannot remove one device of {participant.uri} ({participant.device_label}): '
+                                      + ('its WebRTC session is not told apart from the others' if participant.webrtc else 'the room tells no participant_id for it'))
+                return
+            participant.request_status = 'Leaving'
+            for publisher in publishers:
+                ActivityLog().info(f'[conference] Remove the WebRTC session of {participant.uri} ({participant.device_label}, publisher {publisher.id})')
+                videoroom.remove_participants([publisher.id])
+            for participant_id in participant.direct_ids:
+                ActivityLog().info(f'[conference] Remove the SIP leg of {participant.uri} ({participant.device_label}, participant_id {participant_id})')
+                self.session.sip_session.conference.remove_participant(f'sip:{participant.uri};participant_id={participant_id}')
+        else:
+            participant.request_status = 'Leaving'
+            self.session.sip_session.conference.remove_participant(participant.uri)
         self.pending_removals.add(participant)
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkSessionWillRemoveParticipant', sender=self.session, data=NotificationData(participant=participant))
@@ -1913,44 +1975,84 @@ class ServerConference(object):
         # the room's audio bridge (sylk-janus-audio-bridge: the WebRTC side of the room) is plumbing, not a participant
         users = {uri: user for uri, user in users.items() if not re.search(r';app=[^;]*bridge', uri)}
 
-        removed_participants = [participant for participant in self.participants.values() if participant.uri not in users and participant not in self.pending_additions]
-        confirmed_participants = [participant for participant in self.participants.values() if participant in self.pending_additions and participant.uri in users]
-        updated_participants = [self.participants[uri] for uri in users if uri in self.participants]
-        added_users = set(users.keys()).difference(list(self.participants.keys()))
+        # a participant per device of each account (blink.conference_devices), known again on each update by
+        # its endpoints' participant_ids, whatever the order they come in or the legs that came or went
+        own_uri = str(self.session.account.id).lower() if self.session is not None and self.session.account is not None else None
+        own_instance = normalize_id(SIPSimpleSettings().instance_id)
+        current = {}    # key -> (uri, device, multi_device, this_device)
+        claimed = set()
+        for uri, user in users.items():
+            user_devices = conference_devices.devices(user)
+            for device in user_devices:
+                this_device = uri.lower() == own_uri and (own_instance in device.instance_ids if own_instance and any(d.instance_ids for d in user_devices) else len(user_devices) == 1)
+                known = [participant for participant in self.participants.values()
+                         if participant.uri == uri and participant not in claimed and participant.endpoint_ids & device.ids]
+                if not known:
+                    # one invited (pending, no endpoints yet) or a device the last update told no ids for
+                    known = [participant for participant in self.participants.values()
+                             if participant.uri == uri and participant not in claimed and not participant.endpoint_ids]
+                if known:
+                    participant = known[0]
+                    claimed.add(participant)
+                    key = participant.key
+                else:
+                    # the account's address for its first device, as before; with the device id for the others
+                    key = uri if uri not in current and uri not in self.participants else f'{uri}#{sorted(device.ids)[0] if device.ids else len(current)}'
+                    while key in current or key in self.participants:
+                        key += "'"
+                current[key] = (uri, device, len(user_devices) > 1, this_device)
+
+        removed_participants = [participant for participant in self.participants.values() if participant.key not in current and participant not in self.pending_additions]
+        confirmed_participants = [participant for participant in self.participants.values() if participant in self.pending_additions and participant.key in current]
+        updated_participants = [participant for participant in self.participants.values() if participant.key in current and participant not in confirmed_participants]
+        added_keys = [key for key in current if key not in self.participants]
+        added_users = {current[key][0] for key in added_keys if not any(p.uri == current[key][0] for p in self.participants.values())}
 
         for participant in removed_participants:
-            self.participants.pop(participant.uri)
+            self.participants.pop(participant.key)
             if participant in self.pending_removals:
                 self.pending_removals.remove(participant)
             else:
                 notification.center.post_notification('BlinkSessionWillRemoveParticipant', sender=self.session, data=NotificationData(participant=participant))
             notification.center.post_notification('BlinkSessionDidRemoveParticipant', sender=self.session, data=NotificationData(participant=participant))
             participant.request_status = None
+        removed_uris = {participant.uri for participant in removed_participants} - set(users)
 
         for participant in confirmed_participants:
             participant.request_status = None
-            participant.update(users[participant.uri])
+            uri, device, multi_device, this_device = current[participant.key]
+            participant.update(device, multi_device, this_device)
             self.pending_additions.remove(participant)
             notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
 
         for participant in updated_participants:
-            participant.update(users[participant.uri])
+            uri, device, multi_device, this_device = current[participant.key]
+            participant.update(device, multi_device, this_device)
 
         party, info = self._describe()
-        if not getattr(self, '_got_conference_info', False) or added_users or removed_participants:
+        if not getattr(self, '_got_conference_info', False) or added_keys or removed_participants:
             self._got_conference_info = True
+            device_count = len(current)
             ActivityLog().info(f'[conference] Conference-info of {party}: version {conference_info.version}, state {conference_info.state}, '
                                f'{len(users)} participants ({", ".join(sorted(users)) or "none"})'
+                               + (f', {device_count} devices' if device_count != len(users) else '')
                                + (f', joined {", ".join(sorted(added_users))}' if added_users else '')
-                               + (f', left {", ".join(sorted(p.uri for p in removed_participants))}' if removed_participants else '')
+                               + (f', left {", ".join(sorted(removed_uris))}' if removed_uris else '')
                                + f' ({info})')
+            for key in added_keys:
+                uri, device, multi_device, this_device = current[key]
+                if multi_device:
+                    ActivityLog().info(f'[conference] {uri} is in {party} from another device: {device.label or "?"}'
+                                       + (' (this one)' if this_device else '') + f', endpoints {", ".join(str(endpoint.entity) for endpoint in device) or "none"}')
 
-        for uri in added_users:
+        for key in added_keys:
+            uri, device, multi_device, this_device = current[key]
             contact, contact_uri = URIUtils.find_contact(uri)
             participant = ConferenceParticipant(contact, contact_uri, uri=uri)
+            participant.key = key
             participant.blink_session = self.session
-            participant.update(users[uri])
-            self.participants[participant.uri] = participant
+            participant.update(device, multi_device, this_device)
+            self.participants[key] = participant
             notification.center.post_notification('BlinkSessionWillAddParticipant', sender=self.session, data=NotificationData(participant=participant))
             notification.center.post_notification('BlinkSessionDidAddParticipant', sender=self.session, data=NotificationData(participant=participant))
 
@@ -1981,23 +2083,19 @@ class ServerConference(object):
                 notification.center.post_notification('BlinkSessionDidShareFile', sender=self.session, data=NotificationData(file=shared_file, direction='incoming', conference=True))
 
     def _NH_SIPConferenceDidNotAddParticipant(self, notification):
-        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
-        try:
-            participant = self.participants[uri]
-        except KeyError:
+        participant = self.participant_for(notification.data.participant, prefer=self.pending_additions)
+        if participant is None:
             return
         if participant not in self.pending_additions:
             return
         participant.request_status = None
-        del self.participants[uri]
+        del self.participants[participant.key]
         self.pending_additions.remove(participant)
         notification.center.post_notification('BlinkSessionDidNotAddParticipant', sender=self.session, data=NotificationData(participant=participant, reason=notification.data.reason))
 
     def _NH_SIPConferenceDidNotRemoveParticipant(self, notification):
-        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
-        try:
-            participant = self.participants[uri]
-        except KeyError:
+        participant = self.participant_for(notification.data.participant, prefer=self.pending_removals)
+        if participant is None:
             return
         if participant not in self.pending_removals:
             return
@@ -2006,20 +2104,16 @@ class ServerConference(object):
         notification.center.post_notification('BlinkSessionDidNotRemoveParticipant', sender=self.session, data=NotificationData(participant=participant, reason=notification.data.reason))
 
     def _NH_SIPConferenceGotAddParticipantProgress(self, notification):
-        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
-        try:
-            participant = self.participants[uri]
-        except KeyError:
+        participant = self.participant_for(notification.data.participant, prefer=self.pending_additions)
+        if participant is None:
             return
         if participant not in self.pending_additions:
             return
         participant.request_status = notification.data.reason
 
     def _NH_SIPConferenceGotRemoveParticipantProgress(self, notification):
-        uri = self.sip_prefix_re.sub('', str(notification.data.participant))
-        try:
-            participant = self.participants[uri]
-        except KeyError:
+        participant = self.participant_for(notification.data.participant, prefer=self.pending_removals)
+        if participant is None:
             return
         if participant not in self.pending_removals:
             return
@@ -6909,7 +7003,13 @@ class ConferenceParticipantItem(object):
 
     @property
     def info(self):
-        return self.participant.request_status or self.participant.contact.note or self.participant.uri
+        if self.participant.request_status:
+            return self.participant.request_status
+        if self.participant.multi_device:
+            # an account in the room from several devices: which one this is
+            label = self.participant.device_label or self.participant.uri
+            return translate('sessions', '%s (this device)') % label if self.participant.this_device else label
+        return self.participant.contact.note or self.participant.uri
 
     @property
     def state(self):
@@ -6928,11 +7028,18 @@ class ConferenceParticipantItem(object):
         media = set(self.participant.active_media)
         session = self.participant.blink_session
         if session is not None and session.account is not None and session.contact_uri is not None:
-            ours = self.participant.uri.replace('sip:', '', 1).lower() == str(session.account.id).lower()
+            from blink.webrtc import active_videoroom
+            videoroom = active_videoroom(session.contact_uri.uri)
+            ours = self.participant.this_device or (not self.participant.multi_device and self.participant.uri.replace('sip:', '', 1).lower() == str(session.account.id).lower())
             if ours:
-                from blink.webrtc import active_videoroom
-                if active_videoroom(session.contact_uri.uri) is not None:
+                if videoroom is not None:
                     media |= {'audio', 'video'}     # our audio and video are in the room's video room, over WebRTC
+            elif self.participant.webrtc:
+                # in the room's video room: conference-info tells only the chat of its WebRTC leg, the
+                # video room (when we are in it too) whether it sends video
+                media.add('audio')
+                if any(publisher.video is not False for publisher in self.participant.webrtc_publishers(videoroom)):
+                    media.add('video')
         return media
 
     @property
@@ -6969,15 +7076,18 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
                 if self.is_myself(item, model.session) or not item.widget.isEnabled():
                     return True     # no remove button for myself, nor while a request is pending
                 title = translate('sessions', 'Remove participant')
-                message = translate('sessions', 'Would you like to kick %s out of the conference?') % item.name
+                who = f'{item.name} ({item.participant.device_label})' if item.participant.multi_device and item.participant.device_label else item.name
+                message = translate('sessions', 'Would you like to kick %s out of the conference?') % who
                 if QMessageBox.question(self.parent(), title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-                    ActivityLog().info(f'[conference] Remove {item.participant.uri} from {model.session.uri}')
+                    ActivityLog().info(f'[conference] Remove {item.participant.uri}' + (f' ({item.participant.device_label})' if item.participant.multi_device else '') + f' from {model.session.uri}')
                     model.session.server_conference.remove_participant(item.participant)
                 return True
         return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
 
     @staticmethod
     def is_myself(item, blink_session):
+        if item.participant.multi_device:
+            return item.participant.this_device     # our other devices can be kicked, this one not
         account = getattr(blink_session, 'account', None)
         if account is None or getattr(account, 'id', None) is None:
             return False
