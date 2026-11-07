@@ -1661,10 +1661,22 @@ class VideoroomWindow(QWidget):
                 menu.addAction('Show as the speaker').triggered.connect(lambda: session.set_speakers([id]))
                 if len(speakers) == 1:
                     menu.addAction('Show as second speaker').triggered.connect(lambda: session.set_speakers(speakers + [id]))
-        if not isinstance(tile, LocalTile) and tile.participant.type == 'sip':
-            menu.addSeparator()
-            menu.addAction('Remove from the conference').triggered.connect(lambda: session.remove_participants([tile.participant.uri]))
+        if not isinstance(tile, LocalTile) and getattr(tile.participant, 'extra_video', None) is None and not tile.participant.parent:
+            # a SIP caller by its address; a WebRTC one by its publisher id: the server kicks exactly that
+            # device, even one of our own account (never this one, nor an extra video of someone)
+            participant = tile.participant
+            target = participant.uri if participant.type == 'sip' else participant.id
+            if target:
+                menu.addSeparator()
+                menu.addAction('Remove from the conference').triggered.connect(lambda: self._remove_participant(participant, target))
         menu.exec(position)
+
+    def _remove_participant(self, participant, target):
+        from PyQt6.QtWidgets import QMessageBox
+        answer = QMessageBox.question(self, 'Remove participant', f'Would you like to kick {participant.name} out of the conference?',
+                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if answer == QMessageBox.StandardButton.Yes:
+            self.session.remove_participants([target])
 
     def flash(self, text, duration=3):
         """A note in the status pill for a few seconds (the window's title has the rest)."""
