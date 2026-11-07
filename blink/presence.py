@@ -13,8 +13,10 @@ from application.python import Null, limit
 from datetime import datetime
 from dateutil.tz import tzutc
 from itertools import chain
+from eventlib.twistedutil import block_on
 from twisted.internet import reactor
 from twisted.internet.error import ConnectionLost
+from twisted.internet.threads import deferToThread
 from zope.interface import implementer
 
 from sipsimple import addressbook
@@ -307,13 +309,13 @@ class ContactIcon(object):
         headers = {'If-None-Match': etag} if etag else {}
         req = urllib.request.Request(url, headers=headers)
         try:
-            response = urllib.request.urlopen(req)
+            response = urllib.request.urlopen(req, timeout=10)
             content = response.read()
             info = response.info()
-        except (ConnectionLost, urllib.error.URLError, urllib.error.HTTPError):
+        except (ConnectionLost, OSError):
             return None
         content_type = info.get('content-type')
-        etag = info.get('etag')
+        etag = info.get('etag') or ''
         if etag.startswith('W/'):
             etag = etag[2:]
         etag = etag.replace('\"', '')
@@ -408,9 +410,9 @@ class PresenceSubscriptionHandler(object):
                             icon = None
                         else:
                             # New icon, client uses fast path mechanism
-                            icon = ContactIcon.fetch(icon_url, etag=None, descriptor_etag=icon_hash)
+                            icon = block_on(deferToThread(ContactIcon.fetch, icon_url, etag=None, descriptor_etag=icon_hash))
                     else:
-                        icon = ContactIcon.fetch(icon_url, etag=contact.icon.etag if contact.icon else None)
+                        icon = block_on(deferToThread(ContactIcon.fetch, icon_url, etag=contact.icon.etag if contact.icon else None))
                 else:
                     icon = None
             self._update_presence_state(contact, state, note, icon)
