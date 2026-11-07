@@ -321,9 +321,9 @@ def _offers_video(sdp):
     return False
 
 
-def _video_ssrc(sdp):
-    """The first a=ssrc of the m=video section of an SDP (ours), or None."""
-    match = re.search(r'^m=video [^\r\n]*', sdp, re.M)
+def _video_ssrc(sdp, media='video'):
+    """The first a=ssrc of the m=video (or m=<media>) section of an SDP (ours), or None."""
+    match = re.search(rf'^m={media} [^\r\n]*', sdp, re.M)
     if match is None:
         return None
     rest = sdp[match.end():]
@@ -739,16 +739,19 @@ class VideoroomSession(QObject):
         webrtcbin.connect('notify::ice-gathering-state', self._on_gathering_state, self.id)
         webrtcbin.connect('notify::ice-connection-state', self._on_ice_connection_state, 'publisher')
 
-        # microphone
+        # microphone; its SSRC is chosen now and offered (a=ssrc), as for video: the server drops RTP
+        # from an SSRC it was not told, and the offer is made before the microphone has produced caps
+        import random
+        self._audio_ssrc = random.randint(1, 0xffffffff)
         microphone = [_make('autoaudiosrc', 'microphone'), _make('audioconvert'), _make('audioresample')]
         if _has('webrtcdsp') and _has('webrtcechoprobe'):
             microphone += [_make('capsfilter', caps=Gst.Caps.from_string('audio/x-raw,rate=48000,channels=1')), _make('webrtcdsp', 'dsp', probe='echoprobe', noise_suppression=False, gain_control=False)]    # echo cancelling only, as the SIP audio
         self._volume = _make('volume', 'micvolume', mute=self.audio_muted)
         microphone += [self._volume] + ([_make('level', 'level-self', interval=LEVEL_INTERVAL, post_messages=True)] if _has('level') else []) + [_make('audioconvert'), _make('audioresample'), _make('queue', max_size_time=200 * Gst.MSECOND, leaky='downstream'),
                        _make('opusenc', bitrate=64000, audio_type='generic', complexity=10, inband_fec=True),
-                       _make('rtpopuspay', pt=OPUS_PT)]
+                       _make('rtpopuspay', pt=OPUS_PT, ssrc=self._audio_ssrc)]
         self._add_chain(microphone)
-        audio_caps = Gst.Caps.from_string(f'application/x-rtp,media=audio,encoding-name=OPUS,payload={OPUS_PT},clock-rate=48000,encoding-params=(string)2')
+        audio_caps = Gst.Caps.from_string(f'application/x-rtp,media=audio,encoding-name=OPUS,payload={OPUS_PT},clock-rate=48000,encoding-params=(string)2,ssrc=(uint){self._audio_ssrc}')
         microphone_out = microphone[-1]
         audio_pad = webrtcbin.request_pad_simple('sink_%u')
         audio_transceiver = audio_pad.get_property('transceiver')
@@ -820,6 +823,11 @@ class VideoroomSession(QObject):
             self._offer_video_ssrc = getattr(self, '_video_ssrc', None)     # not in the SDP: the one chosen, at least
         if _video_ssrc(sdp) is None:
             self.log('the offer has no SSRC for our video: the server may drop it', 'warning')
+        audio_ssrc = _video_ssrc(sdp, 'audio')
+        if audio_ssrc is None:
+            self.log('the offer has no SSRC for our audio: the server may drop it', 'warning')
+        elif audio_ssrc != getattr(self, '_audio_ssrc', audio_ssrc):
+            self.log(f'the offer announces audio SSRC {audio_ssrc}, the microphone sends {self._audio_ssrc}: the server may drop it', 'warning')
         ActivityLog().debug(f'[videoroom] {self.room}: offer\n{sdp}')
         for line in rtp_offer_lines(sdp):
             self.log(f'publishing: {line}')
