@@ -173,6 +173,10 @@ class MessagePane(QWidget):
         notification_center.add_observer(self, name='BlinkGotDispositionNotification')
         notification_center.add_observer(self, name='BlinkLocalFilesDidRemove')
         notification_center.add_observer(self, name='CFGSettingsObjectDidChange')     # BlinkSettings cannot be made yet: the configuration is not started
+        # the call buttons follow a call to the conversation's party (ConversationHeader.update_call_buttons)
+        for name in ('BlinkSessionDidChangeState', 'BlinkSessionDidAddStream', 'BlinkSessionDidRemoveStream', 'BlinkSessionDidNotAddStream',
+                     'BlinkSessionDidReinitializeForIncoming', 'BlinkSessionDidReinitializeForOutgoing', 'BlinkSessionDidEnd', 'BlinkSessionWasDeleted'):
+            notification_center.add_observer(self, name=name)
         self._last_read_sound = 0.0
 
     @staticmethod
@@ -224,6 +228,7 @@ class MessagePane(QWidget):
         self.composer.show()
         chosen = self._account(self.chosen_accounts[key]) if key in self.chosen_accounts else None
         self.header.set_conversation(contact, uri, key, chosen or self._default_account())
+        self.header.update_call_buttons()
         self.header.show()
         cached = view_key in self.models
         self.transcript.bubble_delegate.peer_avatar = self.header.avatar.draw
@@ -308,6 +313,7 @@ class MessagePane(QWidget):
             self.unsent[key] = self.unsent.pop(previous)
         chosen = self._account(self.chosen_accounts[key]) if key in self.chosen_accounts else None
         self.header.set_conversation(self.contact, uri, key, chosen or self._default_account())
+        self.header.update_call_buttons()
         self._find_account(key)
         self._load_day_counts(key, self.view_key)
         ActivityLog().info(f'[Message with {key}] Messages are sent to {uri.uri} (was {previous})')
@@ -454,6 +460,13 @@ class MessagePane(QWidget):
         self.transcript.bubble_delegate.clear_cache()
         self.transcript.scheduleDelayedItemsLayout()
         refresh_views()
+
+    def _update_call_buttons(self, notification):
+        if self.contact is not None:
+            self.header.update_call_buttons()
+
+    _NH_BlinkSessionDidChangeState = _NH_BlinkSessionDidAddStream = _NH_BlinkSessionDidRemoveStream = _NH_BlinkSessionDidNotAddStream = _update_call_buttons
+    _NH_BlinkSessionDidReinitializeForIncoming = _NH_BlinkSessionDidReinitializeForOutgoing = _NH_BlinkSessionDidEnd = _NH_BlinkSessionWasDeleted = _update_call_buttons
 
     def _NH_BlinkConversationPreviewsDidChange(self, notification):
         keys = notification.data.keys

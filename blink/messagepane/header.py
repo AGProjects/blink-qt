@@ -537,9 +537,66 @@ class ConversationHeader(QWidget):
 
     # Calls
 
+    # With a call to this conversation's party on, the buttons show it (pressed while its audio,
+    # its video lasts): Audio starts no other call and Video adds video to it. Ending is the
+    # call's own Hang up. The pane calls update_call_buttons as sessions change.
+
+    _idle_states = ('', 'initialized', 'ended', 'deleted')
+
+    def call_session(self):
+        """The call with audio to this conversation's party that is on (connecting or connected), or None."""
+        if self.contact is None or self.uri is None:
+            return None
+        from blink.history import conversation_key, session_conversation_key
+        from blink.sessions import SessionManager
+        address_key = conversation_key(str(self.uri.uri), self.account)
+        for session in SessionManager().sessions:
+            if session.contact_uri is None or str(session.state or '') in self._idle_states or 'audio' not in session.streams.types:
+                continue
+            if session_conversation_key(session) == self.key or conversation_key(str(session.contact_uri.uri), session.account) == address_key:
+                return session
+        return None
+
+    def update_call_buttons(self):
+        session = self.call_session()
+        state = str(session.state or '') if session is not None else ''
+        types = session.streams.types if session is not None else set()
+        has_audio, has_video = 'audio' in types, 'video' in types
+        for button in (self.audio_button, self.video_button):
+            button.setCheckable(True)
+        self.audio_button.setChecked(has_audio)
+        self.video_button.setChecked(has_video)
+        if session is None:
+            self.audio_button.setToolTip(translate('message_pane', 'Audio call'))
+            self.video_button.setToolTip(translate('message_pane', 'Video call'))
+            self.video_button.setEnabled(True)
+            return
+        self.audio_button.setToolTip(translate('message_pane', 'Connecting...') if state.startswith('connecting') else
+                                     translate('message_pane', 'Audio call in progress (Hang up ends it)'))
+        if has_video:
+            self.video_button.setToolTip(translate('message_pane', 'Video call in progress (Hang up ends it)'))
+            self.video_button.setEnabled(True)
+        else:
+            self.video_button.setToolTip(translate('message_pane', 'Add video to the call'))
+            self.video_button.setEnabled(state == 'connected')      # not while connecting, ending or a proposal is pending
+
     def _start_call(self, media):
         if self.contact is None:
             return
-        from blink.sessions import SessionManager, StreamDescription
+        from blink.sessions import SessionManager, StreamDescription, is_conference_uri
+        session = self.call_session()
+        if session is not None:
+            if media == 'video' and 'video' not in session.streams.types and str(session.state) == 'connected':
+                uri = session.contact_uri.uri
+                if is_conference_uri(uri, session.account):
+                    # a room's video is WebRTC: create_session joins its video room, which takes over the SIP audio
+                    ActivityLog().info(f'[message pane] Add video (WebRTC) to the call with {uri} (account {session.account.id})')
+                    SessionManager().create_session(session.contact, session.contact_uri, [StreamDescription('audio'), StreamDescription('video')], account=session.account)
+                else:
+                    ActivityLog().info(f'[message pane] Add video to the call with {uri} (account {session.account.id})')
+                    session.add_stream(StreamDescription('video'))
+            self.update_call_buttons()      # Audio (and Video, when it is there) stays pressed: no other call
+            return
         streams = [StreamDescription('audio')] if media == 'audio' else [StreamDescription('audio'), StreamDescription('video')]
         SessionManager().create_session(self.contact, self.uri, streams, account=self.account)
+        self.update_call_buttons()
