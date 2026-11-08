@@ -1,3 +1,11 @@
+blink (7.2.7) unstable; urgency=medium
+
+  * Separate conference participants per device 
+  * Fix a blocking url fetch request
+  * Added kick out participant menu item
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sat, 07 Nov 2026 14:29:49 -0300
+
 blink (7.2.6) unstable; urgency=medium
 
   * Fix for upload files
