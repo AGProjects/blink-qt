@@ -308,6 +308,24 @@ class SessionInfo(object):
         self.streams.update(session.streams, session.fake_streams)
 
 
+def local_camera_problem():
+    """Why the camera cannot be sent in a call, or None when it can. When no camera opens the
+    SDK falls back to its Null device (no real name), and a camera that failed to reopen
+    (another resolution, a device that went away) stays closed: attaching it to the call's
+    video transport then fails the whole call."""
+    device = getattr(SIPApplication, 'video_device', None)
+    if device is None or device.producer is None:
+        return 'no video device'
+    if device.real_name in (None, 'Null video device'):
+        return 'no camera could be opened'
+    if not device.muted:
+        try:
+            device.producer.start()     # a no-op on a running camera, a closed one raises
+        except SIPCoreError as e:
+            return str(e) or 'the camera cannot be started'
+    return None
+
+
 class StreamDescription(object):
     def __init__(self, type, **kw):
         self.type = type
@@ -557,6 +575,8 @@ class BlinkSession(BlinkSessionBase):
         self.routes = None
         self.chat_type = None
         self.last_failed_reason = None
+        self._call_descriptions = None      # the streams an outgoing call was started with
+        self._audio_only_fallback = False   # this call is the audio only retry of a video call that failed on the camera
 
     def _get_state(self):
         return self.__dict__['state']
@@ -894,7 +914,17 @@ class BlinkSession(BlinkSessionBase):
             return
         self._remember_conference()
         notification_center = NotificationCenter()
-        self.streams.extend(stream_description.create_stream() for stream_description in self.stream_descriptions)
+        descriptions = list(self.stream_descriptions)
+        if 'video' in self.stream_descriptions:
+            problem = local_camera_problem()
+            if problem is not None:
+                # a camera that cannot be opened must not fail the call: it goes on with audio
+                ActivityLog().warning(f'[video] Cannot use the camera ({problem}): calling {self.uri} with audio only')
+                descriptions = [description for description in descriptions if description.type != 'video']
+                if not any(description.type == 'audio' for description in descriptions):
+                    descriptions.append(StreamDescription('audio'))
+        self._call_descriptions = descriptions
+        self.streams.extend(stream_description.create_stream() for stream_description in descriptions)
         self.state = 'connecting/dns_lookup'
         notification_center.post_notification('BlinkSessionWillConnect', sender=self, data=NotificationData(sibling=self._sibling))
         self.stream_descriptions = None
@@ -1292,7 +1322,36 @@ class BlinkSession(BlinkSessionBase):
                 reason = notification.data.reason or 'Call failed'
         else:
             reason = notification.data.failure_reason
+        retry = self._audio_only_retry(notification)
+        contact, contact_uri, account, uri = self.contact, self.contact_uri, self.account, self.uri
         self._terminate(reason=reason, error=True)
+        if retry is not None:
+            ActivityLog().warning(f'[video] The video call to {uri} failed on the camera ({reason}): calling again with audio only')
+
+            def redial():
+                session = SessionManager().create_session(contact, contact_uri, retry, account=account, connect=False)
+                if session is not None:
+                    session._audio_only_fallback = True
+                    session.connect()
+            QTimer.singleShot(0, redial)
+
+    def _audio_only_retry(self, notification):
+        """The streams to call again with when an outgoing video call failed locally on the
+        camera (it could not be attached when the media started): the same call without
+        video. None for any other failure, and for the retry itself."""
+        if self.direction != 'outgoing' or self._audio_only_fallback or not self._call_descriptions:
+            return None
+        if not any(description.type == 'video' for description in self._call_descriptions):
+            return None
+        if notification.data.originator != 'local' or notification.data.code:
+            return None
+        failure = (notification.data.failure_reason or '').lower()
+        if not (failure.startswith('video media stream') or (failure.startswith('sip core error') and ('video' in failure or 'camera' in failure))):
+            return None
+        descriptions = [description for description in self._call_descriptions if description.type != 'video']
+        if not any(description.type == 'audio' for description in descriptions):
+            descriptions.append(StreamDescription('audio'))
+        return descriptions
 
     def _NH_SIPSessionDidEnd(self, notification):
         self._terminate(translate('sessions', 'Call ended') if notification.data.originator == 'local' else translate('sessions', 'Call ended by remote'))

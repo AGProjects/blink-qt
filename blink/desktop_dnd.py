@@ -50,6 +50,10 @@ class DesktopDoNotDisturb(QObject, metaclass=QSingleton):
         self._update(result.stdout.strip() == 'false', 'when Blink started')
         self.process = QProcess(self)
         self.process.readyReadStandardOutput.connect(self._read)
+        # the monitor runs as long as Blink: it must not inherit Blink's descriptors, the camera
+        # (/dev/video*, opened by the SDK without O_CLOEXEC) would stay held by it (Qt >= 6.6)
+        if hasattr(QProcess, 'setUnixProcessParameters'):
+            self.process.setUnixProcessParameters(QProcess.UnixProcessFlag.CloseFileDescriptors)
         self.process.start('gsettings', ['monitor', self.schema, self.key])
 
     def stop(self):
