@@ -449,8 +449,9 @@ class MainWindow(base_class, ui_class):
         wide_padding = self.identity.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
-        # Under the account selector, one line per background job, each shown only when it takes a
-        # while and all of them at once: the message journal (download and import), the older history
+        # Above the buttons bar at the bottom (of the contacts or the sessions view, whichever is
+        # shown), one line per background job, each shown only when it takes a while and all of
+        # them at once: the message journal (download and import), the older history
         # of a first sync, the background decryption of stored messages. The last two have a button
         # beside the bar that sets how much CPU they take.
         from PyQt6.QtWidgets import QVBoxLayout
@@ -477,7 +478,8 @@ class MainWindow(base_class, ui_class):
         self.decryption_line = ProgressLine(self.progress_area, font, self.decryption_speed_button)
         for line in (self.journal_line, self.backlog_line, self.decryption_line):
             progress_layout.addWidget(line)
-        self.window_layout.insertWidget(self.window_layout.indexOf(self.identity_widget) + 1, self.progress_area)
+        self.main_view.currentChanged.connect(self._place_progress_area)
+        self._place_progress_area()
         self._decryption_progress = None        # (done, total, speed, eta) of the background decryption, while it runs
         self._backlog_progress = None           # (done, total, account, phase) of the older history of a first sync, while it runs
 
