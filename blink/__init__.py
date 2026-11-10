@@ -156,6 +156,14 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
+        from blink import instance_lock
+        if not instance_lock.acquire():
+            # another Blink uses this data directory: both would overwrite the configuration
+            pid = instance_lock.holder()
+            ActivityLog().error(f'Blink is already running' + (f' (process {pid})' if pid else '') + f' with data directory {ApplicationData.directory}, not starting a second instance')
+            QMessageBox.critical(None, 'Blink', 'Blink is already running%s with data directory %s.\n\nTwo instances would overwrite each other\'s accounts and settings, so this one does not start.'
+                                 % (f' (process {pid})' if pid else '', ApplicationData.directory))
+            sys.exit(1)
         from blink import profiles
         try:
             switched = profiles.apply_pending_switch()      # before anything reads the configuration
@@ -315,6 +323,8 @@ class Blink(QApplication, metaclass=QSingleton):
         activity.info('SIP application stopped')
         self.log_manager.stop()
         if self.reinit:
+            from blink import instance_lock
+            instance_lock.release()     # the restarted image takes it again
             os.execl(sys.executable, sys.executable, *sys.argv)
 
     def _install_signal_handlers(self):
