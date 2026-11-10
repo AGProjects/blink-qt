@@ -1,3 +1,10 @@
+blink (7.2.8) unstable; urgency=medium
+
+  * Video call fixes
+  * Fix detecting some USB cameras
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sun, 08 Nov 2026 08:24:57 -0300
+
 blink (7.2.7) unstable; urgency=medium
 
   * Separate conference participants per device 
