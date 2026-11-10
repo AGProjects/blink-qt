@@ -742,10 +742,10 @@ class VideoroomSession(QObject):
         # microphone
         microphone = [_make('autoaudiosrc', 'microphone'), _make('audioconvert'), _make('audioresample')]
         if _has('webrtcdsp') and _has('webrtcechoprobe'):
-            microphone += [_make('capsfilter', caps=Gst.Caps.from_string('audio/x-raw,rate=48000,channels=1')), _make('webrtcdsp', 'dsp', probe='echoprobe')]
+            microphone += [_make('capsfilter', caps=Gst.Caps.from_string('audio/x-raw,rate=48000,channels=1')), _make('webrtcdsp', 'dsp', probe='echoprobe', noise_suppression=False, gain_control=False)]    # echo cancelling only, as the SIP audio
         self._volume = _make('volume', 'micvolume', mute=self.audio_muted)
         microphone += [self._volume] + ([_make('level', 'level-self', interval=LEVEL_INTERVAL, post_messages=True)] if _has('level') else []) + [_make('audioconvert'), _make('audioresample'), _make('queue', max_size_time=200 * Gst.MSECOND, leaky='downstream'),
-                       _make('opusenc', bitrate=32000, inband_fec=True, audio_type='voice'),
+                       _make('opusenc', bitrate=64000, audio_type='generic', complexity=10, inband_fec=True),
                        _make('rtpopuspay', pt=OPUS_PT)]
         self._add_chain(microphone)
         audio_caps = Gst.Caps.from_string(f'application/x-rtp,media=audio,encoding-name=OPUS,payload={OPUS_PT},clock-rate=48000,encoding-params=(string)2')
