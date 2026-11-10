@@ -305,15 +305,24 @@ class ParticipantTile(_PtzControls, QWidget):
         participant.speakingChanged.connect(self._SH_SpeakingChanged)
         # one of our extra videos from a camera with PTZ: an RTSP one (ONVIF) or a second USB one (V4L2)
         self._ptz_setup()
+        self.released = False
         extra = getattr(participant, 'extra_video', None)
         if extra is not None and extra.source.get('kind') == 'rtsp':
             from blink.webrtc.ptz import probe
-            probe(extra.source, lambda ptz, source=extra.source: self.set_ptz(ptz, source))
+            probe(extra.source, lambda ptz, source=extra.source: self._SH_PtzProbed(ptz, source))
         elif extra is not None and extra.source.get('kind') == 'camera':
             from blink.webrtc.uvcptz import find
             self.set_ptz(find(extra.source.get('name')), extra.source)
 
+    def _SH_PtzProbed(self, ptz, source):
+        # the camera answers a while after it is asked: the tile may be gone by then (the video stopped, the window closed)
+        from PyQt6 import sip
+        if self.released or sip.isdeleted(self):
+            return
+        self.set_ptz(ptz, source)
+
     def release(self):
+        self.released = True
         self.set_ptz(None)
         self.ptz_idle_timer.stop()
         try:
@@ -498,6 +507,9 @@ class ParticipantTile(_PtzControls, QWidget):
         if ptz_shown:
             self._paint_ptz(painter)
             self._paint_presets(painter)
+        if not compact and getattr(self.participant, 'extra_video', None) is not None and image is not None:
+            from blink.webrtc.ptzcontrols import paint_target
+            paint_target(painter, rect, self.participant.id, mirror=False, crop=True)
         if self.picked or self.replaceable:
             hovered = self.underMouse()
             painter.setClipping(False)
@@ -547,6 +559,66 @@ class _ThumbnailButton(QAbstractButton):
             painter.drawRoundedRect(QRectF(frame.right() - 6, frame.bottom() - 4.5, 5, 3.5), 0.8, 0.8)
 
 
+class _FollowButton(QAbstractButton):
+    """On our own tile, always shown while the camera can follow us (blink.webrtc.tracker.FollowMe):
+    "Follow me" while off, "Following" (blue) or "Looking for you" while on; a click toggles it."""
+
+    height_ = 22
+
+    def __init__(self, tile):
+        super(_FollowButton, self).__init__(tile)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.clicked.connect(self._SH_Clicked)
+        self.hide()
+
+    @staticmethod
+    def _font():
+        font = QFont(QApplication.font())
+        font.setPointSizeF(8.5)
+        font.setWeight(QFont.Weight.Medium)
+        return font
+
+    def _text(self):
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        if not follow_me.enabled:
+            return 'Follow me'
+        return {'lost': 'Looking for you', 'resting': 'Waiting for you', 'following': 'Following', 'paused': 'Follow me: paused'}.get(follow_me.state, 'Follow me: waiting')
+
+    def refresh(self):
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        self.setToolTip('The camera follows you, and nods when it lost you: click to stop' if follow_me.enabled else
+                        'Let the camera turn to keep you in the picture')
+        self.resize(QFontMetrics(self._font()).horizontalAdvance(self._text()) + 22, self.height_)
+        self.update()
+
+    def _SH_Clicked(self):
+        from blink.webrtc.tracker import FollowMe
+        if not FollowMe.instance().toggle():
+            QApplication.beep()
+
+    def paintEvent(self, event):
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        following = follow_me.enabled and follow_me.state == 'following'
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(PICK_COLOR if following else QColor(0, 0, 0, 190 if self.underMouse() else 140))
+        painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
+        # a dot: lit while on
+        dot = QRectF(rect.left() + 8, rect.center().y() - 3, 6, 6)
+        painter.setBrush(white(0.95) if follow_me.enabled else white(0.35))
+        painter.drawEllipse(dot)
+        painter.setFont(self._font())
+        painter.setPen(white(0.95))
+        painter.drawText(rect.adjusted(18, 0, -6, 0), Qt.AlignmentFlag.AlignCenter, self._text())
+
+
 class LocalTile(_PtzControls, QWidget):
     """Our own camera, mirrored, as the other tiles; its PTZ controls when it is a USB camera with them (V4L2)."""
 
@@ -570,6 +642,9 @@ class LocalTile(_PtzControls, QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self._ptz_setup()
         self._ptz_camera_name = None        # the camera self.ptz was looked up for
+        self.follow_button = _FollowButton(self)
+        from blink.webrtc.tracker import FollowMe
+        FollowMe.instance().changed.connect(self._SH_FollowMeChanged)
         self.attach_camera()
 
     @property
@@ -580,7 +655,13 @@ class LocalTile(_PtzControls, QWidget):
         self.overlay.update()       # the picture is the surface's: the controls are painted over it
 
     def _attach_ptz(self, name):
-        """The PTZ controls of the camera we send, when it has them (looked up again only when it changes)."""
+        """The PTZ controls of the camera we send, when it has them (looked up again only when it changes),
+        and Follow me for it."""
+        from blink.webrtc.tracker import FollowMe
+        if name:
+            FollowMe.instance().show(self, name)
+        else:
+            FollowMe.instance().hide(self)
         if name == self._ptz_camera_name:
             return
         self._ptz_camera_name = name
@@ -628,6 +709,12 @@ class LocalTile(_PtzControls, QWidget):
         self.overlay.update()
 
     def release(self):
+        from blink.webrtc.tracker import FollowMe
+        try:
+            FollowMe.instance().changed.disconnect(self._SH_FollowMeChanged)
+        except TypeError:
+            pass
+        FollowMe.instance().hide(self)
         self.set_ptz(None)
         self.ptz_idle_timer.stop()
         if self.blurred:
@@ -635,6 +722,25 @@ class LocalTile(_PtzControls, QWidget):
             self.blurred = False
             BlurredCamera().remove_listener(self)
         self.surface.stop()
+
+    def _SH_FollowMeChanged(self):
+        self.place_thumbnail_button()       # and the follow button
+
+    def place_follow_button(self):
+        """Shown while the camera can follow us (or it is on: it can be turned off), at the left of the edge
+        away from the name pill; not in the carousel."""
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        button = self.follow_button
+        shown = (follow_me.available or (follow_me.enabled and self.ptz is not None)) and not follow_me.suspended and self.height() >= COMPACT_TILE_HEIGHT and \
+            self.width() >= 140
+        if shown:
+            button.refresh()
+            margin = 6
+            y = margin if self.label_corner[0] == 'bottom' else self.height() - margin - button.height()
+            button.move(margin, int(y))
+            button.raise_()
+        button.setVisible(shown)
 
     def set_camera_off(self, off):
         self.camera_off = off
@@ -648,11 +754,14 @@ class LocalTile(_PtzControls, QWidget):
     def place_thumbnail_button(self):
         """In the first corner clear of the name pill and the raised hand badge, as they are painted:
         the right on the edge away from them first, then the others."""
+        self.place_follow_button()          # it goes by the name pill's corner too
         margin = 6
         button = self.thumbnail_button
         rect = QRectF(self.rect())
         taken = [_name_pill_rect(rect, 'Me', self.muted, self.label_corner, _label_avoid(self.overlay))[0].adjusted(-4, -4, 4, 4),
                  _hand_rect(rect, self.label_corner).adjusted(-4, -4, 4, 4)]
+        if self.follow_button.isVisible():
+            taken.append(QRectF(self.follow_button.geometry()).adjusted(-4, -4, 4, 4))
         away = 'bottom' if self.label_corner[0] == 'top' else 'top'
         near = 'top' if away == 'bottom' else 'bottom'
         w, h = button.width(), button.height()
@@ -721,6 +830,9 @@ class _LocalOverlay(QWidget):
         if rect.height() < COMPACT_TILE_HEIGHT:
             return      # in the carousel: the name is the tooltip
         _paint_name_pill(painter, rect, 'Me', self.tile.muted, self.tile.label_corner, _label_avoid(self))
+        if self.tile.surface.isVisible():
+            from blink.webrtc.ptzcontrols import paint_target
+            paint_target(painter, rect, 'camera', mirror=self.tile.surface.mirror, crop=self.tile.surface.crop)
         if self.tile.ptz_shown:
             self.tile._paint_ptz(painter)
             self.tile._paint_presets(painter)
@@ -1050,6 +1162,86 @@ class _CameraObserver(object):
             call_in_gui_thread(window._camera_device_changed)
 
 
+def _follow_me_running():
+    from blink.webrtc.tracker import FollowMe
+    return FollowMe.instance().state != 'off'
+
+
+class _DirectorBadge(QAbstractButton):
+    """While Track speakers runs (blink.webrtc.director): at the top left of the window, the cameras that
+    follow, a dot on those that have someone in sight; a click on "Track speakers" stops it."""
+
+    height_ = 24
+
+    def __init__(self, window):
+        super(_DirectorBadge, self).__init__(window)
+        self.window_ = window
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setMouseTracking(True)
+        self.setToolTip('Track speakers: each camera with PTZ follows whoever it has in sight (a dot: it has someone). D, or a click: stop')
+        self.hide()
+
+    @staticmethod
+    def _font():
+        font = QFont(QApplication.font())
+        font.setPointSizeF(8.5)
+        font.setWeight(QFont.Weight.Medium)
+        return font
+
+    def _parts(self):
+        """[(rect, camera or None for the "Director" label, text)]."""
+        metrics = QFontMetrics(self._font())
+        parts = []
+        x = 0.0
+        from blink.webrtc.tracker import ManualPause
+        texts = [(None, 'Track speakers: paused' if ManualPause.instance().paused else 'Track speakers')] + [(camera, f'{number} {camera.name}') for number, camera in enumerate(self.window_.director.cameras, 1)]
+        for camera, text in texts:
+            width = metrics.horizontalAdvance(text) + 20
+            parts.append((QRectF(x, 0, width, self.height_), camera, text))
+            x += width + 4
+        return parts
+
+    def refresh(self):
+        running = self.window_.director.running
+        if running:
+            parts = self._parts()
+            self.resize(int(parts[-1][0].right()) + 1, self.height_)
+            self.place()
+            self.raise_()
+        self.setVisible(running)
+        self.update()
+
+    def place(self):
+        self.move(TILE_GAP + 8, TILE_GAP + 8)
+
+    def mouseReleaseEvent(self, event):
+        for rect, camera, text in self._parts():
+            if rect.contains(event.position()):
+                director = self.window_.director
+                if camera is None:
+                    self.window_.toggle_director()
+                return
+        super(_DirectorBadge, self).mouseReleaseEvent(event)
+
+    def paintEvent(self, event):
+        director = self.window_.director
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setFont(self._font())
+        for rect, camera, text in self._parts():
+            rect = rect.adjusted(0.5, 0.5, -0.5, -0.5)
+            lit = camera is not None and camera is director.active
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(PICK_COLOR if lit else QColor(0, 0, 0, 160))
+            painter.drawRoundedRect(rect, rect.height() / 2, rect.height() / 2)
+            if camera is not None and camera.tracker.seen:
+                painter.setBrush(SPEAKING_COLOR)    # this one has us in sight
+                painter.drawEllipse(QRectF(rect.left() + 6, rect.center().y() - 3, 6, 6))
+            painter.setPen(white(0.95))
+            painter.drawText(rect.adjusted(6 if camera is not None else 0, 0, 0, 0), Qt.AlignmentFlag.AlignCenter, text)
+
+
 class VideoroomWindow(QWidget):
     windows = {}        # session -> window
 
@@ -1093,6 +1285,20 @@ class VideoroomWindow(QWidget):
 
         self.status_label = StatusLabel(self)
         self.status_label.set_status('Connecting…')
+
+        # Track speakers (D, or chosen when joining): each camera of ours with PTZ follows whoever it sees (blink.webrtc.director)
+        from blink.webrtc.director import Director
+        self.director = Director(self)
+        self._auto_direct_timer = QTimer(self)
+        self._auto_direct_timer.setSingleShot(True)
+        self._auto_direct_timer.setInterval(1500)      # the cameras settle (extra videos come one after the other)
+        self._auto_direct_timer.timeout.connect(self._auto_direct)
+        self.director.changed.connect(self._SH_DirectorChanged)
+        self.director_badge = _DirectorBadge(self)
+        self.director.sightChanged.connect(self.director_badge.update)
+        from blink.webrtc.tracker import ManualPause, Trackers
+        ManualPause.instance().changed.connect(self._SH_ManualPauseChanged)
+        Trackers.instance().looked.connect(self._SH_TrackerLooked)
 
         self.call_bar = CallBar(self)
         self.call_bar.scale = CALL_BAR_SCALE
@@ -1194,6 +1400,7 @@ class VideoroomWindow(QWidget):
         self.grid.setGeometry(self.rect())
         self.call_bar.tile()
         self._place_status()
+        self.director_badge.place()
         self.carousel.tile()
         self.status_label.raise_()
         self.call_bar.raise_()
@@ -1257,6 +1464,66 @@ class VideoroomWindow(QWidget):
                 self.set_picked(None)       # a click anywhere else, our own tile included, cancels
         return False
 
+    # The director (blink.webrtc.director)
+
+    def toggle_director(self):
+        """D: Track speakers on or off, for this room (it is not started again by itself once turned off)."""
+        if self.director.running:
+            self.session.track_speaker = False
+            self.director.stop()
+        elif self.director.start():
+            self.session.track_speaker = True
+        else:
+            self.flash('Track speakers needs a camera with PTZ', duration=5)
+
+    def _auto_direct(self):
+        """Track speakers chosen when joining: started once the cameras are there, and again as they come and go."""
+        if self._closing or not getattr(self.session, 'track_speaker', False) or self.session.state != 'established':
+            return
+        director = self.director
+        wanted = [id for id, name, ptz, source, interval in director.candidates()]
+        if director.running and sorted(wanted) == sorted(camera.id for camera in director.cameras):
+            return
+        if director.running:
+            director.restart()
+        else:
+            director.start()
+
+    def _add_director_action(self, menu):
+        if self.director.running or self.director.possible(self.director.candidates()):
+            action = menu.addAction('Track speakers (D)')
+            action.setCheckable(True)
+            action.setChecked(self.director.running)
+            action.setToolTip('Each camera with PTZ follows whoever it has in sight')
+            action.triggered.connect(lambda checked: self.toggle_director())
+
+    def _SH_TrackerLooked(self, key):
+        """A tracker looked: the picture of ours it follows someone on shows where (the target)."""
+        if self._closing:
+            return
+        if key == 'camera':
+            self.local_tile.overlay.update()
+            return
+        extra = self.session.extra_videos.get(key)
+        tile = self.tiles.get(extra.participant) if extra is not None else None
+        if tile is not None:
+            tile.update()
+
+    def _SH_ManualPauseChanged(self, paused):
+        if self._closing:
+            return
+        self.director_badge.refresh()
+        if self.director.running or _follow_me_running():
+            self.flash('Tracking paused: you drive (again 10 s after your last move)' if paused else 'Tracking again')
+
+    def _SH_DirectorChanged(self):
+        director = self.director
+        if director.running and not director._restarting:
+            self.flash('Track speakers: ' + ', '.join(camera.name for camera in director.cameras))
+        elif not director.running and not self._closing and not director._restarting:
+            self.flash('Track speakers off')
+        self.director_badge.refresh()
+
     # Extra videos of ours: a second camera, an RTSP camera (blink.webrtc.extravideo)
 
     def _add_video_dialog(self):
@@ -1319,9 +1586,12 @@ class VideoroomWindow(QWidget):
             return
         if state == 'established':
             self.flash(f'{extra.label} added')
+            self._auto_direct_timer.start()
             self._update_auto_speakers()
             self._update_speakers_button()      # one more stream that can be speaker
         elif state == 'ended':
+            self.director.forget(extra.participant.id)
+            self._auto_direct_timer.start()
             self._SH_ParticipantLeft(extra.participant)
             self._update_auto_speakers()
             if reason not in ('stopped', 'left'):
@@ -1379,7 +1649,10 @@ class VideoroomWindow(QWidget):
             self.toggle_full_screen()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self.picked is not None:
+        modifiers = event.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
+        if event.key() == Qt.Key.Key_D and modifiers == Qt.KeyboardModifier.NoModifier:
+            self.toggle_director()
+        elif event.key() == Qt.Key.Key_Escape and self.picked is not None:
             self.set_picked(None)
         elif event.key() == Qt.Key.Key_Escape and self.isFullScreen():
             self.toggle_full_screen()
@@ -1692,6 +1965,14 @@ class VideoroomWindow(QWidget):
                 hide.triggered.connect(lambda: self._set_self_hidden(True))
             menu.addSeparator()
             if tile.ptz is not None:
+                from blink.webrtc.tracker import FollowMe
+                follow_me = FollowMe.instance()
+                if follow_me.available or follow_me.enabled:
+                    follow = menu.addAction('Follow me')
+                    follow.setCheckable(True)
+                    follow.setChecked(follow_me.enabled)
+                    follow.triggered.connect(lambda checked: follow_me.set_enabled(checked))
+                self._add_director_action(menu)
                 tile.add_ptz_menu(menu)
             menu.addAction('Lower hand' if tile.hand else 'Raise hand').triggered.connect(lambda: session.toggle_hand())
         elif getattr(tile.participant, 'extra_video', None) is not None:
@@ -1707,6 +1988,7 @@ class VideoroomWindow(QWidget):
                 action.setChecked(participant.extra_video.resolution == name)
                 action.triggered.connect(lambda checked, name=name: participant.extra_video.set_resolution(name))
             if tile.ptz is not None:
+                self._add_director_action(menu)
                 tile.add_ptz_menu(menu)
             menu.addAction('Stop this video').triggered.connect(lambda: participant.extra_video.stop())
         else:
@@ -1841,6 +2123,13 @@ class VideoroomWindow(QWidget):
         if self._closing:
             return
         self._closing = True
+        try:
+            from blink.webrtc.tracker import ManualPause, Trackers
+            ManualPause.instance().changed.disconnect(self._SH_ManualPauseChanged)
+            Trackers.instance().looked.disconnect(self._SH_TrackerLooked)
+        except TypeError:
+            pass
+        self.director.stop()
         self.clock.stop()
         self._camera_observer.close()
         try:
@@ -1870,6 +2159,7 @@ class VideoroomWindow(QWidget):
             self._update_status()
             self.idle_timer.start()
             self._start_pending_extra_videos()
+            self._auto_direct_timer.start()
         elif state == 'terminated':
             self.clock.stop()
             self._end_room_chat()       # however it ended, the chat opened for it goes with it

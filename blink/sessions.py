@@ -8244,6 +8244,13 @@ class ConferenceDialog(base_class, ui_class):
         source_buttons.addWidget(self.video_source_remove_button)
         source_buttons.addStretch(1)
         sources_layout.addLayout(source_buttons)
+        # Track speakers (blink.webrtc.director): each checked camera with PTZ follows whoever it has in sight
+        self.track_speaker_button = QCheckBox(translate('conference_dialog', 'Track speakers'), self.video_sources_widget)
+        self.track_speaker_button.setToolTip(translate('conference_dialog', 'Each camera with pan and tilt (PTZ) follows whoever it has in sight, on its own. '
+                                                                            'What the conference shows and its audio are not changed. D in the conference turns it on or off'))
+        self.track_speaker_button.setChecked(str(ui_settings().value(self.TRACK_SPEAKER_KEY, 'false')).lower() == 'true')
+        self.track_speaker_button.toggled.connect(lambda checked: ui_settings().setValue(self.TRACK_SPEAKER_KEY, 'true' if checked else 'false'))
+        sources_layout.addWidget(self.track_speaker_button)
         self.grid_layout.addWidget(self.video_sources_widget, 2, 1)
         self.video_sources_label.hide()
         self.video_sources_widget.hide()
@@ -8492,7 +8499,7 @@ class ConferenceDialog(base_class, ui_class):
 
     # Profiles
 
-    PROFILES_KEY = 'conference_dialog/profiles'     # [{name, room, audio, video, invitees: [[key, name]], sources: [video line keys]}]
+    PROFILES_KEY = 'conference_dialog/profiles'     # [{name, room, audio, video, invitees: [[key, name]], sources: [video line keys], track_speaker}]
 
     def _profiles(self):
         import json
@@ -8535,6 +8542,8 @@ class ConferenceDialog(base_class, ui_class):
         self._add_invitees([(key, name) for key, name in profile.get('invitees') or [] if key])
         if profile.get('sources') is not None:
             self._checked_keys = set(profile['sources'])        # what is not here any more is left out; a camera stays checked
+        if profile.get('track_speaker') is not None:
+            self.track_speaker_button.setChecked(bool(profile['track_speaker']))
         self._load_video_sources()
         self._update_media_labels()
         self._update_accept_button()
@@ -8542,15 +8551,15 @@ class ConferenceDialog(base_class, ui_class):
     def _current_profile(self, name):
         from blink.messagepane.forward import NameRole
         invitees = [[item.data(Qt.ItemDataRole.UserRole), item.data(NameRole) or ''] for item in (self.invite_list.item(number) for number in range(self.invite_list.count()))]
-        sources = [self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in self._video_source_items() if item.checkState() == Qt.CheckState.Checked]
+        sources = self._checked_video_source_keys()
         return dict(name=name, room=self.room_button.currentText().strip(), audio=self.audio_button.isChecked(), video=self.video_button.isChecked(),
-                    invitees=invitees, sources=sources)
+                    invitees=invitees, sources=sources, track_speaker=self.track_speaker_button.isChecked())
 
     def _SH_ProfileSaveClicked(self):
         from PyQt6.QtWidgets import QInputDialog
         current = self.profile_combo.currentData()
         name, ok = QInputDialog.getText(self, translate('conference_dialog', 'Save profile'),
-                                        translate('conference_dialog', 'Profile name (the room, audio and video, the videos and the invitees are saved):'),
+                                        translate('conference_dialog', 'Profile name (the room, audio and video, the videos, Track speakers and the invitees are saved):'),
                                         text=current or self.room_button.currentText().strip())
         name = name.strip()
         if not ok or not name:
@@ -8583,6 +8592,7 @@ class ConferenceDialog(base_class, ui_class):
     # everything else goes as extra feeds under us (blink.webrtc.extravideo). An older gateway takes
     # one video per participant: a single choice among the cameras and screens.
 
+    TRACK_SPEAKER_KEY = 'conference_dialog/track_speaker'
     VIDEO_SOURCES_KEY = 'conference_dialog/video_sources'      # the checked lines: ["camera:<device>", "screen:<device>", "rtsp:<url>"]
 
     @staticmethod
@@ -8618,9 +8628,14 @@ class ConferenceDialog(base_class, ui_class):
                 host = data['url']
             text = data.get('label') or host
             tooltip = translate('conference_dialog', 'Network camera %s, sent at %s (right click to change)') % (data['url'], data.get('resolution') or '640x360')
+        if data['kind'] == 'camera' and self._local_camera_has_ptz(data['name']):
+            text += self.PTZ_SUFFIX
+            tooltip += translate('conference_dialog', ', with pan, tilt or zoom (PTZ): Track speakers can turn it')
         item = QListWidgetItem(('    ' if self._multiple_feeds else '') + text)
         item.setToolTip(tooltip)
         item.setData(Qt.ItemDataRole.UserRole, data)
+        if data['kind'] == 'rtsp':
+            self._probe_network_camera_ptz(data)
         flags = item.flags() | Qt.ItemFlag.ItemIsUserCheckable
         if data['kind'] == 'rtsp':
             flags |= Qt.ItemFlag.ItemIsEditable
@@ -8629,6 +8644,37 @@ class ConferenceDialog(base_class, ui_class):
         item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
         self.video_sources.addItem(item)
         return item
+
+    PTZ_SUFFIX = '  (PTZ supported)'
+
+    def _local_camera_has_ptz(self, name):
+        """A USB camera with pan, tilt or zoom controls (V4L2); asked once per camera while the dialog lives."""
+        cache = self.__dict__.setdefault('_local_ptz', {})
+        if name not in cache:
+            try:
+                from blink.webrtc.uvcptz import find
+                cache[name] = find(name) is not None
+            except Exception:
+                cache[name] = False
+        return cache[name]
+
+    def _probe_network_camera_ptz(self, data):
+        """A network camera answers over ONVIF whether it has PTZ, a moment later (blink.webrtc.ptz, which
+        keeps the answer): its line says so then, if it is still there."""
+        from blink.webrtc.ptz import probe
+
+        def answered(ptz):
+            from PyQt6 import sip
+            if ptz is None or sip.isdeleted(self):
+                return
+            for item in self._video_source_items():
+                other = item.data(Qt.ItemDataRole.UserRole)
+                if other.get('kind') == 'rtsp' and other.get('url') == data['url'] and not item.text().endswith(self.PTZ_SUFFIX):
+                    self.video_sources.blockSignals(True)
+                    item.setText(item.text() + self.PTZ_SUFFIX)
+                    item.setToolTip(item.toolTip() + translate('conference_dialog', ', with pan, tilt or zoom (PTZ): Track speakers can turn it'))
+                    self.video_sources.blockSignals(False)
+        probe(data, answered)
 
     @staticmethod
     def _screens():
@@ -8715,9 +8761,18 @@ class ConferenceDialog(base_class, ui_class):
         items = (self.video_sources.item(number) for number in range(self.video_sources.count()))
         return [item for item in items if item.data(Qt.ItemDataRole.UserRole) is not None]
 
+    def _checked_video_source_keys(self):
+        """The checked lines, and those chosen that are not listed now (the network cameras, while the room's
+        server is not known to take more than one video): they stay chosen."""
+        items = self._video_source_items()
+        listed = {self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in items}
+        keys = [self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in items if item.checkState() == Qt.CheckState.Checked]
+        keys += sorted(key for key in (self._checked_keys or ()) if key not in listed and key not in keys)
+        return keys
+
     def _save_checked_video_sources(self):
         import json
-        keys = [self._video_source_key(item.data(Qt.ItemDataRole.UserRole)) for item in self._video_source_items() if item.checkState() == Qt.CheckState.Checked]
+        keys = self._checked_video_source_keys()
         self._checked_keys = set(keys)
         ui_settings().setValue(self.VIDEO_SOURCES_KEY, json.dumps(keys))
 
@@ -8758,14 +8813,25 @@ class ConferenceDialog(base_class, ui_class):
         self._multiple_feeds = multiple
         self._load_video_sources()
 
+    @staticmethod
+    def _rtsp_host(data):
+        from urllib.parse import urlsplit
+        try:
+            return urlsplit(data['url']).hostname or data['url']
+        except ValueError:
+            return data['url']
+
     def _SH_VideoSourceChanged(self, item):
         data = item.data(Qt.ItemDataRole.UserRole)
         if data is None:
             return
         self.video_sources.blockSignals(True)
-        if data['kind'] == 'rtsp' and item.text().strip() and item.text().strip() != data.get('label'):
+        name = item.text().strip()
+        if name.endswith(self.PTZ_SUFFIX.strip()):
+            name = name[:-len(self.PTZ_SUFFIX.strip())].strip()     # what the line says, not part of the name
+        if data['kind'] == 'rtsp' and name and name != data.get('label') and name != self._rtsp_host(data):
             from blink.webrtc.extravideo import remember_source
-            data = dict(data, label=item.text().strip())        # renamed
+            data = dict(data, label=name)        # renamed
             item.setData(Qt.ItemDataRole.UserRole, data)
             remember_source(data)
         if item.checkState() == Qt.CheckState.Checked:
@@ -8777,7 +8843,7 @@ class ConferenceDialog(base_class, ui_class):
             # with Video, one camera (or screen) of ours stays checked: the last one cannot be unchecked
             if not any(other.checkState() == Qt.CheckState.Checked and other.data(Qt.ItemDataRole.UserRole)['kind'] in ('camera', 'screen') for other in self._video_source_items()):
                 item.setCheckState(Qt.CheckState.Checked)
-        self._checked_keys = {self._video_source_key(other.data(Qt.ItemDataRole.UserRole)) for other in self._video_source_items() if other.checkState() == Qt.CheckState.Checked}
+        self._checked_keys = set(self._checked_video_source_keys())
         self.video_sources.blockSignals(False)
         self._save_checked_video_sources()
 
@@ -8919,6 +8985,10 @@ class ConferenceDialog(base_class, ui_class):
                 ActivityLog().info(f'[conference] Publishing also {", ".join(label for source, label in extras)}')
             # without audio: the microphone starts muted; without a camera checked: the camera starts off (until the screen is shared); removes SIP audio to the room
             video_room = join_video_conference(account, video_uri, audio=audio, video=bool(camera), target=target, extra_sources=extras, screen=screen)
+            if video_room is not None:
+                video_room.track_speaker = self.track_speaker_button.isChecked()     # started by the window once the cameras are there
+                if video_room.track_speaker:
+                    ActivityLog().info(f'[conference] Tracking speakers with the cameras that have PTZ')
             from blink.webrtc import room_chat_session
             existing = room_chat_session(video_room) if video_room is not None else None
             streams = [] if existing is not None else [StreamDescription('chat')]

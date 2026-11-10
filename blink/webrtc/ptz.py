@@ -29,6 +29,10 @@ __all__ = ['Ptz', 'probe', 'preset_label', 'SPEED']
 TPTZ = 'xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"'
 SPEED = 0.5             # of the camera's continuous velocity range (-1..1)
 STATUS_INTERVAL = 400   # ms between the questions for the zoom position while zooming
+SPEED_DEGREES = 40.0    # degrees a second a camera turns at full continuous speed (a guess: ONVIF does not tell)
+FIELD_OF_VIEW = (90.0, 50.0)    # degrees, horizontal and vertical, zoomed out (a guess, as an EZVIZ indoor PTZ camera)
+BURST_SPEED = 1.0       # of the continuous velocity range, for a turn by degrees
+DRIVE_CHANGE = 0.1      # a velocity closer than this to the one sent is not sent again
 
 _known = {}             # (url, user, password): Ptz, or False when the camera has no PTZ; None while asked
 _waiting = {}           # the same key: [callback] waiting for the answer
@@ -164,9 +168,33 @@ class Ptz(object):
         ActivityLog().info(f'[ptz] {host}: PTZ, profile {token}, zoom {"yes" if zoom else "no"}, {len(presets)} presets')
         return ptz
 
+    # Pan the other way: the camera's right is not ours (chosen in the PTZ menu); applied in move, drive and at_limit
+
+    @property
+    def pan_reversed(self):
+        return pan_reversed(self.host)
+
+    @pan_reversed.setter
+    def pan_reversed(self, value):
+        set_pan_reversed(self.host, value)
+
+    def _pan(self, value):
+        return -value if self.pan_reversed else value
+
+    # Home: the middle, when nobody is in sight (blink.webrtc.tracker)
+
+    def go_home(self):
+        from PyQt6.QtCore import QTimer
+        self.active_preset = None
+        self._call('home', f'<tptz:GotoHomePosition {TPTZ}><tptz:ProfileToken>{escape(self.profile)}</tptz:ProfileToken></tptz:GotoHomePosition>')
+        for delay in (1500, 4000):
+            QTimer.singleShot(delay, self.refresh_status)
+
     def at_limit(self, axis, direction):
         """Whether the axis ('pan', 'tilt', 'zoom') can go no further that way (direction < 0: down, > 0: up);
         False while its position is not known."""
+        if axis == 'pan':
+            direction = self._pan(direction)
         position, limits = self.position.get(axis), self.ranges.get(axis)
         if position is None or limits is None:
             return False
@@ -201,10 +229,66 @@ class Ptz(object):
             self.refresh_status()
             QTimer.singleShot(1000, self.refresh_status)
 
+    # Turning by degrees (blink.webrtc.tracker): ContinuousMove for as long as it takes at SPEED_DEGREES, then Stop
+
+    def can_turn(self):
+        return True
+
+    def field_of_view(self):
+        return FIELD_OF_VIEW
+
+    def nudge_degrees(self, pan=0.0, tilt=0.0):
+        """Turn by this many degrees (pan > 0: right, tilt > 0: up), both at once, the larger at BURST_SPEED."""
+        from PyQt6.QtCore import QTimer
+        if (pan > 0 and self.at_limit('pan', 1)) or (pan < 0 and self.at_limit('pan', -1)):
+            pan = 0.0
+        if (tilt > 0 and self.at_limit('tilt', 1)) or (tilt < 0 and self.at_limit('tilt', -1)):
+            tilt = 0.0
+        largest = max(abs(pan), abs(tilt))
+        if not largest:
+            return
+        self.move(pan / largest * BURST_SPEED, tilt / largest * BURST_SPEED)
+        burst = self._burst         # move() numbered it: a later move or burst takes over
+
+        def stop():
+            if self._burst == burst:
+                self.stop()
+        QTimer.singleShot(max(100, int(largest / (SPEED_DEGREES * BURST_SPEED) * 1000)), stop)
+
+    # Driving (blink.webrtc.tracker): a continuous velocity, changed as often as the person moves
+
+    def can_drive(self):
+        return False        # by steps: its picture comes late (RTSP), and driven it overshoots
+
+    def drive(self, pan=0.0, tilt=0.0):
+        """Turn at this velocity (each -1..1, pan > 0: right, tilt > 0: up) until it changes; 0, 0: stop.
+        Sent only when it changed enough; a control held by hand (move) wins."""
+        if getattr(self, '_held', False):
+            return
+        pan = 0.0 if (pan > 0 and self.at_limit('pan', 1)) or (pan < 0 and self.at_limit('pan', -1)) else pan
+        tilt = 0.0 if (tilt > 0 and self.at_limit('tilt', 1)) or (tilt < 0 and self.at_limit('tilt', -1)) else tilt
+        previous = getattr(self, '_driving', (0.0, 0.0))
+        if not pan and not tilt:
+            if previous != (0.0, 0.0):
+                self._driving = (0.0, 0.0)
+                self._send_stop()
+            return
+        if previous != (0.0, 0.0) and abs(pan - previous[0]) < DRIVE_CHANGE and abs(tilt - previous[1]) < DRIVE_CHANGE and \
+                (pan > 0) == (previous[0] > 0) and (tilt > 0) == (previous[1] > 0):
+            return
+        self._driving = (pan, tilt)
+        self._send_move(self._pan(pan), tilt, 0.0)
+
     # Asked from the GUI thread, done in the camera's thread in order
 
     def move(self, pan=0.0, tilt=0.0, zoom=0.0):
-        """Continuous move (each -1..1 of the camera's speed range) until stop()."""
+        """Continuous move (each -1..1 of the camera's speed range) until stop(): a control held, or a burst."""
+        self._burst = getattr(self, '_burst', 0) + 1        # a burst's stop is not this move's
+        self._held = True
+        self._driving = (0.0, 0.0)
+        self._send_move(self._pan(pan), tilt, zoom)
+
+    def _send_move(self, pan, tilt, zoom):
         self.active_preset = None
         velocity = ''
         if pan or tilt:
@@ -217,6 +301,11 @@ class Ptz(object):
                                f'<tptz:Velocity>{velocity}</tptz:Velocity></tptz:ContinuousMove>')
 
     def stop(self):
+        self._held = False
+        self._driving = (0.0, 0.0)
+        self._send_stop()
+
+    def _send_stop(self):
         if self._status_timer is not None and self._status_timer.isActive():
             self._poll_status(False)
         self._call('stop', f'<tptz:Stop {TPTZ}><tptz:ProfileToken>{escape(self.profile)}</tptz:ProfileToken>'
@@ -269,6 +358,34 @@ class Ptz(object):
                 ActivityLog().warning(f'[ptz] {self.host}: {what} failed: {e}')
             if done is not None:
                 call_in_gui_thread(done, answer, error)
+
+
+REVERSED_KEY = 'ptz/reversed_pan'
+
+
+def pan_reversed(key, default=False):
+    """Whether this camera (its name or host) turns the other way than it says: chosen per camera, in ui.conf."""
+    import json
+    from blink.resources import ui_settings
+    try:
+        chosen = json.loads(ui_settings().value(REVERSED_KEY, '{}') or '{}')
+    except (TypeError, ValueError):
+        chosen = {}
+    value = chosen.get(key) if isinstance(chosen, dict) else None
+    return default if value is None else bool(value)
+
+
+def set_pan_reversed(key, reversed_):
+    import json
+    from blink.resources import ui_settings
+    try:
+        chosen = json.loads(ui_settings().value(REVERSED_KEY, '{}') or '{}')
+    except (TypeError, ValueError):
+        chosen = {}
+    if not isinstance(chosen, dict):
+        chosen = {}
+    chosen[key] = bool(reversed_)
+    ui_settings().setValue(REVERSED_KEY, json.dumps(chosen))
 
 
 def _get_status(profile):

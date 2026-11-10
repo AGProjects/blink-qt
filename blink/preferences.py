@@ -8,7 +8,7 @@ from datetime import timezone
 from dateutil.tz import tzlocal
 
 from PyQt6.QtCore import Qt, QEvent, QRegularExpression
-from PyQt6.QtGui import QRegularExpressionValidator, QValidator, QActionGroup
+from PyQt6.QtGui import QRegularExpressionValidator, QValidator, QActionGroup, QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication, QButtonGroup, QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QTextBrowser, QVBoxLayout, QListView, QListWidgetItem, QMessageBox, QSpinBox, QStyle, QStyleOptionComboBox, QStyledItemDelegate
 
 from application import log
@@ -562,6 +562,22 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.camera_preview.mirror = True
         from blink.webrtc.ptzcontrols import PtzOverlay
         self.camera_ptz = PtzOverlay(self.camera_preview)     # pan, tilt and zoom of a USB camera with them (V4L2)
+        # Follow me (or F): the camera follows the person (blink.webrtc.tracker.FollowMe), here and in the
+        # video rooms (our own tile shows it and toggles it too). Beside the camera list, in place of its spacer.
+        self.follow_me_button = QCheckBox(translate('preferences_window', 'Follow me'), self.camera_preview.parentWidget())
+        self.follow_me_button.setToolTip(translate('preferences_window', 'The camera turns to keep you in the picture, and nods when it lost you (F)'))
+        from blink.webrtc.tracker import FollowMe
+        self.follow_me_button.setChecked(FollowMe.instance().enabled)
+        self.follow_me_button.setEnabled(FollowMe.instance().enabled)     # until a camera that can turn is shown: only off
+        video_layout = self.camera_preview.parentWidget().layout()
+        spacer = video_layout.itemAtPosition(2, 2)
+        if spacer is not None and spacer.spacerItem() is not None:
+            video_layout.removeItem(spacer)
+        video_layout.addWidget(self.follow_me_button, 2, 2)
+        self.follow_me_button.clicked.connect(self._SH_FollowMeButtonClicked)
+        FollowMe.instance().changed.connect(self._SH_FollowMeChanged)
+        self.follow_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F), self)
+        self.follow_shortcut.activated.connect(self._SH_FollowShortcutActivated)
 
         self.video_framerate_button.clear()
         for rate in (10, 15, 20, 24, 25, 30):
@@ -691,6 +707,27 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self._show_camera_preview(False)
         return False
 
+    def _SH_FollowMeChanged(self):
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        self.follow_me_button.setChecked(follow_me.enabled)
+        self.follow_me_button.setEnabled(follow_me.available or follow_me.enabled)     # on: it can always be turned off
+        self.camera_ptz.update()
+
+    def _SH_FollowMeButtonClicked(self, checked):
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        if checked and not follow_me.available:
+            QApplication.beep()
+        follow_me.set_enabled(checked)
+
+    def _SH_FollowShortcutActivated(self):
+        from blink.webrtc.tracker import FollowMe
+        if not self.camera_preview.isVisible():
+            return
+        if not FollowMe.instance().toggle():
+            QApplication.beep()     # the camera cannot turn, or the person model is not there
+
     def _show_camera_preview(self, visible=True):
         """The camera in the Video page, blurred as the video rooms send it when the blur is on."""
         from blink.webrtc.background_blur import BlurredCamera, blur_enabled
@@ -713,6 +750,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         except AttributeError:
             camera_name = None
         self.camera_ptz.attach(camera_name)
+        from blink.webrtc.tracker import FollowMe
+        if visible:
+            FollowMe.instance().show(self, camera_name)
+        else:
+            FollowMe.instance().hide(self)
 
     def closeEvent(self, event):
         super(PreferencesWindow, self).closeEvent(event)

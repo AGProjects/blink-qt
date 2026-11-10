@@ -16,6 +16,7 @@ import json
 import os
 import struct
 import sys
+import time
 import uuid
 
 from PyQt6.QtCore import QTimer
@@ -33,6 +34,9 @@ TILT_ABSOLUTE = _CAMERA_CLASS_BASE + 9
 ZOOM_ABSOLUTE = _CAMERA_CLASS_BASE + 13
 PAN_SPEED = _CAMERA_CLASS_BASE + 32
 TILT_SPEED = _CAMERA_CLASS_BASE + 33
+PAN_RESET = _CAMERA_CLASS_BASE + 6          # buttons: back to the middle
+TILT_RESET = _CAMERA_CLASS_BASE + 7
+REVERSED_BY_DEFAULT = ()                    # cameras known to pan the other way: none for sure (Reverse pan in the PTZ menu)
 _QUERYCTRL = struct.Struct('II32siiiiI2I')         # struct v4l2_queryctrl
 _CONTROL = struct.Struct('Ii')                     # struct v4l2_control
 VIDIOC_QUERYCTRL = 0xc0000000 | (_QUERYCTRL.size << 16) | (ord('V') << 8) | 36
@@ -40,6 +44,9 @@ VIDIOC_G_CTRL = 0xc0000000 | (_CONTROL.size << 16) | (ord('V') << 8) | 27
 VIDIOC_S_CTRL = 0xc0000000 | (_CONTROL.size << 16) | (ord('V') << 8) | 28
 CTRL_FLAG_DISABLED = 0x0001
 
+ARC_SECONDS = 3600      # pan_absolute and tilt_absolute are in arc seconds (V4L2)
+FIELD_OF_VIEW = (82.0, 52.0)    # degrees, horizontal and vertical, zoomed out: a 90 degree diagonal at 16:9 (Logitech PTZ Pro 2)
+SPEED_DEGREES = 30.0    # degrees a second a camera turns at with pan_speed / tilt_speed at their maximum (a guess: UVC does not tell)
 MOVE_INTERVAL = 100     # ms between the steps of a held control
 STEP_FRACTION = 0.02    # of a control's range per step at full speed (1.0): 20 % a second
 PRESETS_KEY = 'videoroom/uvc_ptz_presets'
@@ -60,6 +67,16 @@ def _query(fd, control):
     if flags & CTRL_FLAG_DISABLED or maximum <= minimum:
         return None
     return minimum, maximum, max(1, step), default
+
+
+def _has_button(fd, control):
+    """Whether the camera has this button control (a reset: no range)."""
+    buffer = bytearray(_QUERYCTRL.pack(control, 0, b'', 0, 0, 0, 0, 0, 0, 0))
+    try:
+        fcntl.ioctl(fd, VIDIOC_QUERYCTRL, buffer)
+    except OSError:
+        return False
+    return not _QUERYCTRL.unpack(buffer)[7] & CTRL_FLAG_DISABLED
 
 
 def _get(fd, control):
@@ -99,19 +116,53 @@ def find(name):
             continue
         try:
             controls = {control: _query(fd, control) for control in (PAN_ABSOLUTE, TILT_ABSOLUTE, ZOOM_ABSOLUTE, PAN_SPEED, TILT_SPEED)}
+            resets = [control for control in (PAN_RESET, TILT_RESET) if _has_button(fd, control)]
         finally:
             os.close(fd)
         controls = {control: limits for control, limits in controls.items() if limits is not None}
         if controls:        # the metadata node of the same camera has none: the next one is tried
             ptz = UvcPtz(path, card, controls)
+            ptz.resets = resets
             ptz.refresh_status()
-            ActivityLog().info(f'[ptz] {card} ({path}): PTZ over V4L2, ' + ', '.join(_NAMES[control] for control in controls))
+            ActivityLog().info(f'[ptz] {card} ({path}): PTZ over V4L2, ' +
+                               ', '.join(f'{_NAMES[control]} {limits[0]}..{limits[1]}' for control, limits in controls.items()) +
+                               (', driven' if ptz.can_drive() else ', by steps') +
+                               (', ' + ', '.join(_NAMES[control] for control in resets) if resets else ', no reset (the middle is reckoned)'))
             return ptz
     return None
 
 
+REVERSED_KEY = 'ptz/reversed_pan'
+
+
+def pan_reversed(key, default=False):
+    """Whether this camera (its name or host) turns the other way than it says: chosen per camera, in ui.conf."""
+    import json
+    from blink.resources import ui_settings
+    try:
+        chosen = json.loads(ui_settings().value(REVERSED_KEY, '{}') or '{}')
+    except (TypeError, ValueError):
+        chosen = {}
+    value = chosen.get(key) if isinstance(chosen, dict) else None
+    return default if value is None else bool(value)
+
+
+def set_pan_reversed(key, reversed_):
+    import json
+    from blink.resources import ui_settings
+    try:
+        chosen = json.loads(ui_settings().value(REVERSED_KEY, '{}') or '{}')
+    except (TypeError, ValueError):
+        chosen = {}
+    if not isinstance(chosen, dict):
+        chosen = {}
+    chosen[key] = bool(reversed_)
+    ui_settings().setValue(REVERSED_KEY, json.dumps(chosen))
+
+
 _AXES = {'pan': PAN_ABSOLUTE, 'tilt': TILT_ABSOLUTE, 'zoom': ZOOM_ABSOLUTE}
-_NAMES = {PAN_ABSOLUTE: 'pan', TILT_ABSOLUTE: 'tilt', ZOOM_ABSOLUTE: 'zoom', PAN_SPEED: 'pan speed', TILT_SPEED: 'tilt speed'}
+_NAMES = {PAN_ABSOLUTE: 'pan', TILT_ABSOLUTE: 'tilt', ZOOM_ABSOLUTE: 'zoom', PAN_SPEED: 'pan speed', TILT_SPEED: 'tilt speed', PAN_RESET: 'pan reset', TILT_RESET: 'tilt reset'}
+TRAVEL = 6.0            # s at full speed from the middle to an end, at most: what is reckoned is never more
 
 
 def _saved():
@@ -140,6 +191,11 @@ class UvcPtz(object):
         self._fd = None                 # open while a control is held
         self._velocity = None           # (pan, tilt, zoom) of the control held, absolute controls
         self._speeds = False            # the control held set pan_speed or tilt_speed
+        self._bursts = {}               # {speed control: the number of its latest burst}
+        self._drive = {}                # {speed control: the speed drive() set}
+        self._speed_now = {}            # {speed control: (the speed set, when)}: to reckon where it is
+        self._reckoned = {}             # {speed control: seconds at full speed away from the middle (> 0: the positive way)}
+        self._homing = 0                # the number of the latest reckoned way home
         self._timer = QTimer()
         self._timer.setInterval(MOVE_INTERVAL)
         self._timer.timeout.connect(self._step)
@@ -168,9 +224,72 @@ class UvcPtz(object):
             saved.pop(self.host, None)
         _save(saved)
 
+    # Pan the other way: the camera's right is not ours (chosen in the PTZ menu); applied in move, drive, nudge and at_limit
+
+    @property
+    def pan_reversed(self):
+        return pan_reversed(self.host, default=any(name in self.host.lower() for name in REVERSED_BY_DEFAULT))
+
+    @pan_reversed.setter
+    def pan_reversed(self, value):
+        set_pan_reversed(self.host, value)
+
+    def _pan(self, value):
+        return -value if self.pan_reversed else value
+
+    # Home: the middle, when nobody is in sight (blink.webrtc.tracker)
+
+    def go_home(self):
+        """Back to the middle: the reset buttons (pan_reset, tilt_reset), else the default absolute position."""
+        if self._velocity or self._speeds:
+            return
+        self.drive(0.0, 0.0)
+        resets = list(getattr(self, 'resets', []))
+        defaults = {control: self.controls[control][3] for control in (PAN_ABSOLUTE, TILT_ABSOLUTE) if control in self.controls}
+
+        def home(fd):
+            for control in resets:
+                _set(fd, control, 1)
+            for control, value in defaults.items():
+                if (control == PAN_ABSOLUTE and PAN_RESET in resets) or (control == TILT_ABSOLUTE and TILT_RESET in resets):
+                    continue
+                _set(fd, control, value)
+        if (resets or defaults) and self._with_device(home, 'home'):
+            self.active_preset = None
+            self._reckoned = {}
+            QTimer.singleShot(1500, self.refresh_status)
+        reckoned = [speed for absolute, reset, speed in ((PAN_ABSOLUTE, PAN_RESET, PAN_SPEED), (TILT_ABSOLUTE, TILT_RESET, TILT_SPEED))
+                    if speed in self.controls and absolute not in self.controls and reset not in resets]
+        if reckoned:
+            self._go_home_reckoned(reckoned)
+
+    def _go_home_reckoned(self, controls):
+        """No reset and no position: back by as long, at full speed, as it was reckoned to have turned away."""
+        self._homing += 1
+        homing = self._homing
+        self._bursts = {control: number + 1 for control, number in self._bursts.items()}      # no burst stops this
+        for control in controls:
+            away = self._reckoned.get(control, 0.0)
+            if abs(away) < 0.05:
+                continue
+            minimum, maximum, step, default = self.controls[control]
+            speed = minimum if away > 0 else maximum
+
+            def stop(control=control):
+                if self._homing == homing and not self._speeds:
+                    self._with_device(lambda fd: self._set_speed(fd, control, 0), 'home')
+                    self._drive[control] = 0
+                    self._reckoned[control] = 0.0
+            if self._with_device(lambda fd: self._set_speed(fd, control, speed), 'home'):
+                self._drive[control] = speed        # drive() sees it turning: it stops it, or turns it its way
+                self.active_preset = None
+                QTimer.singleShot(int(abs(away) * 1000), stop)
+
     def at_limit(self, axis, direction):
         """Whether the axis ('pan', 'tilt', 'zoom') can go no further that way (direction < 0: down, > 0: up);
         False while its position is not known (with speed controls it never is)."""
+        if axis == 'pan':
+            direction = self._pan(direction)
         control = _AXES[axis]
         if control not in self.controls or self.position.get(control) is None:
             return False
@@ -197,6 +316,120 @@ class UvcPtz(object):
             for control, value in position.items():
                 self._position_now(control, value)
 
+    # Turning by degrees (blink.webrtc.tracker)
+
+    def can_turn(self):
+        return any(control in self.controls for control in (PAN_ABSOLUTE, TILT_ABSOLUTE, PAN_SPEED, TILT_SPEED))
+
+    def field_of_view(self):
+        """(horizontal, vertical) degrees seen now: FIELD_OF_VIEW, narrower as it zooms (zoom_absolute / its minimum)."""
+        horizontal, vertical = FIELD_OF_VIEW
+        zoom = self.position.get(ZOOM_ABSOLUTE)
+        if zoom is not None and ZOOM_ABSOLUTE in self.controls:
+            minimum = self.controls[ZOOM_ABSOLUTE][0]
+            factor = zoom / minimum if minimum > 0 else 1.0
+            if factor > 1.0:
+                horizontal, vertical = horizontal / factor, vertical / factor
+        return horizontal, vertical
+
+    def nudge_degrees(self, pan=0.0, tilt=0.0):
+        """Turn by this many degrees (pan > 0: right, tilt > 0: up), within the limits. Without an absolute
+        control for an axis, its speed for as long as that takes at SPEED_DEGREES (a burst)."""
+        if self._velocity or self._speeds:
+            return          # a control is held: the user drives
+        pan = self._pan(pan)
+        for degrees, absolute, speed in ((pan, PAN_ABSOLUTE, PAN_SPEED), (tilt, TILT_ABSOLUTE, TILT_SPEED)):
+            if degrees and absolute not in self.controls and speed in self.controls:
+                self._burst(speed, degrees)
+        if not self.position:
+            self.refresh_status()
+        targets = {}
+        for control, degrees in ((PAN_ABSOLUTE, pan), (TILT_ABSOLUTE, tilt)):
+            if degrees and control in self.controls and self.position.get(control) is not None:
+                minimum, maximum, step, default = self.controls[control]
+                value = self.position[control] + round(degrees * ARC_SECONDS / step) * step
+                targets[control] = min(maximum, max(minimum, value))
+        targets = {control: value for control, value in targets.items() if value != self.position.get(control)}
+        if not targets:
+            return
+
+        def turn(fd):
+            for control, value in targets.items():
+                _set(fd, control, value)
+        if self._with_device(turn, 'turn'):
+            self.active_preset = None
+            for control, value in targets.items():
+                self._position_now(control, value)
+
+    # Driving (blink.webrtc.tracker): with pan_speed / tilt_speed, the speed changed as often as the person moves
+
+    DRIVE_STEPS = 4         # speeds from stop to full, at least, for it to be driven: with fewer (stop or full) it overshoots, steps instead
+
+    def can_drive(self):
+        if PAN_SPEED not in self.controls:
+            return False
+        minimum, maximum, step, default = self.controls[PAN_SPEED]
+        return maximum / step >= self.DRIVE_STEPS
+
+    def drive(self, pan=0.0, tilt=0.0):
+        """Turn at this velocity (each -1..1 of the speed range, pan > 0: right, tilt > 0: up) until it changes;
+        0, 0: stop. Set only when it changed; a control held by hand wins."""
+        if self._velocity or self._speeds:
+            return
+        pan = self._pan(pan)
+        if pan or tilt:
+            self._homing += 1       # driven again: a way home under way does not stop it later
+        targets = {}
+        for control, value in ((PAN_SPEED, pan), (TILT_SPEED, tilt)):
+            if control in self.controls:
+                minimum, maximum, step, default = self.controls[control]
+                limit = maximum if value > 0 else -minimum
+                speed = round(abs(value) * limit / step) * step if value else 0
+                if value and not speed:
+                    speed = step        # the slowest it goes rather than not at all
+                targets[control] = int(speed if value > 0 else -speed)
+        targets = {control: speed for control, speed in targets.items() if speed != self._drive.get(control, 0)}
+        if not targets:
+            return
+
+        def turn(fd):
+            for control, speed in targets.items():
+                self._set_speed(fd, control, speed)
+        if self._with_device(turn, 'turn'):
+            self.active_preset = None
+            self._drive.update(targets)
+
+    def _track(self, control, speed):
+        """A speed was set: what the one before turned is added to how far from the middle it is reckoned to be."""
+        now = time.monotonic()
+        previous, since = self._speed_now.get(control, (0, now))
+        if previous:
+            minimum, maximum, step, default = self.controls[control]
+            limit = maximum if previous > 0 else -minimum
+            moved = (now - since) * previous / (limit or 1)
+            self._reckoned[control] = max(-TRAVEL, min(TRAVEL, self._reckoned.get(control, 0.0) + moved))
+        self._speed_now[control] = (speed, now)
+
+    def _set_speed(self, fd, control, speed):
+        _set(fd, control, speed)
+        self._track(control, speed)
+
+    def _burst(self, control, degrees):
+        """Turn at full speed for as long as the degrees take, then stop; a newer burst of the same control takes over."""
+        minimum, maximum, step, default = self.controls[control]
+        speed = maximum if degrees > 0 else minimum
+        if not speed:
+            return
+        generation = self._bursts.get(control, 0) + 1
+        self._bursts[control] = generation
+
+        def stop():
+            if self._bursts.get(control) == generation and not self._speeds:
+                self._with_device(lambda fd: self._set_speed(fd, control, 0), 'turn')
+        if self._with_device(lambda fd: self._set_speed(fd, control, speed), 'turn'):
+            self.active_preset = None
+            QTimer.singleShot(max(20, int(abs(degrees) / SPEED_DEGREES * 1000)), stop)
+
     # Moving
 
     def _with_device(self, action, what):
@@ -219,6 +452,10 @@ class UvcPtz(object):
     def move(self, pan=0.0, tilt=0.0, zoom=0.0):
         """Move (each -1..1 of the camera's speed) until stop()."""
         self.stop()
+        pan = self._pan(pan)
+        self._bursts = {control: number + 1 for control, number in self._bursts.items()}     # the user drives: no burst stops this
+        self._homing += 1
+        self._drive = {}
         self.active_preset = None
         try:
             self._fd = _open(self.path)
@@ -230,7 +467,7 @@ class UvcPtz(object):
             for value, position, speed in ((pan, PAN_ABSOLUTE, PAN_SPEED), (tilt, TILT_ABSOLUTE, TILT_SPEED)):
                 if value and position not in self.controls and speed in self.controls:     # no absolute control for it: its speed
                     minimum, maximum, step, default = self.controls[speed]
-                    _set(self._fd, speed, maximum if value > 0 else minimum)
+                    self._set_speed(self._fd, speed, maximum if value > 0 else minimum)
                     self._speeds = True
         except OSError as e:
             ActivityLog().warning(f'[ptz] {self.host}: move failed: {e.strerror}')
@@ -265,7 +502,7 @@ class UvcPtz(object):
             try:
                 for control in (PAN_SPEED, TILT_SPEED):
                     if control in self.controls:
-                        _set(self._fd, control, 0)
+                        self._set_speed(self._fd, control, 0)
             except OSError as e:
                 ActivityLog().warning(f'[ptz] {self.host}: stop failed: {e.strerror}')
         self._speeds = False
