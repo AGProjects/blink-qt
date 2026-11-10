@@ -560,6 +560,8 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         size_policy.setHeightForWidth(True)
         self.camera_preview.setSizePolicy(size_policy)
         self.camera_preview.mirror = True
+        from blink.webrtc.ptzcontrols import PtzOverlay
+        self.camera_ptz = PtzOverlay(self.camera_preview)     # pan, tilt and zoom of a USB camera with them (V4L2)
 
         self.video_framerate_button.clear()
         for rate in (10, 15, 20, 24, 25, 30):
@@ -706,6 +708,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
                 self.camera_preview.clear_frame()
             self.camera_preview.producer = producer
         self._preview_blurred = blurred
+        try:
+            camera_name = SIPApplication.video_device.real_name if producer is not None and not is_screen_device(SIPSimpleSettings().video.device) else None
+        except AttributeError:
+            camera_name = None
+        self.camera_ptz.attach(camera_name)
 
     def closeEvent(self, event):
         super(PreferencesWindow, self).closeEvent(event)
