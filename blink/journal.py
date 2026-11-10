@@ -220,12 +220,17 @@ class SeenMessageIds(object):
     def __len__(self):
         return len(self._ids)
 
-    def seen(self, message_id):
+    @staticmethod
+    def _key(message_id, account_id):
+        # per account: a message between two accounts of this device has one id for both copies
+        return f'{account_id}/{message_id}' if account_id else str(message_id)
+
+    def seen(self, message_id, account_id=None):
         """True if the id was handled before; else remember it and return False.
         A message without an id is never a duplicate."""
         if not message_id:
             return False
-        message_id = str(message_id)
+        message_id = self._key(message_id, account_id)
         with self._lock:
             if message_id in self._ids:
                 return True
@@ -234,10 +239,10 @@ class SeenMessageIds(object):
                 self._ids.popitem(last=False)
             return False
 
-    def forget(self, message_id):
+    def forget(self, message_id, account_id=None):
         """Drop an id whose handling failed, so a later copy is handled again."""
         with self._lock:
-            self._ids.pop(str(message_id), None)
+            self._ids.pop(self._key(message_id, account_id), None)
 
 
 class OwnMarkers(object):

@@ -1506,8 +1506,8 @@ class MessageHistory(object, metaclass=Singleton):
             return " and category = 'text' and has_link = 1"
         return f" and category = {Message.sqlrepr(category)}"
 
-    def stored_message_ids(self, message_ids, timeout=30):
-        """The ones of these message ids history already holds (removed ones included).
+    def stored_message_ids(self, message_ids, account_id=None, timeout=30):
+        """The ones of these message ids history already holds for account_id (removed ones included).
 
         For callers outside the db thread (the journal's sync thread): the query
         is queued on the db thread, after the writes before it, and waited for to
@@ -1526,7 +1526,8 @@ class MessageHistory(object, metaclass=Singleton):
                 table = Message.sqlmeta.table
                 for start in range(0, len(message_ids), 500):
                     chunk = message_ids[start:start + 500]
-                    rows = self.db.queryAll(f"select distinct message_id from {table} where message_id in ({', '.join(self.db.sqlrepr(message_id) for message_id in chunk)})")
+                    account_clause = f" and account_id = {self.db.sqlrepr(str(account_id))}" if account_id else ''
+                    rows = self.db.queryAll(f"select distinct message_id from {table} where message_id in ({', '.join(self.db.sqlrepr(message_id) for message_id in chunk)}){account_clause}")
                     found.update(str(message_id) for (message_id,) in rows)
             except Exception as e:
                 ActivityLog().error(f'[db] Looking up stored message ids failed: {e}')

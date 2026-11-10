@@ -534,8 +534,9 @@ class OutgoingMessage(object):
                             return
                         self.is_secure = True
             content = content if isinstance(content, bytes) else content.encode()
-            additional_sip_headers = skip_journal_headers(content, skip=self.skip_journal) + self.extra_sip_headers
-            if additional_sip_headers:
+            journal_headers = skip_journal_headers(content, skip=self.skip_journal)
+            additional_sip_headers = journal_headers + self.extra_sip_headers
+            if journal_headers:
                 why = 'a notice for the other devices' if self.skip_journal else 'OTR'
                 ActivityLog().info(f'[Message with {self._peer}] Sending {self.content_type} message {self.id} without journalling it ({why})')
             if self.account.sms.use_cpim and self.use_cpim:
@@ -1969,7 +1970,7 @@ class MessageManager(object, metaclass=Singleton):
         # what an earlier run of Blink stored (received live before quitting, say) is a duplicate
         # too: the in-memory seen ids start empty, and handling it again would show it as new
         from blink.history import MessageHistory
-        stored = MessageHistory().stored_message_ids(message.get('message_id') for message in messages)
+        stored = MessageHistory().stored_message_ids((message.get('message_id') for message in messages), account_id=account.id)
         db_wait = 0.0       # seconds waited for the db thread (stats of the journal log)
         # batch: entries between pauses; duty: the pause is this many times the time the batch took
         # (2.0: busy a third of the time), for work in the background that must not hog the CPU;
@@ -1985,7 +1986,7 @@ class MessageManager(object, metaclass=Singleton):
                 raise JournalInterrupted(f'quitting at entry {index} of {len(messages)}')
             content_type = str(message.get('content_type') or '').lower()
             action = journal_action(content_type)
-            if self.seen_message_ids.seen(message.get('message_id')) or str(message.get('message_id') or '') in stored:
+            if self.seen_message_ids.seen(message.get('message_id'), account.id) or str(message.get('message_id') or '') in stored:
                 outcome = 'duplicates'      # already handled live (or earlier in this run), or already stored
             elif first_sync and action in self.journal_snapshot_skipped:
                 outcome = f'{action.replace("_", " ")} skipped (final state)'
@@ -1994,7 +1995,7 @@ class MessageManager(object, metaclass=Singleton):
                     outcome = getattr(self, f'_journal_{action}')(account, message, content_type, first_sync, contacts)
                 except Exception as e:
                     outcome = 'failed'
-                    self.seen_message_ids.forget(message.get('message_id'))
+                    self.seen_message_ids.forget(message.get('message_id'), account.id)
                     log.warning(f'Journal entry {message.get("message_id")} ({content_type}) of {account.id} could not be applied: {e!r}')
             outcomes[outcome] += 1
             if stats is not None:
@@ -2713,7 +2714,7 @@ class MessageManager(object, metaclass=Singleton):
                 return
 
         # only a CPIM message carries the sender's id; without CPIM the id above is made up here
-        if cpim_message is not None and self.seen_message_ids.seen(message_id):
+        if cpim_message is not None and self.seen_message_ids.seen(message_id, account.id):
             ActivityLog().info(f'[Message] {content_type.lower()} message {message_id} for account {account.id} skipped, it was already handled (live or from the journal)')
             return
 

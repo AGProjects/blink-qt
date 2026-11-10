@@ -191,6 +191,16 @@ class SeenMessageIdsTests(unittest.TestCase):
         seen.forget('never seen')
         self.assertFalse(seen.seen('a'))
 
+    def test_per_account(self):
+        # one id for both copies of a message between two accounts of this device
+        seen = journal.SeenMessageIds()
+        self.assertFalse(seen.seen('a', 'ag@sylk.link'))
+        self.assertFalse(seen.seen('a', 'support@sylk.link'))
+        self.assertTrue(seen.seen('a', 'support@sylk.link'))
+        seen.forget('a', 'support@sylk.link')
+        self.assertFalse(seen.seen('a', 'support@sylk.link'))
+        self.assertTrue(seen.seen('a', 'ag@sylk.link'))
+
 
 class OwnMarkersTests(unittest.TestCase):
     def setUp(self):
