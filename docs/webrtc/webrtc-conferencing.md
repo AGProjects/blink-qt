@@ -378,7 +378,7 @@ the initial with "no video" while its video is lost.
 | Mute | microphone |
 | Camera (menu) | each camera (System Default, then the usable ones), the screen (one entry per monitor), Turn camera off/on; red "Camera off" while off |
 | Stop sharing | red, only while the screen is shared |
-| Speakers | speaker selection (§5.6); with two or more others with video, or speakers set |
+| Speakers | speaker selection (§5.6); with two video streams or more (ours while the camera is on, our established extra videos, everyone else's and their extra videos: children count as well as parents), or speakers set; the same rule for Show as the speaker / as second speaker on a tile (Stop showing as speaker always) |
 | Chat | the room's MSRP chat in front (started if there is none) |
 | Raise/Lower hand | with more than two of us (or our hand still up); yellow while up |
 | More (menu) | Share screen / Stop sharing screen (connected only), Hide myself / Show myself, Show me as a thumbnail / Put me back in the grid, Add video… (with `multiple-video-feeds`), Invite participants…, Conference info…, Share conference address…, Mute everyone, Lower all hands |

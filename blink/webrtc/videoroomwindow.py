@@ -106,6 +106,7 @@ PICK_COLOR = QColor(10, 132, 255)   # the carousel tile picked to go into the gr
 NAME_PILL_HEIGHT = 22
 ENDED_LINGER = 2500         # ms the window stays to show why the room ended
 CONTROLS_IDLE_TIME = 5000   # ms without the mouse moving before the call bar hides
+SPEAKER_CONTROLS_STREAMS = 2        # video streams (parents and children, ours included) for speaker selection
 # Video loss, from Sylk desktop and Sylk Mobile. An average of the received video bitrate below
 # the threshold (desktop) degrades the tile: it keeps its place and shows the initial. Degraded
 # for VIDEO_DEGRADE_GRACE (mobile) it is demoted to the carousel, unless the user put it in the
@@ -1255,6 +1256,7 @@ class VideoroomWindow(QWidget):
         if state == 'established':
             self.flash(f'{extra.label} added')
             self._update_auto_speakers()
+            self._update_speakers_button()      # one more stream that can be speaker
         elif state == 'ended':
             self._SH_ParticipantLeft(extra.participant)
             self._update_auto_speakers()
@@ -1342,6 +1344,7 @@ class VideoroomWindow(QWidget):
         self.session.set_video_muted(off)
         self.local_tile.set_camera_off(off)
         self.camera_button.configure('camera', 'Camera off' if off else 'Camera', tint=RED if off else None)
+        self._update_speakers_button()          # our camera is one of the streams that can be speaker
 
     def _SH_CameraMenuClicked(self):
         """The video input: each camera, the screen (one entry per monitor the SDK has a device
@@ -1649,7 +1652,8 @@ class VideoroomWindow(QWidget):
             if tile.hand:
                 menu.addAction('Lower hand').triggered.connect(lambda: session.toggle_hand(id))
         can_speak = isinstance(tile, LocalTile) or tile.participant.video is True
-        if can_speak:
+        speaker_controls = len(self._speaker_candidates()) >= SPEAKER_CONTROLS_STREAMS
+        if can_speak and (speaker_controls or id in speakers):     # speakers still set can always be cleared
             menu.addSeparator()
             if id in speakers:
                 menu.addAction('Stop showing as speaker').triggered.connect(lambda: session.set_speakers([s for s in speakers if s != id]))
@@ -1673,15 +1677,21 @@ class VideoroomWindow(QWidget):
     # Speaker selection (blink.webrtc.speakerdialog)
 
     def _speaker_candidates(self):
-        candidates = [(self.session.id, 'Me')]
-        candidates += [(participant.id, participant.name) for participant, tile in self.tiles.items()
-                       if participant.video is True and participant.visible]
+        """The video streams that can be shown as speaker, as (publisher id, name): ours first ('Me', while
+        the camera is on), our established extra videos, and everyone else's videos, extra ones included."""
+        candidates = [] if self.session.video_muted else [(self.session.id, 'Me')]
+        for participant in self.tiles:
+            if participant.video is not True or not participant.visible:
+                continue
+            extra = getattr(participant, 'extra_video', None)
+            if extra is not None and extra.state != 'established':
+                continue
+            candidates.append((participant.id, participant.name))
         return candidates
 
     def _update_speakers_button(self):
-        # as Sylk Mobile: when there are two or more others with video to choose between, or speakers to clear
-        others = sum(1 for participant in self.tiles if participant.video is True and participant.visible)
-        visible = others >= 2 or bool(self.session.speakers)
+        # with two video streams or more (parents and children, ours included), or speakers to clear
+        visible = len(self._speaker_candidates()) >= SPEAKER_CONTROLS_STREAMS or bool(self.session.speakers)
         changed = False
         if self.speakers_button.isVisibleTo(self.call_bar) != visible:
             self.speakers_button.setVisible(visible)
