@@ -1027,6 +1027,67 @@ class MessageManager(object, metaclass=Singleton):
         finally:
             self._syncing.discard(account.id)
 
+    def refetch_journal(self, account, days=None):
+        """Download the journal of `account` again, all of it (journal_since_years) or its last
+        `days` days, as a first sync: what is already in the database stays, what is missing is
+        added. Returns None when started, else why it cannot start now."""
+        if account is BonjourAccount() or not account.enabled:
+            return translate('message_manager', 'The account is not enabled.')
+        from blink.sylk_discovery import has_sylkserver
+        if not has_sylkserver(account):
+            return translate('message_manager', 'The domain of the account does not run SylkServer.')
+        if not account.sms.history_synchronization_url or not account.sms.history_synchronization_token:
+            return translate('message_manager', 'The account has no message journal on a server yet.')
+        if self._journal_first_sync_busy(account):
+            return translate('message_manager', 'A download of the journal of this account is still in progress.')
+        self._refetch_journal(account, days)
+        return None
+
+    def _journal_first_sync_busy(self, account):
+        return (account.id in self._snapshot_backlogs or self._journal_snapshot_pending(account)
+                or os.path.exists(self._journal_first_sync_marker(account)))
+
+    @run_in_thread('sync')
+    def _refetch_journal(self, account, days):
+        activity = ActivityLog()
+        if self._journal_first_sync_busy(account):     # one queued before this
+            activity.info(f'[journal] Refetch of {account.id} not started: a first sync is in progress')
+            return
+        path = os.path.join(self._journal_directory(account), self.journal_refetch_file)
+        if days:
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+            try:
+                with open(path + '.tmp', 'w') as file:
+                    file.write(since.isoformat())
+                os.replace(path + '.tmp', path)
+            except OSError as e:
+                activity.error(f'[journal] Cannot write {path}, refetch of {account.id} not started: {e}')
+                return
+        else:
+            unlink(path)
+        # no cursor: the next run is a first sync (the cursor copy goes too, or it would be restored)
+        account.sms.history_synchronization_id = None
+        account.sms.history_synchronization_id_timestamp = None
+        account.save()
+        self._save_journal_cursor(account, '')
+        activity.info(f'[journal] Refetching the message journal of {account.id}' + (f' of the last {days} days' if days else f' of the last {self.journal_since_years} years') + ', asked by the user')
+        JournalLog()(account.id, 'refetch', days=days or None)
+        self._syncing.add(account.id)
+        try:
+            self._fetch_server_history(account, 'refetch')
+        finally:
+            self._syncing.discard(account.id)
+
+    def _journal_refetch_since(self, account):
+        """How far back a refetch asked by the user goes, None for a regular first sync."""
+        try:
+            with open(os.path.join(self._journal_directory(account), self.journal_refetch_file)) as file:
+                return ISOTimestamp(file.read().strip()).astimezone(timezone.utc)
+        except (OSError, ValueError):
+            return None
+
+    journal_refetch_file = 'refetch-since'     # journal/<account>/refetch-since: the start of a refetch limited to its last days (ISO time)
+
     _journal_unverified_logged = False
     journal_since_years = 5     # how far back the history of a new device goes, as sylk mobile does
     journal_recent_days = 30    # a first sync downloads and applies these last days, then it is finished; the older
@@ -1248,7 +1309,13 @@ class MessageManager(object, metaclass=Singleton):
         if cursor:
             return self._journal_url(account, cursor=cursor)
         backfill = self._journal_backfill_state(account)
-        since = ISOTimestamp(backfill['until']) if backfill is not None else datetime.now(timezone.utc) - timedelta(days=self.journal_recent_days)
+        if backfill is not None:
+            since = ISOTimestamp(backfill['until'])
+        else:
+            since = datetime.now(timezone.utc) - timedelta(days=self.journal_recent_days)
+            limit = self._journal_refetch_since(account)
+            if limit is not None and limit > since:
+                since = limit       # a refetch of fewer days than a first sync's recent ones: no older history
         return self._journal_url(account, since=since)
 
     @staticmethod
@@ -1320,8 +1387,13 @@ class MessageManager(object, metaclass=Singleton):
                 except OSError as e:
                     activity.warning(f'[journal] Cannot write {date_path}: {e}')
             # the first sync asks for its last days; what is older is fetched after it, up to there
-            self._save_journal_backfill_state(account, {'until': (started_at.astimezone(timezone.utc) - timedelta(days=self.journal_recent_days)).isoformat(),
-                                                        'cursor': ''})
+            # (a refetch of the last days only: down to its limit, or nothing when within the recent days)
+            until = started_at.astimezone(timezone.utc) - timedelta(days=self.journal_recent_days)
+            limit = self._journal_refetch_since(account)
+            if limit is None:
+                self._save_journal_backfill_state(account, {'until': until.isoformat(), 'cursor': ''})
+            elif limit < until:
+                self._save_journal_backfill_state(account, {'until': until.isoformat(), 'cursor': '', 'since': limit.isoformat()})
         # the pages of a first sync are a snapshot, kept apart (applied newest first, _apply_snapshot_recent)
         page_directory = self._journal_snapshot_cache(account).directory if first_sync else directory
         jlog = JournalLog()
@@ -1451,6 +1523,7 @@ class MessageManager(object, metaclass=Singleton):
             try:
                 with open(os.path.join(page_directory, self.journal_snapshot_complete), 'w') as complete_file:
                     complete_file.write(f'{ISOTimestamp.now()} {cached + entries} entries\n')
+                unlink(os.path.join(directory, self.journal_refetch_file))
             except OSError as e:
                 activity.error(f'[journal] Cannot mark the first sync of {account.id} as downloaded: {e}')
                 self._journal_progress(account, 'done')
@@ -1647,6 +1720,8 @@ class MessageManager(object, metaclass=Singleton):
                 return False
             if state.get('cursor'):
                 url = self._journal_url(account, cursor=state['cursor'])
+            elif state.get('since'):
+                url = self._journal_url(account, since=ISOTimestamp(state['since']).astimezone(timezone.utc))     # a refetch of the last days
             else:
                 url = self._journal_url(account, since=datetime.now(timezone.utc) - timedelta(days=365 * self.journal_since_years))
             try:

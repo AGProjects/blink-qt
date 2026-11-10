@@ -382,6 +382,14 @@ class MainWindow(base_class, ui_class):
         actions = self.blink_menu.actions()
         position = actions.index(self.profiles_menu.menuAction()) + 1
         self.blink_menu.insertAction(actions[position] if position < len(actions) else None, self.data_window_action)
+        # Blink -> Refetch history from server, after the Data manager
+        self.refetch_journal_action = QAction(translate('main_window', 'Refetch history from server...'), self)
+        self.refetch_journal_action.triggered.connect(self._AH_RefetchJournalActionTriggered)
+        actions = self.blink_menu.actions()
+        position = actions.index(self.data_window_action) + 1
+        self.blink_menu.insertAction(actions[position] if position < len(actions) else None, self.refetch_journal_action)
+        self.blink_menu.aboutToShow.connect(lambda: self.refetch_journal_action.setVisible(bool(self._refetch_journal_accounts())))
+        self.refetch_journal_action.setVisible(False)       # until an account with SylkServer is there
 
     def refresh_devices(self):
         """Read the sound devices again; a chosen device that is gone falls back to the system default.
@@ -441,7 +449,7 @@ class MainWindow(base_class, ui_class):
         wide_padding = self.identity.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option, QStyle.SubControl.SC_ComboBoxEditField, self.identity).height() < 10
         self.identity.setStyleSheet("""QComboBox { padding: 0px 4px 0px 4px; }""" if wide_padding else "")
 
-        # Under the contact list, one line per background job, each shown only when it takes a
+        # Under the account selector, one line per background job, each shown only when it takes a
         # while and all of them at once: the message journal (download and import), the older history
         # of a first sync, the background decryption of stored messages. The last two have a button
         # beside the bar that sets how much CPU they take.
@@ -469,7 +477,7 @@ class MainWindow(base_class, ui_class):
         self.decryption_line = ProgressLine(self.progress_area, font, self.decryption_speed_button)
         for line in (self.journal_line, self.backlog_line, self.decryption_line):
             progress_layout.addWidget(line)
-        self.contacts_layout.insertWidget(self.contacts_layout.indexOf(self.contacts_view) + 1, self.progress_area)
+        self.window_layout.insertWidget(self.window_layout.indexOf(self.identity_widget) + 1, self.progress_area)
         self._decryption_progress = None        # (done, total, speed, eta) of the background decryption, while it runs
         self._backlog_progress = None           # (done, total, account, phase) of the older history of a first sync, while it runs
 
@@ -1153,6 +1161,85 @@ class MainWindow(base_class, ui_class):
             from blink.datawindow import DataWindow
             self.data_window = DataWindow()
         self.data_window.show()
+
+    def _place_progress_area(self, index=None):
+        """The progress lines go right above the buttons bar of the view shown: they move with it."""
+        if self.main_view.currentWidget() is self.sessions_panel:
+            layout, buttons = self.sessions_layout, self.session_buttons_layout
+        else:
+            layout, buttons = self.contacts_layout, self.contact_buttonbox_layout
+        for other in (self.contacts_layout, self.sessions_layout):
+            if other.indexOf(self.progress_area) >= 0:
+                other.removeWidget(self.progress_area)
+        position = next((i for i in range(layout.count()) if layout.itemAt(i).layout() is buttons), layout.count())
+        layout.insertWidget(position, self.progress_area)     # reparented to that view's page
+        self.progress_area.show()       # the lines show and hide themselves
+
+    @staticmethod
+    def _refetch_journal_accounts():
+        # the journal is SylkServer's: only accounts whose domain runs it
+        from blink.sylk_discovery import has_sylkserver
+        return [account for account in AccountManager().iter_accounts()
+                if account is not BonjourAccount() and account.enabled and has_sylkserver(account) and account.sms.history_synchronization_url]
+
+    def _AH_RefetchJournalActionTriggered(self, checked=False):
+        """Download the message journal of an account again: all of it, or its last days. What is
+        in the database stays, what is missing is added."""
+        from PyQt6.QtWidgets import QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QRadioButton, QSpinBox, QVBoxLayout
+        from blink.messages import MessageManager
+        accounts = self._refetch_journal_accounts()
+        title = translate('main_window', 'Refetch history from server')
+        if not accounts:
+            QMessageBox.information(self, title, translate('main_window', 'No enabled account has SylkServer keeping its messages.'))
+            return
+        manager = MessageManager()
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        explanation = QLabel(translate('main_window', 'Download the message history of the account from the server again. '
+                                                      'Messages on this device are kept, the missing ones are added.'))
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        form = QFormLayout()
+        account_box = QComboBox(dialog)
+        for account in accounts:
+            account_box.addItem(str(account.id), account)
+        default = AccountManager().default_account
+        if default in accounts:
+            account_box.setCurrentIndex(accounts.index(default))
+        form.addRow(translate('main_window', 'Account:'), account_box)
+        all_button = QRadioButton(translate('main_window', 'All (last %d years)') % manager.journal_since_years, dialog)
+        days_button = QRadioButton(translate('main_window', 'Last'), dialog)
+        days_box = QSpinBox(dialog)
+        days_box.setRange(1, 365 * manager.journal_since_years)
+        days_box.setValue(30)
+        days_box.setSuffix(translate('main_window', ' days'))
+        group = QButtonGroup(dialog)
+        group.addButton(all_button)
+        group.addButton(days_button)
+        days_button.setChecked(True)
+        days_box.valueChanged.connect(lambda value: days_button.setChecked(True))
+        period = QVBoxLayout()
+        period.addWidget(all_button)
+        row = QHBoxLayout()
+        row.addWidget(days_button)
+        row.addWidget(days_box)
+        row.addStretch()
+        period.addLayout(row)
+        form.addRow(translate('main_window', 'Period:'), period)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel, dialog)
+        buttons.addButton(translate('main_window', 'Refetch'), QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        account = account_box.currentData()
+        days = None if all_button.isChecked() else days_box.value()
+        error = manager.refetch_journal(account, days)
+        if error:
+            QMessageBox.warning(self, title, error)
 
     def _AH_VoicemailActionTriggered(self, checked):
         account = self.sender().data()
