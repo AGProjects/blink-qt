@@ -134,6 +134,12 @@ def room_title(room):
 
 
 NAME_PILL_MARGIN = 8
+PTZ_RADIUS = 46             # the direction pad of a PTZ camera (blink.webrtc.ptz), at most; smaller on a small tile
+PTZ_MIN_SIZE = (200, 150)   # a tile smaller than this shows no PTZ controls
+PTZ_ACTIVE_COLOR = QColor(10, 132, 255)
+PRESET_PILL_HEIGHT = 24
+PRESET_PILL_GAP = 6
+PTZ_IDLE_TIME = 5000        # ms without the mouse moving over a tile before its PTZ controls and preset pills hide
 CALL_BAR_SCALE = 0.75
 CALL_BAR_LIFT = TILE_GAP + NAME_PILL_MARGIN + NAME_PILL_HEIGHT + 6      # the call bar's bottom, from the window's
 
@@ -302,8 +308,236 @@ class ParticipantTile(QWidget):
         participant.frameReady.connect(self.set_image)
         participant.changed.connect(self.update)
         participant.speakingChanged.connect(self._SH_SpeakingChanged)
+        # one of our extra videos from an RTSP camera with PTZ: a direction pad, zoom and presets under the mouse
+        self.ptz = None                 # blink.webrtc.ptz.Ptz when the camera has PTZ
+        self.ptz_held = None            # the control held: (pan, tilt, zoom)
+        self.ptz_idle = False           # the mouse has not moved over the tile for PTZ_IDLE_TIME
+        self.ptz_idle_timer = QTimer(self)
+        self.ptz_idle_timer.setSingleShot(True)
+        self.ptz_idle_timer.setInterval(PTZ_IDLE_TIME)
+        self.ptz_idle_timer.timeout.connect(self._SH_PtzIdle)
+        extra = getattr(participant, 'extra_video', None)
+        if extra is not None and extra.source.get('kind') == 'rtsp':
+            from blink.webrtc.ptz import probe
+            probe(extra.source, self._SH_PtzProbed)
+
+    def _SH_PtzProbed(self, ptz):
+        self.ptz = ptz
+        if ptz is not None:
+            self.update()
+
+    def _SH_PtzIdle(self):
+        self.ptz_idle = True
+        self.update()
+
+    # PTZ controls (as in AG CuteCams)
+
+    @property
+    def ptz_camera(self):
+        return self.participant.extra_video.source
+
+    @property
+    def ptz_zoom(self):
+        return self.ptz is not None and self.ptz.zoom_for(self.ptz_camera)
+
+    @property
+    def ptz_shown(self):
+        return self.ptz is not None and self.in_grid and ((self.underMouse() and not self.ptz_idle) or self.ptz_held is not None) and \
+            self.width() >= PTZ_MIN_SIZE[0] and self.height() >= PTZ_MIN_SIZE[1]
+
+    def _ptz_geometry(self):
+        """(the pad's center, its radius, [(zoom, its circle)]): at the right edge, centered."""
+        radius = min(PTZ_RADIUS, self.height() * 0.2)
+        zoom_radius = radius * 0.34
+        zooms = 2 * zoom_radius + 8 if self.ptz_zoom else 0
+        center = QPointF(self.width() - NAME_PILL_MARGIN - radius - 4, self.height() / 2 - zooms / 2)
+        buttons = []
+        if zooms:
+            y = center.y() + radius + 8 + zoom_radius
+            for zoom, x in ((-1.0, center.x() - zoom_radius - 4), (1.0, center.x() + zoom_radius + 4)):
+                buttons.append((zoom, QRectF(x - zoom_radius, y - zoom_radius, 2 * zoom_radius, 2 * zoom_radius)))
+        return center, radius, buttons
+
+    def ptz_control_at(self, position):
+        """(pan, tilt, zoom) of the control at position, or None."""
+        if not self.ptz_shown:
+            return None
+        center, radius, buttons = self._ptz_geometry()
+        for zoom, circle in buttons:
+            if circle.contains(position):
+                return (0.0, 0.0, zoom)
+        dx, dy = position.x() - center.x(), position.y() - center.y()
+        distance = (dx * dx + dy * dy) ** 0.5
+        if distance > radius or distance < radius * 0.3:
+            return None
+        if abs(dx) > abs(dy):
+            return (1.0 if dx > 0 else -1.0, 0.0, 0.0)
+        return (0.0, -1.0 if dy > 0 else 1.0, 0.0)       # up on the screen is up for the camera
+
+    def _preset_pills(self):
+        """[(rect, token, text)] of the preset train, centered on the edge away from the name pill; a last
+        ('+N', token None) when they do not all fit."""
+        if not self.ptz_shown or not self.ptz.presets:
+            return []
+        from blink.webrtc.ptz import preset_label
+        metrics = QFontMetrics(_name_pill_font())
+        labels = [(token, metrics.elidedText(preset_label(self.ptz_camera, token, name), Qt.TextElideMode.ElideRight, 140))
+                  for token, name in self.ptz.presets]
+        width = lambda text: metrics.horizontalAdvance(text) + 20
+        available = self.width() - 2 * NAME_PILL_MARGIN
+        shown = []
+        used = 0
+        for index, (token, text) in enumerate(labels):
+            rest = len(labels) - index - 1
+            more = width(f'+{rest}') + PRESET_PILL_GAP if rest else 0
+            needed = width(text) + (PRESET_PILL_GAP if shown else 0)
+            if used + needed + more > available:
+                break
+            shown.append((token, text))
+            used += needed
+        hidden = len(labels) - len(shown)
+        if hidden:
+            shown.append((None, f'+{hidden}'))
+            used += width(f'+{hidden}') + (PRESET_PILL_GAP if len(shown) > 1 else 0)
+        vertical = 'bottom' if self.label_corner[0] == 'top' else 'top'
+        y = NAME_PILL_MARGIN if vertical == 'top' else self.height() - NAME_PILL_MARGIN - PRESET_PILL_HEIGHT
+        x = (self.width() - used) / 2
+        pills = []
+        for token, text in shown:
+            rect = QRectF(x, y, width(text), PRESET_PILL_HEIGHT)
+            pills.append((rect, token, text))
+            x += rect.width() + PRESET_PILL_GAP
+        return pills
+
+    def preset_pill_at(self, position):
+        """(token, or None for '+N') of the pill at position, or False."""
+        return next((token for rect, token, text in self._preset_pills() if rect.contains(position)), False)
+
+    def ptz_owns(self, position):
+        """Whether a click at position is for the PTZ controls (a control held, the pad, zoom or a preset)."""
+        return self.ptz_held is not None or self.ptz_control_at(position) is not None or self.preset_pill_at(position) is not False
+
+    def _paint_presets(self, painter):
+        painter.setFont(_name_pill_font())
+        for rect, token, text in self._preset_pills():
+            active = token is not None and token == self.ptz.active_preset
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(PTZ_ACTIVE_COLOR if active else QColor(0, 0, 0, 150))
+            painter.drawRoundedRect(rect, PRESET_PILL_HEIGHT / 2, PRESET_PILL_HEIGHT / 2)
+            painter.setPen(white(1.0 if active else 0.9))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+
+    def _paint_ptz(self, painter):
+        center, radius, buttons = self._ptz_geometry()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 140))
+        painter.drawEllipse(center, radius, radius)
+        held = self.ptz_held
+        size = radius * 0.26
+        for pan, tilt in ((0, 1), (0, -1), (-1, 0), (1, 0)):
+            # an arrow head pointing out, at two thirds of the radius
+            tip = QPointF(center.x() + pan * radius * 0.8, center.y() - tilt * radius * 0.8)
+            back = QPointF(center.x() + pan * radius * 0.5, center.y() - tilt * radius * 0.5)
+            side = QPointF(tilt * size, pan * size)
+            active = held is not None and held[:2] == (float(pan), float(tilt))
+            painter.setBrush(PTZ_ACTIVE_COLOR if active else white(0.85))
+            painter.drawPolygon(QPolygonF([tip, back + side, back - side]))
+        painter.setBrush(white(0.35))
+        painter.drawEllipse(center, radius * 0.12, radius * 0.12)
+        for zoom, circle in buttons:
+            active = held is not None and held[2] == zoom
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 140))
+            painter.drawEllipse(circle)
+            pen = QPen(PTZ_ACTIVE_COLOR if active else white(0.85), max(2.0, circle.width() * 0.1))
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            c, arm = circle.center(), circle.width() * 0.25
+            painter.drawLine(QPointF(c.x() - arm, c.y()), QPointF(c.x() + arm, c.y()))
+            if zoom > 0:
+                painter.drawLine(QPointF(c.x(), c.y() - arm), QPointF(c.x(), c.y() + arm))
+
+    def ptz_press(self, control):
+        if self.ptz is None or control is None:
+            return
+        from blink.webrtc.ptz import SPEED
+        if self.ptz_held is not None:
+            self.ptz.stop()
+        self.ptz_held = control
+        pan, tilt, zoom = control
+        self.ptz.move(pan * SPEED, tilt * SPEED, zoom * SPEED)
+        self.update()
+
+    def ptz_release(self):
+        if self.ptz is not None and self.ptz_held is not None:
+            self.ptz.stop()
+        self.ptz_held = None
+        self.update()
+
+    def _ptz_wake(self):
+        """The mouse moved over the tile: the controls show again, until it rests PTZ_IDLE_TIME."""
+        if self.ptz is None:
+            return
+        if self.ptz_idle:
+            self.ptz_idle = False
+            self.update()
+        self.ptz_idle_timer.start()
+
+    def mouseMoveEvent(self, event):
+        if self.ptz is not None:
+            self._ptz_wake()
+            position = event.position()
+            if self.ptz_control_at(position) is not None or self.preset_pill_at(position) is not False:
+                self.setCursor(Qt.CursorShape.PointingHandCursor)
+                pill = self.preset_pill_at(position)
+                if pill is None:
+                    self.setToolTip('More presets')
+                elif pill is not False:
+                    from blink.webrtc.ptz import preset_label
+                    self.setToolTip('Go to ' + preset_label(self.ptz_camera, pill, dict(self.ptz.presets).get(pill, '')))
+                else:
+                    self.setToolTip('')
+            elif not self.replaceable:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+                self.setToolTip('')
+        super(ParticipantTile, self).mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        if self.ptz is not None and event.button() == Qt.MouseButton.LeftButton:
+            control = self.ptz_control_at(event.position())
+            if control is not None:
+                self.ptz_press(control)
+                event.accept()
+                return
+            pill = self.preset_pill_at(event.position())
+            if pill is not False:
+                if pill is None:
+                    window = self.window()
+                    if hasattr(window, '_tile_menu'):
+                        window._tile_menu(self, event.globalPosition().toPoint())      # the presets that do not fit are in the menu
+                else:
+                    self.ptz.goto_preset(pill)
+                    self.update()
+                event.accept()
+                return
+        super(ParticipantTile, self).mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.ptz_held is not None:
+            self.ptz_release()
+            event.accept()
+            return
+        super(ParticipantTile, self).mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if self.ptz is not None and event.button() == Qt.MouseButton.LeftButton and self.ptz_owns(event.position()):
+            self.mousePressEvent(event)     # a second quick press on the pad: still a move, not full screen
+            return
+        super(ParticipantTile, self).mouseDoubleClickEvent(event)
 
     def release(self):
+        self.ptz_release()
+        self.ptz_idle_timer.stop()
         try:
             self.participant.frameReady.disconnect(self.set_image)
             self.participant.changed.disconnect(self.update)
@@ -376,10 +610,12 @@ class ParticipantTile(QWidget):
             self.update()
 
     def enterEvent(self, event):
+        self._ptz_wake()
         self.update()       # the Replace hint follows the mouse
         super(ParticipantTile, self).enterEvent(event)
 
     def leaveEvent(self, event):
+        self.ptz_idle_timer.stop()
         self.update()
         super(ParticipantTile, self).leaveEvent(event)
 
@@ -471,11 +707,15 @@ class ParticipantTile(QWidget):
             _paint_hand(painter, rect, self.label_corner, compact)
         if self.participant.speaking and not (self.picked or self.replaceable):
             _paint_speaking(painter, rect, compact)
-        if not compact and self.underMouse() and not self.replaceable and self.participant.video is True:
+        ptz_shown = not compact and not self.replaceable and self.ptz_shown
+        if not compact and self.underMouse() and not self.replaceable and self.participant.video is True and not (ptz_shown and self.ptz.presets):
             parts = [self.participant.video_codec or '', '%d kbit/s' % round(self.bitrate / 1000) if self._sample is not None else '']
             text = ' · '.join(part for part in parts if part)
             if text:
                 _paint_stats(painter, rect, text)
+        if ptz_shown:
+            self._paint_ptz(painter)
+            self._paint_presets(painter)
         if self.picked or self.replaceable:
             hovered = self.underMouse()
             painter.setClipping(False)
@@ -1174,6 +1414,10 @@ class VideoroomWindow(QWidget):
         if event.type() == QEvent.Type.ContextMenu and isinstance(watched, (ParticipantTile, LocalTile)):
             self._tile_menu(watched, event.globalPos())
             return True
+        if isinstance(watched, ParticipantTile) and watched.ptz is not None and \
+                event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick) and \
+                event.button() == Qt.MouseButton.LeftButton and watched.ptz_owns(event.position()):
+            return False        # the camera's PTZ controls: the tile's own
         if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
             if watched in self.carousel.tiles:
                 if self.grid.speakers:
@@ -1192,6 +1436,51 @@ class VideoroomWindow(QWidget):
             if self.picked is not None and watched not in (carousel, carousel.viewport, carousel.content, carousel.left_arrow, carousel.right_arrow):
                 self.set_picked(None)       # a click anywhere else, our own tile included, cancels
         return False
+
+    def _ptz_menu(self, menu, tile):
+        """The presets of an extra video's PTZ camera: go to one, save the position as one, delete one."""
+        from blink.webrtc.ptz import preset_label
+        ptz, camera = tile.ptz, tile.ptz_camera
+        presets = menu.addMenu('Go to preset')
+        presets.setEnabled(bool(ptz.presets))
+        for token, name in ptz.presets:
+            action = presets.addAction(preset_label(camera, token, name))
+            action.setCheckable(True)
+            action.setChecked(token == ptz.active_preset)
+            action.triggered.connect(lambda checked, token=token: (ptz.goto_preset(token), tile.update()))
+        menu.addAction('Save position as preset...').triggered.connect(lambda: self._save_ptz_preset(tile))
+        delete = menu.addMenu('Delete preset')
+        delete.setEnabled(bool(ptz.presets))
+        for token, name in ptz.presets:
+            delete.addAction(preset_label(camera, token, name)).triggered.connect(lambda checked, token=token: self._delete_ptz_preset(tile, token))
+        menu.addSeparator()
+
+    def _save_ptz_preset(self, tile):
+        from PyQt6.QtWidgets import QInputDialog
+        ptz = tile.ptz
+        name, ok = QInputDialog.getText(self, 'Save preset', f'Save the position of {tile.participant.name} as:', text=f'Preset {len(ptz.presets) + 1}')
+        name = name.strip()
+        if not ok or not name:
+            return
+
+        def saved(token, error):
+            if error:
+                self.flash(f'{tile.participant.name}: cannot save the preset: {error}', duration=6)
+            else:
+                ptz.active_preset = token
+                ptz.refresh_presets(lambda presets, error: tile.update())
+        ptz.set_preset(name, done=saved)
+
+    def _delete_ptz_preset(self, tile, token):
+        ptz = tile.ptz
+
+        def deleted(answer, error):
+            if error:
+                self.flash(f'{tile.participant.name}: cannot delete the preset: {error}', duration=6)
+            if ptz.active_preset == token:
+                ptz.active_preset = None
+            ptz.refresh_presets(lambda presets, error: tile.update())
+        ptz.remove_preset(token, deleted)
 
     # Extra videos of ours: a second camera, an RTSP camera (blink.webrtc.extravideo)
 
@@ -1640,6 +1929,8 @@ class VideoroomWindow(QWidget):
                 action.setCheckable(True)
                 action.setChecked(participant.extra_video.resolution == name)
                 action.triggered.connect(lambda checked, name=name: participant.extra_video.set_resolution(name))
+            if tile.ptz is not None:
+                self._ptz_menu(menu, tile)
             menu.addAction('Stop this video').triggered.connect(lambda: participant.extra_video.stop())
         else:
             participant = tile.participant
@@ -1947,7 +2238,8 @@ class AddVideoDialog(QDialog):
         find_button.clicked.connect(self._find_camera)
         saved_row.addWidget(find_button)
         layout.addRow('Used before', saved_row)
-        self.url_edit = QLineEdit(self)
+        from blink.webrtc.camerasetup import AddressLineEdit
+        self.url_edit = AddressLineEdit(self)
         self.url_edit.setPlaceholderText('rtsp://192.168.1.10:554/stream1')
         layout.addRow('Address', self.url_edit)
         self.user_edit = QLineEdit(self)

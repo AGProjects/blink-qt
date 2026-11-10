@@ -1,3 +1,16 @@
+blink (7.2.9) unstable; urgency=medium
+
+  * Fix storing unique messages per account
+  * Do not allow running Blink twice
+  * Prevent deleting account data if shared by multiple profiles
+  * Make WebRTC audio conference on par with 1 to 1 calls
+  * Speaker control fix
+  * Added refetch message history from server menu item
+  * Move progress bar at the bottom
+  * Hide data manager menu items if account does not support SylkServer
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 10 Nov 2026 17:08:00 -0300
+
 blink (7.2.8) unstable; urgency=medium
 
   * Video call fixes

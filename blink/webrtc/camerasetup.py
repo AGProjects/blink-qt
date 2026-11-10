@@ -32,11 +32,25 @@ from blink.util import call_in_gui_thread
 from blink.widgets.lineedit import add_password_reveal
 
 
-__all__ = ['NetworkCameraDialog', 'rtsp_address', 'split_credentials', 'manage_cameras']
+__all__ = ['NetworkCameraDialog', 'AddressLineEdit', 'rtsp_address', 'split_credentials', 'manage_cameras']
 
 
 LOCAL_ONLY_KEY = 'videoroom/rtsp_local_only'     # Only my local network, as last set
 TEST_HINT = 'Test pulls a picture from the camera; it can be saved untested too.'
+
+
+class AddressLineEdit(QLineEdit):
+    """A line edit for a camera address that shows the start of a long address (the scheme and host,
+    not the end of the path) whenever it is not being typed in."""
+
+    def setText(self, text):
+        super().setText(text)
+        if not self.hasFocus():
+            self.setCursorPosition(0)
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.setCursorPosition(0)
 
 
 def _host(url):
@@ -188,7 +202,7 @@ class NetworkCameraDialog(QDialog):
         self.label_edit.setPlaceholderText('Front door')
         self.label_edit.editingFinished.connect(self._rename)
         form.addRow('Name', self.label_edit)
-        self.url_edit = QLineEdit(self)
+        self.url_edit = AddressLineEdit(self)
         self.url_edit.setPlaceholderText('rtsp://192.168.1.10:554/stream1')
         self.url_edit.setToolTip('An IP address is enough: the stream is then asked from the camera (ONVIF)')
         form.addRow('Address', self.url_edit)
