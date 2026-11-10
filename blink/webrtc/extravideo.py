@@ -12,7 +12,8 @@ publisher chose), so the offer carries its SSRC:
 Sources: rtspsrc (location, user, password; video only) or a local camera from GStreamer's
 device monitor. An RTSP source saved (tested or not), or that worked, is remembered with its
 password in ui.conf (`videoroom/video_sources`) and offered again; `verified` once a picture
-came from it with the address, user and password saved.
+came from it with the address, user and password saved; `mac`: its MAC address (learned when it
+answers on its RTSP port, or entered), to find it when the DHCP server gave it another address.
 """
 
 import json
@@ -28,7 +29,7 @@ from blink.util import call_in_gui_thread
 from blink.webrtc.videoroom import Gst, GstWebRTC, Participant, VIDEO_CODECS, _make, _has, _sdp_message, _video_ssrc
 
 
-__all__ = ['ExtraVideo', 'RESOLUTIONS', 'DEFAULT_RESOLUTION', 'local_cameras', 'saved_sources', 'remember_source', 'mark_verified', 'rename_source', 'set_source_resolution', 'forget_source']
+__all__ = ['ExtraVideo', 'RESOLUTIONS', 'DEFAULT_RESOLUTION', 'local_cameras', 'saved_sources', 'remember_source', 'mark_verified', 'rename_source', 'set_source_resolution', 'set_source_mac', 'forget_source']
 
 
 FPS = 10
@@ -67,10 +68,24 @@ def remember_source(source, replaces=None):
     gone = {source.get('url'), replaces} - {None}
     previous = next((other for other in saved_sources() if other.get('url') in gone), {})
     sources = [other for other in saved_sources() if other.get('url') not in gone]
-    sources.insert(0, dict(label=source.get('label') or '', url=source['url'], user=source.get('user') or '', password=source.get('password') or '',
-                           resolution=source.get('resolution') or previous.get('resolution') or DEFAULT_RESOLUTION,
-                           verified=bool(source['verified']) if 'verified' in source else _still_verified(previous, source)))
+    entry = dict(label=source.get('label') or '', url=source['url'], user=source.get('user') or '', password=source.get('password') or '',
+                 resolution=source.get('resolution') or previous.get('resolution') or DEFAULT_RESOLUTION,
+                 verified=bool(source['verified']) if 'verified' in source else _still_verified(previous, source))
+    if 'mac' in source:        # the manager's field: given, or emptied
+        if source['mac']:
+            entry['mac'] = source['mac']
+    elif previous.get('mac') and _host(previous.get('url')) == _host(entry['url']):      # the same device
+        entry['mac'] = previous['mac']
+    sources.insert(0, entry)
     _save_sources(sources[:20])
+
+
+def _host(url):
+    from urllib.parse import urlsplit
+    try:
+        return urlsplit(url or '').hostname or ''
+    except ValueError:
+        return ''
 
 
 def _details(source):
@@ -109,6 +124,18 @@ def set_source_resolution(url, resolution):
     for source in sources:
         if source.get('url') == url:
             source['resolution'] = resolution
+    _save_sources(sources)
+
+
+def set_source_mac(url, mac):
+    """The MAC address of a remembered source, where it is in the list; None forgets it."""
+    sources = saved_sources()
+    for source in sources:
+        if source.get('url') == url:
+            if mac:
+                source['mac'] = mac
+            else:
+                source.pop('mac', None)
     _save_sources(sources)
 
 

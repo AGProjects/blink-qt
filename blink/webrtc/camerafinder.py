@@ -9,6 +9,11 @@
   - A test: rtspsrc ─► decodebin ─► appsink until the first whole picture (a key frame), or a timeout.
   - Whether a saved camera answers on its RTSP port (not all cameras answer discovery), its MAC
     address (the neighbour table), and whether a host is on one of this computer's networks.
+  - Where a camera is by its MAC address (locate), when the DHCP server gave it another address: in
+    the neighbour table, else after a UDP packet to every address of its network (each makes this
+    computer ask ARP who has it; at most /22, else the /24 around its address), the table again;
+    an address found must take a connection on the RTSP port. The neighbour table keeps entries of
+    devices gone: the MAC answering at an address counts only when something answers there now.
 
 Everything here blocks: it is called from threads (run_in_thread) and answers in the GUI thread.
 """
@@ -31,13 +36,15 @@ from xml.etree import ElementTree
 from blink.logging import ActivityLog
 
 
-__all__ = ['FoundCamera', 'check_online', 'classify_local', 'discover', 'onvif_stream_uri', 'test_stream']
+__all__ = ['FoundCamera', 'check_online', 'classify_local', 'discover', 'locate', 'normal_mac', 'onvif_stream_uri', 'test_stream']
 
 
 WS_DISCOVERY = ('239.255.255.250', 3702)
 DISCOVERY_TIME = 3.0
 SOAP_TIMEOUT = 6
 TEST_TIMEOUT = 12
+SWEEP_WAIT = 2.0            # seconds for the ARP answers after the sweep
+MAX_SWEEP = 1024            # addresses; a larger network: the /24 around the camera's
 ONLINE_TIMEOUT = 2.0
 KEY_FRAME_WAIT = 3.0        # seconds of pictures without a key frame after which one is shown anyway
 
@@ -257,6 +264,131 @@ def check_online(url):
     finally:
         connection.close()
     return True, _mac_address(address)
+
+
+# Where a camera is, by its MAC address
+
+def normal_mac(text):
+    """aa:bb:cc:dd:ee:ff from the ways a MAC address is written (- or : or none between, any case); None: not one."""
+    text = (text or '').strip()
+    digits = re.sub(r'[^0-9a-fA-F]', '', text)
+    if len(digits) != 12 or re.fullmatch(r'[0-9a-fA-F:\-. ]+', text) is None:
+        return None
+    return ':'.join(digits[i:i + 2] for i in range(0, 12, 2)).lower()
+
+
+def _with_host(url, host):
+    """The URL with another host, the rest as it was (user, password, port, path, query)."""
+    from urllib.parse import urlunsplit
+    parts = urlsplit(url)
+    userinfo, at, _ = parts.netloc.rpartition('@')
+    port = f':{parts.port}' if parts.port else ''
+    return urlunsplit(parts._replace(netloc=f'{userinfo}{at}{host}{port}'))
+
+
+def _ipv4(host):
+    import ipaddress
+    try:
+        address = ipaddress.ip_address(host or '')
+    except ValueError:
+        return None
+    return address if address.version == 4 else None
+
+
+def _network_of(address):
+    """The local network the address is on (None: not on ours), the /24 around it when that one is large."""
+    import ipaddress
+    for network in _local_networks():
+        if network.version == 4 and address in network:
+            return ipaddress.ip_network(f'{address}/24', strict=False) if network.num_addresses > MAX_SWEEP else network
+    return None
+
+
+def _neighbours():
+    """{MAC: [IPv4 address]} of the neighbour table (ip neigh, else /proc/net/arp), without failed entries."""
+    table = {}
+    def add(mac, address):
+        mac = mac.lower()
+        if mac != '00:00:00:00:00:00' and _ipv4(address):
+            table.setdefault(mac, []).append(address)
+    command = _ip_command()
+    if command is not None:
+        try:
+            output = subprocess.run([command, '-4', 'neigh', 'show'], capture_output=True, text=True, timeout=3).stdout
+            for line in output.splitlines():
+                match = re.match(r'(\S+) .*lladdr ((?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2})', line)
+                if match and 'FAILED' not in line and 'INCOMPLETE' not in line:
+                    add(match.group(2), match.group(1))
+            return table
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        with open('/proc/net/arp') as arp:
+            for line in arp.read().splitlines()[1:]:
+                words = line.split()
+                if len(words) >= 4:
+                    add(words[3], words[0])
+    except OSError:
+        pass
+    return table
+
+
+def _sweep(network):
+    """A UDP packet to every address of the network (port 9, discard): the ARP questions fill the neighbour table."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setblocking(False)
+        for address in network.hosts():
+            try:
+                sock.sendto(b'', (str(address), 9))
+            except OSError:
+                pass
+    time.sleep(SWEEP_WAIT)
+
+
+def _answers(address):
+    """Whether something answers ping at the address now."""
+    try:
+        return subprocess.run(['ping', '-n', '-q', '-c', '1', '-W', '1', str(address)], capture_output=True, timeout=3).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def locate(url, mac=None):
+    """Where the camera is (blocks): (state, url, mac, detail); state: 'here' (its MAC answers at its address, or,
+    without a MAC, the one that does), 'moved' (url: at another address), 'missing' (not found), 'unknown' (not an
+    IPv4 address on this computer's networks, or nothing answers)."""
+    host, port = _rtsp_port(url)
+    address = _ipv4(host)
+    if address is None:
+        return 'unknown', url, mac, 'only an IP address on this network can be checked'
+    network = _network_of(address)
+    if network is None:
+        return 'unknown', url, mac, f'{address} is not on this computer\'s networks'
+    online, here = check_online(url)
+    if here is None and (online or _answers(address)):      # only of a device answering now, not a stale entry
+        here = _mac_address(str(address))
+    if not mac:
+        if here:
+            return 'here', url, here, f'{here} answers at {address}'
+        return 'unknown', url, None, f'nothing answers at {address}' if not online else f'no MAC address known for {address}'
+    if here == mac:
+        return 'here', url, mac, f'{mac} answers at {address}' + ('' if online else ', not on its RTSP port')
+    def find():
+        import ipaddress
+        return [ip for ip in _neighbours().get(mac, []) if ip != str(address) and ipaddress.ip_address(ip) in network]
+    found = find()
+    if not found:
+        ActivityLog().info(f'[cameras] Looking for {mac} on {network}')
+        _sweep(network)
+        found = find()
+    for ip in found:
+        new_url = _with_host(url, ip)
+        online, new_mac = check_online(new_url)
+        if online and new_mac in (None, mac):
+            return 'moved', new_url, mac, f'{mac} is at {ip}' + (f' ({address} is {here})' if here else '')
+    if found:
+        return 'missing', url, mac, f'{mac} is at {", ".join(found)}, not answering on its RTSP port'
+    return 'missing', url, mac, f'{mac} is not on {network}' + (f' ({address} is {here})' if here else f' (nothing answers at {address})')
 
 
 # ONVIF: the RTSP address of a camera

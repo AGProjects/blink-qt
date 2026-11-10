@@ -12,7 +12,11 @@ when only an IP address is typed), and its user and password when saved. Test pu
 and shows it. Any rtsp:// address (or a bare IP) can be saved, tested or not (the camera may be
 offline now); it is remembered (blink.webrtc.extravideo.remember_source) with its password.
 rtsp://user:password@host/... typed or pasted: the user and password go into their fields.
-Renaming a saved camera saves it.
+Renaming a saved camera saves it, as does changing its MAC address (learned when the camera is
+first seen online on this computer's network, or entered). Find checks that the MAC address
+answers at the camera's address, else looks for it on the network
+(blink.webrtc.camerafinder.locate) and puts the address it is at in the field (Update saves it);
+without a MAC address, the one answering at the address is filled in.
 """
 
 import threading
@@ -201,6 +205,22 @@ class NetworkCameraDialog(QDialog):
         self.resolution_combo.setCurrentIndex(self.resolution_combo.findData(DEFAULT_RESOLUTION))
         self.resolution_combo.setToolTip('What the camera is sent to the conference at; smaller takes less of your upload')
         form.addRow('Send at', self.resolution_combo)
+        mac_row = QHBoxLayout()
+        self.mac_edit = QLineEdit(self)
+        self.mac_edit.setPlaceholderText('learned when it answers')
+        self.mac_edit.setToolTip('Learned when the camera is first seen online, or entered; Find looks for the camera by it '
+                                 'when the DHCP server gave it another address')
+        self.mac_edit.editingFinished.connect(self._mac_edited)
+        mac_row.addWidget(self.mac_edit, 1)
+        self.find_button = QPushButton('Find', self)
+        self.find_button.setAutoDefault(False)
+        self.find_button.setToolTip('Check that this MAC address answers at the camera\'s address, else look for it on the '
+                                    'network and put the address it is at in the field (Update saves it); without a MAC '
+                                    'address, the one answering at the address is filled in')
+        self.find_button.clicked.connect(self._find_mac)
+        mac_row.addWidget(self.find_button)
+        form.addRow('MAC address', mac_row)
+        self.finding = False
         layout.addLayout(form)
 
         test_row = QHBoxLayout()
@@ -322,6 +342,7 @@ class NetworkCameraDialog(QDialog):
         self.online[url] = online
         if mac:
             self.macs[url] = mac
+            self._learn_mac(url, mac)
         self._show_found()
 
     def _classify_local(self):
@@ -471,6 +492,8 @@ class NetworkCameraDialog(QDialog):
                 self.user_edit.clear()
                 self.password_edit.clear()
             self.filled = None
+        self.mac_edit.setText((saved or {}).get('mac') or '')
+        self.mac_edit.setStyleSheet('')
         self.xaddr = camera.xaddr if camera.how == 'onvif' else None
         if not self.url_edit.text() and self.xaddr:
             self.url_edit.setPlaceholderText('asked from the camera (ONVIF) when tested')
@@ -515,6 +538,91 @@ class NetworkCameraDialog(QDialog):
             self.mode_label.setToolTip('Saving adds a camera (one with the same address is replaced)')
         if self.managing:
             self.add_button.setText('Update' if self.editing is not None else 'Save')
+        self.find_button.setEnabled(bool(url) and not self.finding)
+
+    # The MAC address
+
+    def _learn_mac(self, url, mac):
+        """A saved camera without a MAC address seen online at its address: its MAC address kept."""
+        from blink.webrtc.extravideo import saved_sources, set_source_mac
+        saved = next((source for source in self.saved if source['url'] == url), None)
+        if saved is None or saved.get('mac'):
+            return
+        set_source_mac(url, mac)
+        ActivityLog().info(f'[cameras] {saved.get("label") or _host(url)}: MAC address {mac}')
+        self.saved = saved_sources()
+        if self.editing is not None and self.editing['url'] == url:
+            self.editing = next((source for source in self.saved if source['url'] == url), None)
+            if not self.mac_edit.text().strip() and not self.mac_edit.hasFocus():
+                self.mac_edit.setText(mac)
+
+    def _mac(self):
+        """The MAC address entered, normalized; '' when empty, None when not one."""
+        from blink.webrtc.camerafinder import normal_mac
+        text = self.mac_edit.text().strip()
+        return normal_mac(text) if text else ''
+
+    def _mac_edited(self):
+        """Of a saved camera: kept at once (as its name), when valid."""
+        mac = self._mac()
+        if mac is None:
+            self.mac_edit.setStyleSheet('color: #d33;')
+            self.test_status.setText('Not a MAC address: six pairs of hex digits, aa:bb:cc:dd:ee:ff')
+            return
+        self.mac_edit.setStyleSheet('')
+        if mac and self.mac_edit.text() != mac:
+            self.mac_edit.setText(mac)
+        saved = self.editing
+        if saved is None or (saved.get('mac') or '') == mac or saved['url'] != self._fields()[0]:
+            return
+        from blink.webrtc.extravideo import saved_sources, set_source_mac
+        set_source_mac(saved['url'], mac or None)
+        ActivityLog().info(f'[cameras] {saved.get("label") or _host(saved["url"])}: MAC address ' + (mac or 'forgotten'))
+        self.saved = saved_sources()
+        self.editing = next((source for source in self.saved if source['url'] == saved['url']), None)
+        self._update()
+
+    def _find_mac(self):
+        mac = self._mac()
+        if mac is None:
+            self._mac_edited()
+            return
+        self._take_credentials()
+        url = self._fields()[0]
+        if not url:
+            return
+        self.finding = True
+        self._update()
+        self.test_status.setText(f'Looking for {mac} on the network…' if mac else f'Asking who is at {_host(url)}…')
+
+        def work():
+            from blink.webrtc.camerafinder import locate
+            try:
+                answer = locate(url, mac or None)
+            except Exception as e:
+                answer = ('unknown', url, mac, str(e))
+            call_in_gui_thread(self._mac_found, url, *answer)
+        threading.Thread(target=work, name=f'find {_host(url)}', daemon=True).start()
+
+    def _mac_found(self, url, state, new_url, mac, detail):
+        if self.closed:
+            return
+        self.finding = False
+        if self._fields()[0] != url:        # the address changed meanwhile
+            self._update()
+            return
+        if mac and not self.mac_edit.text().strip():
+            self.mac_edit.setText(mac)
+            self._mac_edited()
+        if state == 'moved':
+            ActivityLog().info(f'[cameras] Found: {detail}')
+            self.url_edit.setText(new_url)
+            self.test_status.setText(f'Found: {detail}. ' + ('Update to save the new address.' if self.editing is not None else 'Save to keep it.'))
+        elif state == 'here':
+            self.test_status.setText(f'The camera is at its address: {detail}.')
+        else:
+            self.test_status.setText(f'Not found: {detail}.')
+        self._update()
 
     # Test
 
@@ -594,7 +702,7 @@ class NetworkCameraDialog(QDialog):
 
     def source(self):
         url, user, password = self._fields()
-        return dict(kind='rtsp', url=url, user=user, password=password, resolution=self.resolution_combo.currentData())
+        return dict(kind='rtsp', url=url, user=user, password=password, resolution=self.resolution_combo.currentData(), mac=self._mac() or '')
 
     def _add(self):
         from blink.webrtc.extravideo import remember_source, saved_sources
@@ -649,7 +757,7 @@ class NetworkCameraDialog(QDialog):
 
     def _clear_fields(self):
         self._forget_test()
-        for edit in (self.label_edit, self.url_edit, self.user_edit, self.password_edit):
+        for edit in (self.label_edit, self.url_edit, self.user_edit, self.password_edit, self.mac_edit):
             edit.clear()
         self.url_edit.setPlaceholderText('rtsp://192.168.1.10:554/stream1')
         self.filled = self.editing = self.xaddr = None
