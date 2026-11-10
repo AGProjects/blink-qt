@@ -388,8 +388,9 @@ class MainWindow(base_class, ui_class):
         actions = self.blink_menu.actions()
         position = actions.index(self.data_window_action) + 1
         self.blink_menu.insertAction(actions[position] if position < len(actions) else None, self.refetch_journal_action)
-        self.blink_menu.aboutToShow.connect(lambda: self.refetch_journal_action.setVisible(bool(self._refetch_journal_accounts())))
-        self.refetch_journal_action.setVisible(False)       # until an account with SylkServer is there
+        # both only for the account selected in the main window, and only when its domain runs SylkServer
+        self.blink_menu.aboutToShow.connect(self._update_sylkserver_actions)
+        self._update_sylkserver_actions()
 
     def refresh_devices(self):
         """Read the sound devices again; a chosen device that is gone falls back to the system default.
@@ -1177,6 +1178,12 @@ class MainWindow(base_class, ui_class):
         layout.insertWidget(position, self.progress_area)     # reparented to that view's page
         self.progress_area.show()       # the lines show and hide themselves
 
+    def _update_sylkserver_actions(self):
+        from blink.sylk_discovery import has_sylkserver
+        account = self._selected_account()
+        self.data_window_action.setVisible(has_sylkserver(account))
+        self.refetch_journal_action.setVisible(account in self._refetch_journal_accounts())
+
     @staticmethod
     def _refetch_journal_accounts():
         # the journal is SylkServer's: only accounts whose domain runs it
@@ -1206,7 +1213,7 @@ class MainWindow(base_class, ui_class):
         account_box = QComboBox(dialog)
         for account in accounts:
             account_box.addItem(str(account.id), account)
-        default = AccountManager().default_account
+        default = self._selected_account()
         if default in accounts:
             account_box.setCurrentIndex(accounts.index(default))
         form.addRow(translate('main_window', 'Account:'), account_box)
