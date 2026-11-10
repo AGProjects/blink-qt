@@ -24,7 +24,7 @@ import re
 from blink.resources import ApplicationData
 
 
-__all__ = ['current_profile', 'profile_names', 'request_switch', 'request_delete_current', 'apply_pending_switch', 'rename_current', 'create_profile', 'accounts_of_current', 'valid_name']
+__all__ = ['current_profile', 'profile_names', 'request_switch', 'request_delete_current', 'apply_pending_switch', 'rename_current', 'create_profile', 'accounts_of_current', 'profiles_with_account', 'valid_name']
 
 
 DEFAULT_NAME = 'Default'
@@ -144,6 +144,31 @@ def accounts_of_current():
         return sorted(key for key in accounts if key != 'bonjour')
     except Exception:
         return []
+
+
+def profiles_with_account(account_id):
+    """The other profiles whose configuration has SIP account `account_id`. What an account
+    keeps outside the configuration (messages, downloaded files, PGP keys, journal cursor) is
+    shared by the profiles: removing an account from one profile must not remove those while
+    another profile still has it. A configuration that cannot be read counts as having it."""
+    from sipsimple.configuration.backend.file import FileBackend
+    account_id = str(account_id)
+    current = current_profile()
+    found = []
+    for name in profile_names():
+        if name == current:
+            continue
+        config = _path(name, 'config')
+        if not os.path.exists(config):
+            continue
+        try:
+            accounts = FileBackend(config).load().get('Accounts') or {}
+        except Exception:
+            found.append(name)
+            continue
+        if account_id in accounts:
+            found.append(name)
+    return found
 
 
 def has_accounts():

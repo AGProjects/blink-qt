@@ -141,14 +141,25 @@ class HistoryManager(object, metaclass=Singleton):
         account = notification.data.account
         if account is BonjourAccount():
             return
-        ActivityLog().info('[db] Account %s was deleted, removing its history' % account.id)
-        self.message_history.remove(account)
-        self.download_history.remove_account_files(account)
+        # the call history belongs to the profile; the rest is shared by all profiles
         calls = [entry for entry in self.calls if entry.account_id != str(account.id)]
         if len(calls) != len(self.calls):
             ActivityLog().info('[db] Removed %d call history entries of %s' % (len(self.calls) - len(calls), account.id))
             self.calls = calls
             self.save()
+        from blink import profiles
+        try:
+            others = profiles.profiles_with_account(account.id)
+        except Exception as e:
+            others = ['?']
+            ActivityLog().error(f'[db] Cannot tell whether other profiles use {account.id}, keeping its history: {e!r}')
+        if others:
+            ActivityLog().info(f'[db] Account {account.id} was removed from profile {profiles.current_profile()}; '
+                               f'profile {", ".join(others)} still has it, its messages, files, PGP keys and journal are kept')
+            return
+        ActivityLog().info('[db] Account %s was deleted, removing its history' % account.id)
+        self.message_history.remove(account)
+        self.download_history.remove_account_files(account)
         self._remove_account_keys(account)
         self._remove_account_journal(account)
         # the db thread runs these after the removal above
