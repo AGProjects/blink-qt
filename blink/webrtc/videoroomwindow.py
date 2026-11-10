@@ -281,60 +281,38 @@ def _paint_replace_hint(painter, rect):
     painter.drawText(pill, Qt.AlignmentFlag.AlignCenter, text)
 
 
-class ParticipantTile(QWidget):
-    """A remote participant: the latest decoded picture, filling the tile, or the initial."""
+class _PtzControls(object):
+    """Pan, tilt, zoom and presets of a tile's camera, under the mouse, as in AG CuteCams: a direction
+    pad at the right edge, zoom + and - under it, the presets as pills along the edge away from the
+    name. The camera is an RTSP one over ONVIF (blink.webrtc.ptz) or a USB one over V4L2
+    (blink.webrtc.uvcptz); held, a control moves it, let go, it stops."""
 
-    def __init__(self, participant, parent):
-        super(ParticipantTile, self).__init__(parent)
-        self.participant = participant
-        self.image = None
-        self.frames = 0             # pictures received
-        self.since = None           # when the feed was established
-        self.bitrate = 0.0          # the average received video bitrate, bit/s
-        self._sample = None         # (time, video bytes) of the previous sample
-        self.last_bytes = None      # when video bytes last came
-        self.refreshed = False      # the server was asked for the video again during this stall
-        self.degraded = None        # since when too little video comes: the initial is shown in place
-        self.demoted = False        # degraded too long: in the carousel, as audio only
-        self.pinned = False         # put in the grid by the user: degraded, but never demoted
-        self.placementChanged = lambda: None    # set by the window: the tile moves between the grid and the carousel
-        self.refreshVideo = lambda: None        # set by the window: ask the server for the video again
-        self.label_corner = ('bottom', 'left')     # where the name goes, set by the grid
-        self.hand = False           # the participant's hand is raised
-        self.picked = False         # in the carousel, chosen to go into the grid
-        self.replaceable = False    # in the grid, while a carousel tile is picked: a click puts it here
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)     # as an avatar in the carousel the video shows around it
-        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        participant.frameReady.connect(self.set_image)
-        participant.changed.connect(self.update)
-        participant.speakingChanged.connect(self._SH_SpeakingChanged)
-        # one of our extra videos from an RTSP camera with PTZ: a direction pad, zoom and presets under the mouse
-        self.ptz = None                 # blink.webrtc.ptz.Ptz when the camera has PTZ
+    ptz_mirrored = False        # the tile shows the picture mirrored (our own camera)
+
+    def _ptz_setup(self):
+        self.ptz = None                 # Ptz or UvcPtz when the camera has PTZ
+        self.ptz_camera = {}
         self.ptz_held = None            # the control held: (pan, tilt, zoom)
         self.ptz_idle = False           # the mouse has not moved over the tile for PTZ_IDLE_TIME
         self.ptz_idle_timer = QTimer(self)
         self.ptz_idle_timer.setSingleShot(True)
         self.ptz_idle_timer.setInterval(PTZ_IDLE_TIME)
         self.ptz_idle_timer.timeout.connect(self._SH_PtzIdle)
-        extra = getattr(participant, 'extra_video', None)
-        if extra is not None and extra.source.get('kind') == 'rtsp':
-            from blink.webrtc.ptz import probe
-            probe(extra.source, self._SH_PtzProbed)
 
-    def _SH_PtzProbed(self, ptz):
-        self.ptz = ptz
-        if ptz is not None:
-            self.update()
+    def set_ptz(self, ptz, camera=None):
+        """ptz: blink.webrtc.ptz.Ptz or blink.webrtc.uvcptz.UvcPtz of the tile's camera, or None; camera: its settings (ptz_zoom, preset_names)."""
+        if self.ptz is not None and self.ptz_held is not None:
+            self.ptz.stop()
+        self.ptz, self.ptz_held = ptz, None
+        self.ptz_camera = camera or {}
+        self._ptz_update()
+
+    def _ptz_update(self):
+        self.update()
 
     def _SH_PtzIdle(self):
         self.ptz_idle = True
-        self.update()
-
-    # PTZ controls (as in AG CuteCams)
-
-    @property
-    def ptz_camera(self):
-        return self.participant.extra_video.source
+        self._ptz_update()
 
     @property
     def ptz_zoom(self):
@@ -342,7 +320,7 @@ class ParticipantTile(QWidget):
 
     @property
     def ptz_shown(self):
-        return self.ptz is not None and self.in_grid and ((self.underMouse() and not self.ptz_idle) or self.ptz_held is not None) and \
+        return self.ptz is not None and getattr(self, 'in_grid', True) and ((self.underMouse() and not self.ptz_idle) or self.ptz_held is not None) and \
             self.width() >= PTZ_MIN_SIZE[0] and self.height() >= PTZ_MIN_SIZE[1]
 
     def _ptz_geometry(self):
@@ -465,14 +443,16 @@ class ParticipantTile(QWidget):
             self.ptz.stop()
         self.ptz_held = control
         pan, tilt, zoom = control
+        if self.ptz_mirrored:
+            pan = -pan          # the picture is shown mirrored: right on the screen is the camera's left
         self.ptz.move(pan * SPEED, tilt * SPEED, zoom * SPEED)
-        self.update()
+        self._ptz_update()
 
     def ptz_release(self):
         if self.ptz is not None and self.ptz_held is not None:
             self.ptz.stop()
         self.ptz_held = None
-        self.update()
+        self._ptz_update()
 
     def _ptz_wake(self):
         """The mouse moved over the tile: the controls show again, until it rests PTZ_IDLE_TIME."""
@@ -480,7 +460,7 @@ class ParticipantTile(QWidget):
             return
         if self.ptz_idle:
             self.ptz_idle = False
-            self.update()
+            self._ptz_update()
         self.ptz_idle_timer.start()
 
     def mouseMoveEvent(self, event):
@@ -497,10 +477,10 @@ class ParticipantTile(QWidget):
                     self.setToolTip('Go to ' + preset_label(self.ptz_camera, pill, dict(self.ptz.presets).get(pill, '')))
                 else:
                     self.setToolTip('')
-            elif not self.replaceable:
+            elif not getattr(self, 'replaceable', False):
                 self.setCursor(Qt.CursorShape.ArrowCursor)
                 self.setToolTip('')
-        super(ParticipantTile, self).mouseMoveEvent(event)
+        super(_PtzControls, self).mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
         if self.ptz is not None and event.button() == Qt.MouseButton.LeftButton:
@@ -517,23 +497,61 @@ class ParticipantTile(QWidget):
                         window._tile_menu(self, event.globalPosition().toPoint())      # the presets that do not fit are in the menu
                 else:
                     self.ptz.goto_preset(pill)
-                    self.update()
+                    self._ptz_update()
                 event.accept()
                 return
-        super(ParticipantTile, self).mousePressEvent(event)
+        super(_PtzControls, self).mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.ptz_held is not None:
             self.ptz_release()
             event.accept()
             return
-        super(ParticipantTile, self).mouseReleaseEvent(event)
+        super(_PtzControls, self).mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if self.ptz is not None and event.button() == Qt.MouseButton.LeftButton and self.ptz_owns(event.position()):
             self.mousePressEvent(event)     # a second quick press on the pad: still a move, not full screen
             return
-        super(ParticipantTile, self).mouseDoubleClickEvent(event)
+        super(_PtzControls, self).mouseDoubleClickEvent(event)
+
+
+class ParticipantTile(_PtzControls, QWidget):
+    """A remote participant: the latest decoded picture, filling the tile, or the initial."""
+
+    def __init__(self, participant, parent):
+        super(ParticipantTile, self).__init__(parent)
+        self.participant = participant
+        self.image = None
+        self.frames = 0             # pictures received
+        self.since = None           # when the feed was established
+        self.bitrate = 0.0          # the average received video bitrate, bit/s
+        self._sample = None         # (time, video bytes) of the previous sample
+        self.last_bytes = None      # when video bytes last came
+        self.refreshed = False      # the server was asked for the video again during this stall
+        self.degraded = None        # since when too little video comes: the initial is shown in place
+        self.demoted = False        # degraded too long: in the carousel, as audio only
+        self.pinned = False         # put in the grid by the user: degraded, but never demoted
+        self.placementChanged = lambda: None    # set by the window: the tile moves between the grid and the carousel
+        self.refreshVideo = lambda: None        # set by the window: ask the server for the video again
+        self.label_corner = ('bottom', 'left')     # where the name goes, set by the grid
+        self.hand = False           # the participant's hand is raised
+        self.picked = False         # in the carousel, chosen to go into the grid
+        self.replaceable = False    # in the grid, while a carousel tile is picked: a click puts it here
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)     # as an avatar in the carousel the video shows around it
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        participant.frameReady.connect(self.set_image)
+        participant.changed.connect(self.update)
+        participant.speakingChanged.connect(self._SH_SpeakingChanged)
+        # one of our extra videos from a camera with PTZ: an RTSP one (ONVIF) or a second USB one (V4L2)
+        self._ptz_setup()
+        extra = getattr(participant, 'extra_video', None)
+        if extra is not None and extra.source.get('kind') == 'rtsp':
+            from blink.webrtc.ptz import probe
+            probe(extra.source, lambda ptz, source=extra.source: self.set_ptz(ptz, source))
+        elif extra is not None and extra.source.get('kind') == 'camera':
+            from blink.webrtc.uvcptz import find
+            self.set_ptz(find(extra.source.get('name')), extra.source)
 
     def release(self):
         self.ptz_release()
@@ -765,8 +783,8 @@ class _ThumbnailButton(QAbstractButton):
             painter.drawRoundedRect(QRectF(frame.right() - 6, frame.bottom() - 4.5, 5, 3.5), 0.8, 0.8)
 
 
-class LocalTile(QWidget):
-    """Our own camera, mirrored, as the other tiles."""
+class LocalTile(_PtzControls, QWidget):
+    """Our own camera, mirrored, as the other tiles; its PTZ controls when it is a USB camera with them (V4L2)."""
 
     def __init__(self, name, parent):
         super(LocalTile, self).__init__(parent)
@@ -784,7 +802,29 @@ class LocalTile(QWidget):
         self.overlay = _LocalOverlay(self)
         self.thumbnail_button = _ThumbnailButton(self)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self._ptz_setup()
+        self._ptz_camera_name = None        # the camera self.ptz was looked up for
         self.attach_camera()
+
+    @property
+    def ptz_mirrored(self):
+        return self.surface.mirror
+
+    def _ptz_update(self):
+        self.overlay.update()       # the picture is the surface's: the controls are painted over it
+
+    def _attach_ptz(self, name):
+        """The PTZ controls of the camera we send, when it has them (looked up again only when it changes)."""
+        if name == self._ptz_camera_name:
+            return
+        self._ptz_camera_name = name
+        from blink.webrtc.uvcptz import find
+        try:
+            ptz = find(name) if name else None
+        except Exception as e:
+            ActivityLog().warning(f'[ptz] {name}: {e}')
+            ptz = None
+        self.set_ptz(ptz)
 
     def attach_camera(self):
         from sipsimple.application import SIPApplication
@@ -814,9 +854,16 @@ class LocalTile(QWidget):
         except Exception as e:
             ActivityLog().warning(f'[videoroom] Cannot show the camera: {e}')
         self.surface.setVisible(not self.camera_off and producer is not None)
+        try:
+            camera_name = SIPApplication.video_device.real_name if producer is not None and not screen and not self.camera_off else None
+        except AttributeError:
+            camera_name = None
+        self._attach_ptz(camera_name)
         self.overlay.update()
 
     def release(self):
+        self.ptz_release()
+        self.ptz_idle_timer.stop()
         if self.blurred:
             from blink.webrtc.background_blur import BlurredCamera
             self.blurred = False
@@ -855,10 +902,14 @@ class LocalTile(QWidget):
     def enterEvent(self, event):
         self.place_thumbnail_button()       # where the name pill is now (it moves around the call bar and the thumbnail)
         self.thumbnail_button.setVisible(self.thumbnail_button.isEnabled())
+        self._ptz_wake()
+        self.overlay.update()
         super(LocalTile, self).enterEvent(event)
 
     def leaveEvent(self, event):
         self.thumbnail_button.hide()
+        self.ptz_idle_timer.stop()
+        self.overlay.update()
         super(LocalTile, self).leaveEvent(event)
 
     def resizeEvent(self, event):
@@ -904,6 +955,9 @@ class _LocalOverlay(QWidget):
         if rect.height() < COMPACT_TILE_HEIGHT:
             return      # in the carousel: the name is the tooltip
         _paint_name_pill(painter, rect, 'Me', self.tile.muted, self.tile.label_corner, _label_avoid(self))
+        if self.tile.ptz_shown:
+            self.tile._paint_ptz(painter)
+            self.tile._paint_presets(painter)
 
 
 class TileGrid(QWidget):
@@ -1408,16 +1462,16 @@ class VideoroomWindow(QWidget):
             self.show_controls()
         if getattr(self, 'carousel', None) is None:
             return False        # still being built: the grid's events come before the rest exists
+        if isinstance(watched, _PtzControls) and watched.ptz is not None and \
+                event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick) and \
+                event.button() == Qt.MouseButton.LeftButton and watched.ptz_owns(event.position()):
+            return False        # the camera's PTZ controls: the tile's own
         if watched is self.local_tile and self.grid.floating and event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseMove, QEvent.Type.MouseButtonRelease):
             if self._drag_floating(event):
                 return True
         if event.type() == QEvent.Type.ContextMenu and isinstance(watched, (ParticipantTile, LocalTile)):
             self._tile_menu(watched, event.globalPos())
             return True
-        if isinstance(watched, ParticipantTile) and watched.ptz is not None and \
-                event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease, QEvent.Type.MouseButtonDblClick) and \
-                event.button() == Qt.MouseButton.LeftButton and watched.ptz_owns(event.position()):
-            return False        # the camera's PTZ controls: the tile's own
         if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
             if watched in self.carousel.tiles:
                 if self.grid.speakers:
@@ -1438,7 +1492,7 @@ class VideoroomWindow(QWidget):
         return False
 
     def _ptz_menu(self, menu, tile):
-        """The presets of an extra video's PTZ camera: go to one, save the position as one, delete one."""
+        """The presets of a tile's PTZ camera: go to one, save the position as one, delete one."""
         from blink.webrtc.ptz import preset_label
         ptz, camera = tile.ptz, tile.ptz_camera
         presets = menu.addMenu('Go to preset')
@@ -1455,17 +1509,21 @@ class VideoroomWindow(QWidget):
             delete.addAction(preset_label(camera, token, name)).triggered.connect(lambda checked, token=token: self._delete_ptz_preset(tile, token))
         menu.addSeparator()
 
+    @staticmethod
+    def _ptz_name(tile):
+        return tile.participant.name if isinstance(tile, ParticipantTile) else 'My camera'
+
     def _save_ptz_preset(self, tile):
         from PyQt6.QtWidgets import QInputDialog
         ptz = tile.ptz
-        name, ok = QInputDialog.getText(self, 'Save preset', f'Save the position of {tile.participant.name} as:', text=f'Preset {len(ptz.presets) + 1}')
+        name, ok = QInputDialog.getText(self, 'Save preset', f'Save the position of {self._ptz_name(tile)} as:', text=f'Preset {len(ptz.presets) + 1}')
         name = name.strip()
         if not ok or not name:
             return
 
         def saved(token, error):
             if error:
-                self.flash(f'{tile.participant.name}: cannot save the preset: {error}', duration=6)
+                self.flash(f'{self._ptz_name(tile)}: cannot save the preset: {error}', duration=6)
             else:
                 ptz.active_preset = token
                 ptz.refresh_presets(lambda presets, error: tile.update())
@@ -1476,7 +1534,7 @@ class VideoroomWindow(QWidget):
 
         def deleted(answer, error):
             if error:
-                self.flash(f'{tile.participant.name}: cannot delete the preset: {error}', duration=6)
+                self.flash(f'{self._ptz_name(tile)}: cannot delete the preset: {error}', duration=6)
             if ptz.active_preset == token:
                 ptz.active_preset = None
             ptz.refresh_presets(lambda presets, error: tile.update())
@@ -1916,6 +1974,8 @@ class VideoroomWindow(QWidget):
                 hide.setToolTip('Your own video goes from this window; the others still see you')
                 hide.triggered.connect(lambda: self._set_self_hidden(True))
             menu.addSeparator()
+            if tile.ptz is not None:
+                self._ptz_menu(menu, tile)
             menu.addAction('Lower hand' if tile.hand else 'Raise hand').triggered.connect(lambda: session.toggle_hand())
         elif getattr(tile.participant, 'extra_video', None) is not None:
             participant = tile.participant
