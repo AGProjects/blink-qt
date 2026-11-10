@@ -577,6 +577,8 @@ class VideoroomSession(QObject):
         self.reason = ''
         self.participants = {}      # publisher id -> Participant
         self.feeds = {}             # feed id -> Participant
+        # the MSRP window's participant list shows who is here with video: tell it who came, went, or sends video
+        self.participantsChanged.connect(self._post_participants_changed)
         self.speakers = []          # publisher ids the room shows large, for everyone (videoroom-configure); [] is the grid
         self.raised_hands = []      # publisher ids with a raised hand, in the order raised
         self.video_codec = self.video_encoder_name = self.video_pt = None   # what we send (the answer's codec, our encoder, its payload type)
@@ -708,6 +710,9 @@ class VideoroomSession(QObject):
         self.log(f'ended: {reason}')
         self._set_state('terminated', reason)
         VideoroomManager()._session_ended(self)
+
+    def _post_participants_changed(self):
+        NotificationCenter().post_notification('VideoroomSessionParticipantsDidChange', sender=self, data=NotificationData(room=self.room))
 
     def _set_state(self, state, reason=''):
         self.state = state
@@ -1499,6 +1504,7 @@ class VideoroomSession(QObject):
         participant.state = 'connecting'
         participant.video = _offers_video(sdp)
         participant.changed.emit()
+        self._post_participants_changed()
         self.log(f'offer from {participant.uri}: {_media_summary(sdp)}')
         ActivityLog().debug(f'[videoroom] {self.room}: offer from {participant.uri}\n{sdp}')
         for line in rtp_offer_lines(sdp):

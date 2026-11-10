@@ -2476,6 +2476,7 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='VideoroomSessionDidChangeState')
         notification.center.add_observer(self, name='VideoroomSessionAudioMutedDidChange')
+        notification.center.add_observer(self, name='VideoroomSessionParticipantsDidChange')
         notification.center.add_observer(self, name='VideoroomSessionGotMessage')
         notification.center.add_observer(self, name='VideoroomSessionDidDeliverMessage')
 
@@ -2623,6 +2624,18 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
                 chat_widget.update_header()
                 chat_widget.update_input_state()     # the room's chat may go over the video room
         self._update_control_menu()
+
+    def _NH_VideoroomSessionParticipantsDidChange(self, notification):
+        # a publisher came, went or told whether it sends video: the participant rows of the MSRP
+        # session to that room show it (conference-info may have come before the video room told it)
+        from blink.webrtc import active_videoroom
+        for session in self.session_model.sessions:
+            contact_uri = session.blink_session.contact_uri
+            if contact_uri is None or active_videoroom(contact_uri.uri) is not notification.sender:
+                continue
+            conference = getattr(session.blink_session, 'server_conference', None)
+            for participant in list(getattr(conference, 'participants', {}).values()):
+                notification.center.post_notification('ConferenceParticipantDidChange', sender=participant)
 
     def _NH_VideoroomSessionAudioMutedDidChange(self, notification):
         self._sync_mute_button()
