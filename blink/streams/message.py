@@ -19,6 +19,7 @@ from pgpy import PGPKey, PGPUID, PGPMessage
 from pgpy.errors import PGPError, PGPDecryptionError
 from pgpy.constants import PubKeyAlgorithm, KeyFlags, HashAlgorithm, SymmetricKeyAlgorithm, CompressionAlgorithm
 
+from blink import pgp_files
 from blink.logging import MessagingTrace as log
 from blink.util import run_in_gui_thread, UniqueFilenameGenerator
 
@@ -292,15 +293,14 @@ class MessageStream(object, metaclass=MediaStreamType):
 
     @run_in_thread('pgp')
     def encrypt_file(self, filename, transfer_session):
+        # in a child process (blink.pgp_files): pgpy armors big files one bit at a time, holding the GIL
         session = self.blink_session
         notification_center = NotificationCenter()
-        pgp_message = PGPMessage.new(filename, file=True, compression=CompressionAlgorithm.Uncompressed)
-        cipher = SymmetricKeyAlgorithm.AES256
-
-        sessionkey = cipher.gen_key()
-        encrypted_content = self.public_key.encrypt(pgp_message, cipher=cipher, sessionkey=sessionkey)
-        encrypted_content = self.remote_public_key.encrypt(encrypted_content, cipher=cipher, sessionkey=sessionkey)
-        del sessionkey
+        try:
+            encrypted_content = pgp_files.encrypt_file(filename, [str(self.public_key), str(self.remote_public_key)])
+        except Exception as e:
+            log.warning(f'Encryption failed for {filename}: {e}')
+            encrypted_content = None
         notification_center.post_notification('PGPFileDidEncrypt', sender=session, data=NotificationData(filename=f'{filename}.asc', contents=encrypted_content))
 
     @run_in_thread('pgp')
@@ -313,58 +313,37 @@ class MessageStream(object, metaclass=MediaStreamType):
             notification_center.post_notification('PGPFileDidNotDecrypt', sender=session, data=NotificationData(filename=filename, error="No private keys found"))
             return
 
-        try:
-            pgpMessage = PGPMessage.from_file(filename)
-        except (ValueError, FileNotFoundError) as e:
-            log.warning(f'Decryption failed for {filename}, this is not a PGP File, error: {e}')
-            return
-
         key_list = [(session.account, self.private_key)] if self.private_key is not None else []
         key_list.extend(self.other_private_keys)
 
-        error = None
-        for (account, key) in key_list:
-            try:
-                decrypted_message = key.decrypt(pgpMessage)
-            except (PGPDecryptionError, PGPError) as e:
-                error = e
-                log.debug(f'Decryption failed for {filename} with account key {account.id}, error: {error}')
-                continue
-            else:
-                # The name is the transfer's own, without .asc. The name in the
-                # PGP literal data packet is not used: other clients leave it
-                # empty (which made it the download directory), PGP replaces _
-                # with spaces, and a name from the sender must not choose where
-                # the file is written.
-                basename = os.path.basename(filename)
-                decrypted_filepath = os.path.join(os.path.dirname(filename), basename[:-4] if basename.lower().endswith('.asc') and len(basename) > 4 else basename + '.decrypted')
-                # the literal data's bytes as sent: pgpy's .message decodes data marked as text
-                # ('t' latin-1, 'u' UTF-8), which fails for a binary file marked 'u' (some clients do)
-                # and would change a UTF-8 text file marked 't'
-                literal = getattr(decrypted_message, '_message', None)
-                message = getattr(literal, '_contents', None)
-                if message is None:
-                    message = decrypted_message.message
-                file_contents = bytes(message) if isinstance(message, (bytes, bytearray)) else message.encode('utf-8')
-                temporary_filepath = decrypted_filepath + '.part'
-                try:
-                    with open(temporary_filepath, 'wb') as output_file:
-                        output_file.write(file_contents)
-                    os.replace(temporary_filepath, decrypted_filepath)
-                except OSError as e:
-                    log.warning(f'Cannot save decrypted file {decrypted_filepath}: {e}')
-                    unlink(temporary_filepath)
-                    notification_center.post_notification('PGPFileDidNotDecrypt', sender=transfer_session, data=NotificationData(filename=filename, error=str(e)))
-                    return
+        # The name is the transfer's own, without .asc. The name in the
+        # PGP literal data packet is not used: other clients leave it
+        # empty (which made it the download directory), PGP replaces _
+        # with spaces, and a name from the sender must not choose where
+        # the file is written.
+        basename = os.path.basename(filename)
+        decrypted_filepath = os.path.join(os.path.dirname(filename), basename[:-4] if basename.lower().endswith('.asc') and len(basename) > 4 else basename + '.decrypted')
+        temporary_filepath = decrypted_filepath + '.part'
 
-                log.info(f'Decrypted file saved: {decrypted_filepath}')
-                unlink(filename)
+        # in a child process (blink.pgp_files): pgpy checks the armor of big files one bit at a time, holding the GIL
+        try:
+            index = pgp_files.decrypt_file(filename, temporary_filepath, [str(key) for account, key in key_list])
+            os.replace(temporary_filepath, decrypted_filepath)
+        except pgp_files.NotPGPError as e:
+            unlink(temporary_filepath)
+            log.warning(f'Decryption failed for {filename}, this is not a PGP File, error: {e}')
+            return
+        except Exception as e:
+            unlink(temporary_filepath)
+            log.warning(f'Decryption failed for {filename}, error: {e}')
+            notification_center.post_notification('PGPFileDidNotDecrypt', sender=transfer_session, data=NotificationData(filename=filename, error=str(e)))
+            return
 
-                notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=decrypted_filepath, account=account, must_open=must_open, id=id))
-                return
+        account = key_list[index][0]
+        log.info(f'Decrypted file saved: {decrypted_filepath}')
+        unlink(filename)
 
-        log.warning(f'Decryption failed for {filename}, error: {error}')
-        notification_center.post_notification('PGPFileDidNotDecrypt', sender=transfer_session, data=NotificationData(filename=filename, error=error))
+        notification_center.post_notification('PGPFileDidDecrypt', sender=session, data=NotificationData(filename=decrypted_filepath, account=account, must_open=must_open, id=id))
 
     @run_in_gui_thread
     def handle_notification(self, notification):

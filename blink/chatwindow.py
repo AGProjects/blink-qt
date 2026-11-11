@@ -3323,7 +3323,10 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
     def _NH_PGPFileDidNotDecrypt(self, notification):
         transfer_session = notification.sender
 
-        blink_session = next(session.blink_session for session in self.session_model.sessions if session.blink_session.contact.settings is transfer_session.contact.settings)
+        contact = getattr(transfer_session, 'contact', None)
+        if contact is None:
+            return
+        blink_session = next((session.blink_session for session in self.session_model.sessions if session.blink_session.contact is not None and session.blink_session.contact.settings is contact.settings), None)
 
         if blink_session is None:
             return

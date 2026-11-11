@@ -5668,7 +5668,10 @@ class BlinkFileTransfer(BlinkSessionBase):
 
         notification.center.remove_observer(self, name='PGPFileDidEncrypt')
 
-        encrypted_file = io.BytesIO(notification.data.contents.__str__().encode())
+        if notification.data.contents is None:
+            self._terminate(failure_reason='Encryption failed')
+            return
+        encrypted_file = io.BytesIO(notification.data.contents)     # armored in blink.pgp_files, not here (pgpy's armor holds the GUI for seconds)
         self.file_selector.fd = encrypted_file
         self.file_selector.name = notification.data.filename
         encrypted_file.seek(0, os.SEEK_END)
@@ -9316,7 +9319,11 @@ class SessionManager(object, metaclass=Singleton):
         must_open = notification.data.must_open
         session = notification.sender
 
-        if file.name.endswith('.asc'):
+        if file.name.endswith('.asc') and session.account is None:
+            # its session was deleted during the download: the file stays encrypted, it is opened when shown
+            ActivityLog().warning(f'[transfer] {os.path.basename(file.name)}: the conversation ended during the download, not decrypted now')
+            NotificationCenter().post_notification('PGPFileDidNotDecrypt', sender=session, data=NotificationData(filename=file.name, error='the conversation ended during the download'))
+        elif file.name.endswith('.asc'):
             stream = StreamDescription('messages')
             message_stream = stream.create_stream()
             message_stream.blink_session = session

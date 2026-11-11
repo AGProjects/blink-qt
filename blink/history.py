@@ -477,7 +477,15 @@ class HistoryManager(object, metaclass=Singleton):
         self.message_history.add_msrp_file(session.account, key, file_id, direction, envelope, sender_uri, display_name, file.hash)
 
     def _NH_BlinkHTTPFileTransferDidEnd(self, notification):
-        self.download_history.add_file(notification.sender, notification.data.file)
+        # the conversation is taken here, in the GUI thread: the session can be deleted (contact and
+        # account cleared) while the 'db' thread gets to it, or have been before the download ended
+        session, file = notification.sender, notification.data.file
+        account = session.account or getattr(file, 'account', None)
+        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or (conversation_key(session.contact_uri.uri, account) if session.contact_uri is not None else None)
+        if account is None or not remote_uri:
+            log.warning(f'Downloaded file {file.id} not recorded: its conversation ended before the download did')
+            return
+        self.download_history.add_file(str(account.id), remote_uri, file)
 
     def _NH_BlinkMessageContactsDidChange(self, notification):
         self.message_history.get_all_contacts()
@@ -832,11 +840,10 @@ class DownloadHistory(object, metaclass=Singleton):
 
     @classmethod
     @run_in_thread('db')
-    def add_file(cls, session, file):
-        remote_uri = bare_instance_id(getattr(session, 'remote_instance_id', None)) or conversation_key(session.contact_uri.uri, session.account)
+    def add_file(cls, account_id, remote_uri, file):
         try:
             DownloadedFiles(file_id=file.id,
-                            account_id=str(session.account.id),
+                            account_id=account_id,
                             remote_uri=remote_uri,
                             filename=file.name)
         except dberrors.DuplicateEntryError:

@@ -1611,7 +1611,8 @@ class FileTransfersPanel(QWidget):
         from blink.configuration.datatypes import File
         from blink.sessions import SessionManager
         session = self.sessions.get(row.contact)
-        if session is None:
+        # a session deleted since (its conversation closed) has lost its contact: a new one
+        if session is None or session.contact_uri is None or session.account is None:
             session = self.sessions[row.contact] = MessageManager().create_message_session(row.contact, selected=False)
         file = File(row.wire_name, row.size or 0, session.contact, None, row.message_id, row.until, url=row.url, type=row.filetype or None, account=account, protocol='sylk')
         ActivityLog().info(f'[transfer] Fetching {os.path.basename(file.name)} ({row.size or "?"} bytes) of message {row.message_id} (Data manager)')
