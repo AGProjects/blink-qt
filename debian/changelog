@@ -3,6 +3,8 @@ blink (7.2.9) unstable; urgency=medium
   * Fix storing unique messages per account
   * Do not allow running Blink twice
   * Prevent deleting account data if shared by multiple profiles
+  * Added support for controlling Logitech PTZ cameras
+  * Added follow speakers using PTZ supported cameras
   * Make WebRTC audio conference on par with 1 to 1 calls
   * Speaker control fix
   * Added refetch message history from server menu item
