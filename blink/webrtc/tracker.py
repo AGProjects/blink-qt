@@ -8,7 +8,7 @@ when found) and on the lower third line up and down (LOWER_THIRD), the top of th
 head) never closer to the top edge than HEAD_MARGIN. Off by more than DEAD_ZONE, the camera is turned by
 that much of its field of view (GAIN of it, so that it settles without overshooting), at most
 every MOVE_INTERVAL, as it takes the camera a moment to get there. No person for LOST_GRACE:
-the camera nods, NOD_DEGREES up and down from where it was, until one is seen again.
+the camera rests where the person went, until one is seen again (no nodding unless asked: nod).
 
 The PTZ object must turn by degrees (nudge_degrees, field_of_view): blink.webrtc.uvcptz.UvcPtz.
 
@@ -32,7 +32,7 @@ from blink.logging import ActivityLog
 from blink.util import call_in_gui_thread
 
 
-__all__ = ['FollowMe', 'ManualPause', 'Trackers', 'PersonTracker', 'CameraSource', 'ExtraVideoSource', 'can_see', 'can_track']
+__all__ = ['follow_speed', 'set_follow_speed', 'follow_choice', 'set_follow_choice', 'add_follow_menu', 'FOLLOW_CHOICES', 'FollowMe', 'ManualPause', 'Trackers', 'PersonTracker', 'CameraSource', 'ExtraVideoSource', 'can_see', 'can_track']
 
 
 DETECT_INTERVAL = 0.1       # s, at most 10 looks a second (the model takes most of it)
@@ -52,6 +52,74 @@ MOVE_INTERVAL = 0.45        # s between two steps: the camera gets there, and it
 DRIVE_GAIN = 3.0            # velocity (-1..1) per picture width off (cameras driven): a third of the width off is full speed
 DRIVE_STOP = 0.04           # driven: closer to the target than this, it stops (it starts beyond DEAD_ZONE)
 LEAD = 0.3                  # s ahead the person is aimed at, from how fast they move across the picture
+LEAD_FULL_SPEED = 0.45      # the same for a camera with only stop and full speed: it stops earlier, as it cannot slow down
+HUNT_REVERSALS = 3          # a camera driven at full speed that turns back this many times...
+HUNT_WINDOW = 3.0           # ...within these seconds hunts around the target: it is turned by steps from then on
+# Follow me speed (FollowMe.speed, the Follow me menus): the values that set how soon and how far it turns.
+# 'normal' is the constants above; the tracker reads them on every look, so a change applies at once.
+SPEEDS = {
+    'calm':   dict(dead_zone=0.16, drive_stop=0.05, lead_full_speed=0.55, acquire_looks=10, offset_looks=3, interval_factor=1.35),
+    'normal': dict(dead_zone=DEAD_ZONE, drive_stop=DRIVE_STOP, lead_full_speed=LEAD_FULL_SPEED, acquire_looks=ACQUIRE_LOOKS, offset_looks=OFFSET_LOOKS, interval_factor=1.0),
+    'fast':   dict(dead_zone=0.07, drive_stop=0.03, lead_full_speed=0.35, acquire_looks=3, offset_looks=1, interval_factor=0.65),
+}
+SPEED_NAMES = (('calm', 'Calm'), ('normal', 'Normal'), ('fast', 'Fast'))
+SPEED_SETTING = 'video/follow_me_speed'
+
+
+def follow_speed():
+    """The Follow me speed chosen: 'calm', 'normal' or 'fast' (ui.conf)."""
+    from blink.resources import ui_settings
+    speed = str(ui_settings().value(SPEED_SETTING, 'normal'))
+    return speed if speed in SPEEDS else 'normal'
+
+
+def set_follow_speed(speed):
+    from blink.resources import ui_settings
+    if speed in SPEEDS and speed != follow_speed():
+        ui_settings().setValue(SPEED_SETTING, speed)
+        ActivityLog().info(f'[ptz] Follow me speed: {speed}')
+
+
+FOLLOW_CHOICES = (('off', 'Off'),) + SPEED_NAMES       # the one Follow me control: off, or on at a speed
+
+
+def follow_choice():
+    """'off', or the speed Follow me is on at."""
+    return follow_speed() if FollowMe.instance().enabled else 'off'
+
+
+def set_follow_choice(choice, enable=None):
+    """Off, or on at a speed; enable: called to turn it on instead of FollowMe.set_enabled(True) (a video room
+    turns on its cameras, or says why it cannot)."""
+    follow_me = FollowMe.instance()
+    if choice == 'off':
+        follow_me.set_enabled(False)
+        return
+    set_follow_speed(choice)
+    if not follow_me.enabled:
+        enable() if enable is not None else follow_me.set_enabled(True)
+
+
+def add_follow_menu(menu, enable=None, shortcut=''):
+    """The Follow me submenu: Off, Calm, Normal, Fast (its title says which)."""
+    from PyQt6.QtGui import QActionGroup
+    current = follow_choice()
+    title = dict(FOLLOW_CHOICES)[current]
+    submenu = menu.addMenu(f'Follow me: {title}' + (f' ({shortcut})' if shortcut else ''))
+    submenu.setToolTip('Your cameras with PTZ turn to keep you in the picture, and how quickly')
+    group = QActionGroup(submenu)
+    for choice, label in FOLLOW_CHOICES:
+        if choice == 'calm':
+            submenu.addSeparator()
+        action = submenu.addAction(label)
+        action.setCheckable(True)
+        action.setChecked(choice == current)
+        group.addAction(action)
+        action.triggered.connect(lambda checked, choice=choice: set_follow_choice(choice, enable))
+    return submenu
+
+
+LOOK_REPORT = (5.0, 60.0)   # s after following starts, then between: how often it looks, in the log
 DRIVE_WATCHDOG = 600        # ms without a look: a driven camera stops
 WRONG_WAY_MOVE = 0.025      # of the width between two looks, with the turn instead of against it: a sign the camera pans the other way
 WRONG_WAY_LOOKS = 4         # such looks in a row: the camera's pan is reversed (saved), and the tracker carries on
@@ -96,14 +164,23 @@ class ManualPause(QObject):
         self._timer.start()
         if not self.paused:
             self.paused = True
-            ActivityLog().info(f'[ptz] Controlled by hand: tracking paused for {MANUAL_PAUSE // 1000} s')
+            tracking = self._tracking()
+            if tracking:        # nothing tracking: nothing paused worth telling
+                ActivityLog().info(f'[ptz] Controlled by hand: tracking paused for {MANUAL_PAUSE // 1000} s ({tracking})')
             self.changed.emit(True)
 
     def _resume(self):
         if self.paused:
             self.paused = False
-            ActivityLog().info('[ptz] Tracking again')
+            tracking = self._tracking()
+            if tracking:
+                ActivityLog().info(f'[ptz] Tracking again ({tracking})')
             self.changed.emit(False)
+
+    @staticmethod
+    def _tracking():
+        """Who tracks now, as told in the log: the trackers running, by name; empty when none."""
+        return ', '.join(getattr(tracker, 'name', key) for key, tracker in Trackers.instance().trackers.items())
 
 
 TARGET_FRESH = 0.6          # s: where the person was seen is shown that long (a look comes every DETECT_INTERVAL)
@@ -219,7 +296,7 @@ class PersonTracker(QObject):
     stateChanged = pyqtSignal(str)      # 'following', 'lost' (holding, nodding), 'resting' (still, until someone is there for sure), 'paused' (PTZ by hand), 'off'
     personChanged = pyqtSignal(bool)    # the person came into sight, or went out of it (debounced)
 
-    def __init__(self, ptz, parent=None, source=None, nod=True, move_interval=MOVE_INTERVAL):
+    def __init__(self, ptz, parent=None, source=None, nod=False, move_interval=MOVE_INTERVAL):
         """ptz None: a fixed camera, that only looks (personChanged) and never turns."""
         super(PersonTracker, self).__init__(parent)
         self.ptz = ptz
@@ -252,6 +329,10 @@ class PersonTracker(QObject):
         self._pan_since = None          # since when it has been driven hard that way
         self._wrong_way = 0             # looks in a row that say the camera pans the other way
         self._homing = False            # lost: going back to the middle, the nod after
+        self._reversals = []            # when a full-speed drive turned back the other way (hunting)
+        self._drive_way = 0             # the way it was last driven across: -1, 0, 1
+        self._looks = []                # (when, ms the model took) of the looks since the last report
+        self._look_report_at = None
         self._watchdog = QTimer(self)
         self._watchdog.setSingleShot(True)
         self._watchdog.setInterval(DRIVE_WATCHDOG)
@@ -274,7 +355,13 @@ class PersonTracker(QObject):
         ManualPause.instance().changed.connect(self._SH_ManualPause)
         self._thread = threading.Thread(target=self._run, name='person-tracker', daemon=True)
         self._thread.start()
-        ActivityLog().info(f'[ptz] {self.name}: ' + ('following the person' if self.ptz is not None else 'looking for the person (fixed)'))
+        mode = ''
+        if self.ptz is not None:
+            mode = (' (driven at full speed, stopped ahead)' if getattr(self.ptz, 'full_speed_only', False) else ' (driven)') \
+                if getattr(self.ptz, 'can_drive', lambda: False)() else ' (by steps)'
+        ActivityLog().info(f'[ptz] {self.name}: ' + ('following the person' + mode if self.ptz is not None else 'looking for the person (fixed)'))
+        self._look_report_at = time.monotonic() + LOOK_REPORT[0]
+        self._looks = []
         self._set_state('following')
 
     def stop(self):
@@ -344,17 +431,18 @@ class PersonTracker(QObject):
                 except Exception as e:
                     ActivityLog().warning(f'[ptz] Looking for the person failed: {e}')
                     found = None
-                call_in_gui_thread(self._observed, found)
+                call_in_gui_thread(self._observed, found, (time.monotonic() - started) * 1000)
             rest = DETECT_INTERVAL - (time.monotonic() - started)
             if rest > 0:
                 time.sleep(rest)
 
     # The GUI thread: turning the camera
 
-    def _observed(self, found):
+    def _observed(self, found, took=0.0):
         if not self._running:
             return
         now = time.monotonic()
+        self._report_looks(now, took)
         self._streak = (max(self._streak, 0) + 1) if found is not None else (min(self._streak, 0) - 1)
         if found is not None:
             self.where = found
@@ -379,7 +467,7 @@ class PersonTracker(QObject):
             return
         if found is None:
             # lost: it holds where they went for LOST_GRACE (they come back there, mostly), then for sure:
-            # to the middle, a few nods, and it rests until someone is there for sure
+            # it rests there (nod: to the middle and a few nods first) until someone is there for sure
             if self._lost_since is None:
                 self._lost_since = now
             elif now - self._lost_since >= LOST_GRACE:
@@ -408,20 +496,35 @@ class PersonTracker(QObject):
         self._previous = (now, center, middle)
         self._choose_third(center)
         if getattr(self.ptz, 'can_drive', lambda: False)():
-            self._drive(center + self._speed[0] * LEAD, _vertical_error(middle + self._speed[1] * LEAD, top))
+            lead = SPEEDS[follow_speed()]['lead_full_speed'] if getattr(self.ptz, 'full_speed_only', False) else LEAD
+            self._drive(center + self._speed[0] * lead, _vertical_error(middle + self._speed[1] * lead, top))
             return
         x_error = center - self._target
         y_error = _vertical_error(middle, top)
-        off = abs(x_error) > DEAD_ZONE or abs(y_error) > DEAD_ZONE
+        tune = SPEEDS[follow_speed()]
+        dead_zone = tune['dead_zone']
+        off = abs(x_error) > dead_zone or abs(y_error) > dead_zone
         self._off_looks = self._off_looks + 1 if off else 0
-        if self._off_looks < OFFSET_LOOKS or now - self._last_move < self.move_interval:
+        if self._off_looks < tune['offset_looks'] or now - self._last_move < self.move_interval * tune['interval_factor']:
             return          # close enough, or only just off (a gesture), or the camera is still getting there
         horizontal, vertical = self.ptz.field_of_view()
-        pan = x_error * horizontal * GAIN if abs(x_error) > DEAD_ZONE else 0.0
-        tilt = y_error * vertical * GAIN if abs(y_error) > DEAD_ZONE else 0.0
+        pan = x_error * horizontal * GAIN if abs(x_error) > dead_zone else 0.0
+        tilt = y_error * vertical * GAIN if abs(y_error) > dead_zone else 0.0
         if pan or tilt:
             self._last_move = now
             self.ptz.nudge_degrees(pan, tilt)
+
+    def _report_looks(self, now, took):
+        """How often it looks and how long the model takes, in the log: LOOK_REPORT[0] after it starts, then every LOOK_REPORT[1]."""
+        self._looks.append((now, took))
+        if self._look_report_at is None or now < self._look_report_at or len(self._looks) < 2:
+            return
+        span = self._looks[-1][0] - self._looks[0][0]
+        interval = span / (len(self._looks) - 1) * 1000
+        model = sum(ms for when, ms in self._looks) / len(self._looks)
+        ActivityLog().info(f'[ptz] {self.name}: a look every {interval:.0f} ms (the model takes {model:.0f} ms), {self.state}')
+        self._looks = []
+        self._look_report_at = now + LOOK_REPORT[1]
 
     def _acquire(self, found, now):
         """Not following anyone: someone is followed once there for sure (ACQUIRE_LOOKS in a row, big enough;
@@ -433,7 +536,7 @@ class PersonTracker(QObject):
         self._acquiring += 1
         self._found_times = [moment for moment in self._found_times if now - moment < RESTLESS[1]]
         restless = len(self._found_times) >= RESTLESS[0]
-        if self._acquiring < (RESTLESS_LOOKS if restless else ACQUIRE_LOOKS):
+        if self._acquiring < (RESTLESS_LOOKS if restless else SPEEDS[follow_speed()]['acquire_looks']):
             return
         self._locked = True
         self._acquiring = 0
@@ -479,8 +582,9 @@ class PersonTracker(QObject):
         x_error = center - self._target
         driving = []
         velocity = []
+        tune = SPEEDS[follow_speed()]
         for error, was in ((x_error, self._driving[0]), (y_error, self._driving[1])):
-            on = abs(error) > (DRIVE_STOP if was else DEAD_ZONE)
+            on = abs(error) > (tune['drive_stop'] if was else tune['dead_zone'])
             driving.append(on)
             velocity.append(max(-1.0, min(1.0, error * DRIVE_GAIN)) if on else 0.0)
         self._driving = tuple(driving)
@@ -488,9 +592,29 @@ class PersonTracker(QObject):
         if not hard or self._pan_since is None or (velocity[0] > 0) != (self._last_pan > 0):
             self._pan_since = time.monotonic() if hard else None
         self._last_pan = velocity[0]
+        if getattr(self.ptz, 'full_speed_only', False) and self._hunting(velocity[0]):
+            return
         self.ptz.drive(*velocity)
         if any(driving):
             self._watchdog.start()      # no look for a while: it stops rather than turn on blindly
+
+    def _hunting(self, pan):
+        """A full-speed camera turned back the other way HUNT_REVERSALS times within HUNT_WINDOW: it overshoots
+        the target each time. Stopped, and turned by steps from then on (for this camera, until Blink restarts)."""
+        way = (pan > 0) - (pan < 0)
+        if way and self._drive_way and way != self._drive_way:
+            now = time.monotonic()
+            self._reversals = [moment for moment in self._reversals if now - moment < HUNT_WINDOW] + [now]
+            if len(self._reversals) >= HUNT_REVERSALS:
+                self._reversals = []
+                self._drive_way = 0
+                self._halt()
+                self.ptz.stepping = True
+                ActivityLog().warning(f'[ptz] {self.name}: hunts around the person at full speed: turned by steps from now on')
+                return True
+        if way:
+            self._drive_way = way
+        return False
 
     def _halt(self):
         """A driven camera stops."""
@@ -615,8 +739,15 @@ class FollowMe(QObject):
 
     @property
     def state(self):
-        """'following', 'lost' (nodding) or 'off'."""
-        return self.tracker.state if self.tracker is not None and self.tracker.running else 'off'
+        """'following', 'lost', 'resting', 'paused' or 'off'; while a video room's cameras follow (suspended), the
+        state of the room's tracker of this camera."""
+        if self.tracker is not None and self.tracker.running:
+            return self.tracker.state
+        if self.suspended:
+            tracker = Trackers.instance().trackers.get('camera')
+            if tracker is not None and tracker.running:
+                return tracker.state
+        return 'off'
 
     def show(self, owner, camera_name):
         """owner shows the camera Blink sends, by this name (None: none, the screen or the camera off)."""

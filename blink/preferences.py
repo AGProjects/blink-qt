@@ -562,19 +562,31 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.camera_preview.mirror = True
         from blink.webrtc.ptzcontrols import PtzOverlay
         self.camera_ptz = PtzOverlay(self.camera_preview)     # pan, tilt and zoom of a USB camera with them (V4L2)
-        # Follow me (or F): the camera follows the person (blink.webrtc.tracker.FollowMe), here and in the
-        # video rooms (our own tile shows it and toggles it too). Beside the camera list, in place of its spacer.
-        self.follow_me_button = QCheckBox(translate('preferences_window', 'Follow me'), self.camera_preview.parentWidget())
-        self.follow_me_button.setToolTip(translate('preferences_window', 'The camera turns to keep you in the picture, and nods when it lost you (F)'))
-        from blink.webrtc.tracker import FollowMe
-        self.follow_me_button.setChecked(FollowMe.instance().enabled)
-        self.follow_me_button.setEnabled(FollowMe.instance().enabled)     # until a camera that can turn is shown: only off
-        video_layout = self.camera_preview.parentWidget().layout()
-        spacer = video_layout.itemAtPosition(2, 2)
-        if spacer is not None and spacer.spacerItem() is not None:
-            video_layout.removeItem(spacer)
-        video_layout.addWidget(self.follow_me_button, 2, 2)
-        self.follow_me_button.clicked.connect(self._SH_FollowMeButtonClicked)
+        # Follow me (or F): Off, Calm, Normal or Fast, the one control (blink.webrtc.tracker.FollowMe), here and in the
+        # video rooms and calls (their menus, our own tile's button). In the background blur's row: the blur and the spacer under it move down.
+        from PyQt6.QtWidgets import QComboBox, QLabel
+        from blink.webrtc.tracker import FOLLOW_CHOICES, FollowMe
+        camera_box = self.camera_preview.parentWidget()
+        self.follow_me_label = QLabel(translate('preferences_window', 'Follow me:'), camera_box)
+        self.follow_me_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
+        self.follow_me_button = QComboBox(camera_box)
+        for choice, label in FOLLOW_CHOICES:
+            self.follow_me_button.addItem(translate('preferences_window', label), choice)
+        tip = translate('preferences_window', 'Your cameras with pan and tilt (PTZ) turn to keep you in the picture: off, or how quickly (F: on or off)')
+        self.follow_me_label.setToolTip(tip)
+        self.follow_me_button.setToolTip(tip)
+        video_layout = camera_box.layout()
+        row, column, rows, columns = video_layout.getItemPosition(video_layout.indexOf(self.video_background_blur_button))
+        below = video_layout.itemAtPosition(row + 1, 0)
+        if below is not None and below.spacerItem() is not None:
+            video_layout.removeItem(below)
+            video_layout.addItem(below, row + 2, 0, 1, 3)
+        video_layout.removeWidget(self.video_background_blur_button)
+        video_layout.addWidget(self.video_background_blur_button, row + 1, column, rows, columns)
+        video_layout.addWidget(self.follow_me_label, row, 0)
+        video_layout.addWidget(self.follow_me_button, row, 1)
+        self._SH_FollowMeChanged()
+        self.follow_me_button.activated.connect(self._SH_FollowMeButtonActivated)
         FollowMe.instance().changed.connect(self._SH_FollowMeChanged)
         self.follow_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F), self)
         self.follow_shortcut.activated.connect(self._SH_FollowShortcutActivated)
@@ -710,16 +722,19 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
     def _SH_FollowMeChanged(self):
         from blink.webrtc.tracker import FollowMe
         follow_me = FollowMe.instance()
-        self.follow_me_button.setChecked(follow_me.enabled)
-        self.follow_me_button.setEnabled(follow_me.available or follow_me.enabled)     # on: it can always be turned off
+        from blink.webrtc.tracker import follow_choice
+        index = self.follow_me_button.findData(follow_choice())
+        if index >= 0 and index != self.follow_me_button.currentIndex():
+            self.follow_me_button.setCurrentIndex(index)
         self.camera_ptz.update()
 
-    def _SH_FollowMeButtonClicked(self, checked):
-        from blink.webrtc.tracker import FollowMe
-        follow_me = FollowMe.instance()
-        if checked and not follow_me.available:
+    def _SH_FollowMeButtonActivated(self, index):
+        """Off, or on at a speed; on is kept even when the camera shown cannot turn (it follows once one can), with a beep."""
+        from blink.webrtc.tracker import FollowMe, set_follow_choice
+        choice = self.follow_me_button.itemData(index)
+        if choice != 'off' and not FollowMe.instance().available:
             QApplication.beep()
-        follow_me.set_enabled(checked)
+        set_follow_choice(choice)
 
     def _SH_FollowShortcutActivated(self):
         from blink.webrtc.tracker import FollowMe

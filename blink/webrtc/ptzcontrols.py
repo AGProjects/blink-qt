@@ -1,6 +1,6 @@
 """The PTZ controls of a camera over its picture, as in AG CuteCams: a direction pad at the right
 edge, zoom + and - under it, the presets as pills along the edge away from the name, and a presets
-menu. The camera is an RTSP one over ONVIF (blink.webrtc.ptz) or a USB one over V4L2
+menu (its Edit presets... window: blink.webrtc.ptzpresets). The camera is an RTSP one over ONVIF (blink.webrtc.ptz) or a USB one over V4L2
 (blink.webrtc.uvcptz). PtzControls goes into the video room's tiles; PtzOverlay lays them over any
 other picture (the camera preview of the preferences).
 """
@@ -77,6 +77,7 @@ class PtzControls(object):
     (blink.webrtc.uvcptz); held, a control moves it, let go, it stops."""
 
     ptz_mirrored = False        # the tile shows the picture mirrored (our own camera)
+    ptz_plain_cursor = True     # away from the controls: the arrow; False: the cursor of what is under (an overlay)
     ptz_name = 'Camera'         # what the camera is called in messages
     label_corner = ('bottom', 'left')       # where the tile's name is: the presets go along the other edge
 
@@ -133,8 +134,9 @@ class PtzControls(object):
 
     @property
     def ptz_shown(self):
+        minimum = getattr(self, 'ptz_min_size', PTZ_MIN_SIZE)
         return self.ptz is not None and getattr(self, 'in_grid', True) and ((self.underMouse() and not self.ptz_idle) or self.ptz_held is not None) and \
-            self.width() >= PTZ_MIN_SIZE[0] and self.height() >= PTZ_MIN_SIZE[1]
+            self.width() >= minimum[0] and self.height() >= minimum[1]
 
     def _ptz_geometry(self):
         """(the pad's center, its radius, [(zoom, its circle)]): at the right edge, centered."""
@@ -271,6 +273,7 @@ class PtzControls(object):
             return          # a disabled arrow: the click is still the pad's, it does nothing
         self.ptz_touched()
         if control == CENTER:
+            ActivityLog().info(f'[ptz] {self.ptz.host}: middle button pressed')
             if self.ptz_held is not None:
                 self.ptz_release()
             self.ptz.go_home()          # its physical middle
@@ -315,7 +318,10 @@ class PtzControls(object):
                 else:
                     self.setToolTip('')
             elif not getattr(self, 'replaceable', False):
-                self.setCursor(Qt.CursorShape.ArrowCursor)
+                if self.ptz_plain_cursor:
+                    self.setCursor(Qt.CursorShape.ArrowCursor)
+                else:
+                    self.unsetCursor()      # the picture's own (moving the thumbnail of the video window)
                 self.setToolTip('')
         super(PtzControls, self).mouseMoveEvent(event)
 
@@ -381,7 +387,13 @@ class PtzControls(object):
             action.setCheckable(True)
             action.setChecked(token == ptz.active_preset)
             action.triggered.connect(lambda checked, token=token: (self.ptz_touched(), ptz.goto_preset(token), self._ptz_update()))
-        menu.addAction('Save position as preset...').triggered.connect(self._save_ptz_preset)
+        save = menu.addMenu('Save position as preset')
+        for token, name in ptz.presets:
+            save.addAction(preset_label(camera, token, name)).triggered.connect(lambda checked, token=token: self._overwrite_ptz_preset(token))
+        if ptz.presets:
+            save.addSeparator()
+        save.addAction('New preset...').triggered.connect(self._save_ptz_preset)
+        menu.addAction('Edit presets...').triggered.connect(self._edit_ptz_presets)
         if hasattr(ptz, 'pan_reversed'):
             reverse = menu.addAction('Reverse pan')
             reverse.setCheckable(True)
@@ -395,7 +407,7 @@ class PtzControls(object):
         menu.addSeparator()
 
     def _save_ptz_preset(self):
-        ptz = self.ptz
+        ptz, camera = self.ptz, self.ptz_camera
         name, ok = QInputDialog.getText(self.window(), 'Save preset', f'Save the position of {self.ptz_name} as:', text=f'Preset {len(ptz.presets) + 1}')
         name = name.strip()
         if not ok or not name or self.ptz is not ptz:
@@ -405,16 +417,40 @@ class PtzControls(object):
             if error:
                 self.ptz_error(f'{self.ptz_name}: cannot save the preset: {error}')
             else:
+                from blink.webrtc.ptzpresets import set_preset_name
+                set_preset_name(ptz, camera, token, name)      # cameras that ignore the name given (EZVIZ) show ours
                 ptz.active_preset = token
                 ptz.refresh_presets(lambda presets, error: self._ptz_update())
         ptz.set_preset(name, done=saved)
 
+    def _overwrite_ptz_preset(self, token):
+        """The preset takes the current position; its name is kept."""
+        from blink.webrtc.ptz import preset_label
+        ptz, camera = self.ptz, self.ptz_camera
+        name = preset_label(camera, token, dict(ptz.presets).get(token, ''))
+        self.ptz_touched()
+
+        def saved(answer, error):
+            if error:
+                self.ptz_error(f'{self.ptz_name}: cannot save {name}: {error}')
+            else:
+                ptz.active_preset = token
+                ptz.refresh_presets(lambda presets, error: self._ptz_update())
+        ptz.set_preset(name, token=token, done=saved)
+
+    def _edit_ptz_presets(self):
+        from blink.webrtc.ptzpresets import edit_presets
+        edit_presets(self.ptz, self.ptz_camera, self.ptz_camera.get('label') or self.ptz_name, self.window())
+
     def _delete_ptz_preset(self, token):
-        ptz = self.ptz
+        ptz, camera = self.ptz, self.ptz_camera
 
         def deleted(answer, error):
             if error:
                 self.ptz_error(f'{self.ptz_name}: cannot delete the preset: {error}')
+            else:
+                from blink.webrtc.ptzpresets import set_preset_name
+                set_preset_name(ptz, camera, token, None)
             if ptz.active_preset == token:
                 ptz.active_preset = None
             ptz.refresh_presets(lambda presets, error: self._ptz_update())
@@ -423,15 +459,20 @@ class PtzControls(object):
 
 class PtzOverlay(PtzControls, QWidget):
     """The PTZ controls over a picture that is not a tile of the video room: a transparent widget over
-    a VideoSurface (the camera preview of the preferences), its size, for the camera named (V4L2).
+    a VideoSurface (the camera preview of the preferences, the 1-to-1 video window), its size, for the
+    camera named (V4L2). Clicks away from the controls go on to the surface. own_menu: its right-click
+    menu is the presets one; else the click goes on, for the window to put them in its own menu.
     While the camera follows the person (blink.webrtc.tracker.FollowMe) a pill at the bottom says
     so; a control pressed by hand turns Follow me off."""
 
     ptz_name = 'The camera'
+    ptz_plain_cursor = False
 
-    def __init__(self, surface):
+    def __init__(self, surface, own_menu=True, min_size=PTZ_MIN_SIZE):
         super(PtzOverlay, self).__init__(surface)
         self.surface = surface
+        self.own_menu = own_menu
+        self.ptz_min_size = min_size
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setMouseTracking(True)
@@ -482,8 +523,16 @@ class PtzOverlay(PtzControls, QWidget):
         super(PtzOverlay, self).leaveEvent(event)
 
     def contextMenuEvent(self, event):
+        if not self.own_menu:
+            event.ignore()      # the window's menu has the presets
+            return
         if self.ptz is not None:
             menu = QMenu(self)
+            from blink.webrtc.tracker import FollowMe, add_follow_menu
+            follow_me = FollowMe.instance()
+            if follow_me.available or follow_me.enabled:
+                add_follow_menu(menu)
+                menu.addSeparator()
             self.add_ptz_menu(menu)
             menu.exec(event.globalPos())
 

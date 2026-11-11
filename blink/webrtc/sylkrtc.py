@@ -101,7 +101,8 @@ class SylkRTCConnection(QObject):
         self._connect_timer = QTimer(self)
         self._connect_timer.setSingleShot(True)
         self._connect_timer.setInterval(CONNECT_TIMEOUT)
-        self._connect_timer.timeout.connect(lambda: self._fail('no answer from the server'))
+        self._connect_timer.timeout.connect(lambda: self._fail('connected, but the server did not get ready' if self._socket_connected else 'no answer from the server'))
+        self._socket_connected = False
 
     def __repr__(self):
         return f'<SylkRTCConnection {self.url} {self.state}>'
@@ -113,6 +114,7 @@ class SylkRTCConnection(QObject):
             return
         self.state = 'connecting'
         self._close_reason = None
+        self._socket_connected = False
         ActivityLog().info(f'[sylkrtc] Connecting to {self.url}')
         request = QNetworkRequest(QUrl(self.url))
         user_agent = SIPSimpleSettings().user_agent
@@ -166,6 +168,7 @@ class SylkRTCConnection(QObject):
         self.closed.emit(reason)
 
     def _SH_Connected(self):
+        self._socket_connected = True
         protocol = self.socket.subprotocol() if hasattr(self.socket, 'subprotocol') else PROTOCOL
         ActivityLog().info(f'[sylkrtc] Connected to {self.url} (protocol {protocol or "none"}), waiting for the server')
         self._ping_timer.start()

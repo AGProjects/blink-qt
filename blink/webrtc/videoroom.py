@@ -665,7 +665,9 @@ class VideoroomSession(QObject):
             self._join_as_guest()
             return
         if error is not None:
-            self._terminate(f'the server refused the account: {error}')
+            # the connection's failure comes here too (every pending account-add gets its reason)
+            unreachable = self.connection is not None and self.connection.state == 'closed'
+            self._terminate(f'cannot reach the server: {error}' if unreachable else f'the server refused the account: {error}')
             return
         try:
             self._start_media()

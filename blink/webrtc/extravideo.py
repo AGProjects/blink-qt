@@ -13,7 +13,8 @@ Sources: rtspsrc (location, user, password; video only) or a local camera from G
 device monitor. An RTSP source saved (tested or not), or that worked, is remembered with its
 password in ui.conf (`videoroom/video_sources`) and offered again; `verified` once a picture
 came from it with the address, user and password saved; `mac`: its MAC address (learned when it
-answers on its RTSP port, or entered), to find it when the DHCP server gave it another address.
+answers on its RTSP port, or entered), to find it when the DHCP server gave it another address;
+`preset_names`: {preset token: the name given in Blink} of its PTZ presets (ONVIF has no rename).
 """
 
 import json
@@ -29,7 +30,7 @@ from blink.util import call_in_gui_thread
 from blink.webrtc.videoroom import Gst, GstWebRTC, Participant, VIDEO_CODECS, _make, _has, _sdp_message, _video_ssrc
 
 
-__all__ = ['ExtraVideo', 'RESOLUTIONS', 'DEFAULT_RESOLUTION', 'local_cameras', 'saved_sources', 'remember_source', 'mark_verified', 'rename_source', 'set_source_resolution', 'set_source_mac', 'forget_source']
+__all__ = ['ExtraVideo', 'RESOLUTIONS', 'DEFAULT_RESOLUTION', 'local_cameras', 'saved_sources', 'remember_source', 'mark_verified', 'rename_source', 'set_source_resolution', 'set_source_mac', 'set_preset_name', 'forget_source']
 
 
 FPS = 10
@@ -76,6 +77,10 @@ def remember_source(source, replaces=None):
             entry['mac'] = source['mac']
     elif previous.get('mac') and _host(previous.get('url')) == _host(entry['url']):      # the same device
         entry['mac'] = previous['mac']
+    names = source.get('preset_names', previous.get('preset_names'))
+    same_device = entry.get('mac') and entry.get('mac') == previous.get('mac')      # moved (DHCP)
+    if names and (entry['url'] == previous.get('url', entry['url']) or same_device):      # another address: another camera, other presets
+        entry['preset_names'] = dict(names)
     sources.insert(0, entry)
     _save_sources(sources[:20])
 
@@ -136,6 +141,23 @@ def set_source_mac(url, mac):
                 source['mac'] = mac
             else:
                 source.pop('mac', None)
+    _save_sources(sources)
+
+
+def set_preset_name(url, token, name):
+    """The name given to a PTZ preset of a remembered source; None forgets it (the preset was deleted)."""
+    sources = saved_sources()
+    for source in sources:
+        if source.get('url') == url:
+            names = dict(source.get('preset_names') or {})
+            if name:
+                names[token] = name
+            else:
+                names.pop(token, None)
+            if names:
+                source['preset_names'] = names
+            else:
+                source.pop('preset_names', None)
     _save_sources(sources)
 
 

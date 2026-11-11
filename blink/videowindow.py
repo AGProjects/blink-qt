@@ -612,6 +612,7 @@ class TrackedVideoSurface(VideoSurface):
 
     def __init__(self, parent=None, framerate=None):
         super(TrackedVideoSurface, self).__init__(parent, framerate=framerate)
+        self.producer_changed = None      # called after the producer changed
         self.frame_count = 0
         self.frame_size = None
         self.has_picture = False
@@ -626,6 +627,8 @@ class TrackedVideoSurface(VideoSurface):
         if producer is None:
             self._image = None
         self.update()
+        if self.producer_changed is not None:
+            self.producer_changed()
 
     producer = property(VideoSurface.producer.fget, _set_tracked_producer)
 
@@ -1180,6 +1183,11 @@ class VideoWindow(QWidget):
         self.my_video_view = LocalVideoView(self, framerate=None)
         self.my_video_view.setMouseTracking(True)
         self.my_video_view.hide()
+        # pan, tilt, zoom and presets of our camera (V4L2), over whichever view shows it
+        from blink.webrtc.ptzcontrols import PtzOverlay
+        self.main_ptz = PtzOverlay(self.video_view, own_menu=False)
+        self.thumbnail_ptz = PtzOverlay(self.my_video_view, own_menu=False, min_size=(160, 90))
+        self.video_view.producer_changed = self.my_video_view.producer_changed = self._attach_ptz
 
         self.status_label = StatusLabel(self)
         self.call_bar = CallBar(self)
@@ -1421,7 +1429,42 @@ class VideoWindow(QWidget):
         preview.setCheckable(True)
         preview.setChecked(not self.local_video_hidden)
         preview.setEnabled(self.connected)
+        self._add_ptz_menu(menu)
         self._exec_menu(menu, event.globalPos())
+
+    def _add_ptz_menu(self, menu):
+        """Follow me and the presets of our camera, when a view shows it and it has PTZ."""
+        overlay = next((overlay for overlay in (self.main_ptz, self.thumbnail_ptz) if overlay.ptz is not None), None)
+        if overlay is None:
+            return
+        from blink.webrtc.tracker import FollowMe
+        follow_me = FollowMe.instance()
+        menu.addSeparator()
+        if follow_me.available or follow_me.enabled:
+            from blink.webrtc.tracker import add_follow_menu
+            add_follow_menu(menu)
+        overlay.add_ptz_menu(menu)
+
+    def _attach_ptz(self):
+        """The PTZ controls over the view that shows our camera (not a shared screen), none over the other; Follow me
+        knows the camera is shown here."""
+        if self.blink_session is None:
+            name = None
+        else:
+            local = self.local_producer
+            try:
+                name = SIPApplication.video_device.real_name if local is not None and not local_is_screen() else None
+            except AttributeError:
+                name = None
+        main = name if name and self.video_view.producer is not None and self.video_view.producer is self.local_producer else None
+        thumbnail = name if name and self.my_video_view.producer is not None and self.my_video_view.producer is self.local_producer else None
+        self.main_ptz.attach(main)
+        self.thumbnail_ptz.attach(thumbnail)
+        from blink.webrtc.tracker import FollowMe
+        if main or thumbnail:
+            FollowMe.instance().show(self, main or thumbnail)
+        else:
+            FollowMe.instance().hide(self)
 
     def _exec_menu(self, menu, position):
         self.camera_menu_open = True
@@ -2126,6 +2169,11 @@ class VideoWindow(QWidget):
     def _teardown(self):
         if self.blink_session is None:
             return
+        self.video_view.producer_changed = self.my_video_view.producer_changed = None
+        self.main_ptz.attach(None)
+        self.thumbnail_ptz.attach(None)
+        from blink.webrtc.tracker import FollowMe
+        FollowMe.instance().hide(self)
         self._stop_watching_message_pane()
         self.hide_preview_in_drawer()
         if self.docked:

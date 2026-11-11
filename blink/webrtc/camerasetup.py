@@ -9,7 +9,8 @@ discovery), with a filter, a sort and "Only my local network". A Verified column
 cameras a picture came from with the address, user and password saved. Picking one fills in its
 name and address (an ONVIF camera's RTSP address is asked from the camera when tested, as it is
 when only an IP address is typed), and its user and password when saved. Test pulls a picture
-and shows it. Any rtsp:// address (or a bare IP) can be saved, tested or not (the camera may be
+and shows it; double-clicking it opens the camera live in a window of its own, with its PTZ
+controls (blink.webrtc.cameraviewer). Any rtsp:// address (or a bare IP) can be saved, tested or not (the camera may be
 offline now); it is remembered (blink.webrtc.extravideo.remember_source) with its password.
 rtsp://user:password@host/... typed or pasted: the user and password go into their fields.
 Renaming a saved camera saves it, as does changing its MAC address (learned when the camera is
@@ -21,7 +22,7 @@ without a MAC address, the one answering at the address is filled in.
 
 import threading
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QEvent, QSize
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
                              QPushButton, QSizePolicy, QTreeWidget, QTreeWidgetItem, QVBoxLayout)
@@ -251,6 +252,7 @@ class NetworkCameraDialog(QDialog):
         self.preview.setFixedSize(QSize(320, 180))
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setStyleSheet('background: black; color: gray;')
+        self.preview.installEventFilter(self)     # double-click: the camera live in a window of its own, with PTZ
         layout.addWidget(self.preview, 0, Qt.AlignmentFlag.AlignHCenter)
         note = QLabel('Video only, 10 fps. The camera is remembered with its password.', self)
         note.setWordWrap(True)
@@ -295,6 +297,21 @@ class NetworkCameraDialog(QDialog):
         if self.testing:
             self.test_id += 1   # its answer is dropped
         super(NetworkCameraDialog, self).done(result)
+
+    def eventFilter(self, watched, event):
+        if watched is self.preview and event.type() == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton:
+            self._open_viewer()
+            return True
+        return super(NetworkCameraDialog, self).eventFilter(watched, event)
+
+    def _open_viewer(self):
+        """The camera tested, live in a window of its own with its PTZ controls; a child of this window while it is modal
+        (Add network camera), so it takes clicks; else on its own."""
+        if self.tested is None:
+            return
+        from blink.webrtc.cameraviewer import open_camera
+        url, user, password = self.tested
+        open_camera(dict(url=url, user=user, password=password, label=self.label_edit.text().strip() or _host(url)), parent=self if self.isModal() else None)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -646,6 +663,8 @@ class NetworkCameraDialog(QDialog):
         self.test_id += 1
         self.tested = None
         self.preview.clear()
+        self.preview.setToolTip('')
+        self.preview.unsetCursor()
         self.test_status.setText(TEST_HINT)
 
     def _test(self):
@@ -700,6 +719,8 @@ class NetworkCameraDialog(QDialog):
             self.preview.setPixmap(QPixmap.fromImage(image).scaled(self.preview.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             self.test_status.setText(f'The camera works ({detail} video)' if detail else 'The camera works')
             self.tested = (url, user, password)
+            self.preview.setToolTip('Double-click to watch the camera live in a window of its own, with its PTZ controls')
+            self.preview.setCursor(Qt.CursorShape.PointingHandCursor)
             saved = self.editing
             if saved is not None and not saved.get('verified') and (saved['url'], saved.get('user') or '', saved.get('password') or '') == self.tested:
                 from blink.webrtc.extravideo import mark_verified, saved_sources

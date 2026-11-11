@@ -313,6 +313,8 @@ class Ptz(object):
 
     def goto_preset(self, token, done=None):
         from PyQt6.QtCore import QTimer
+        name = dict(self.presets).get(token, '')
+        ActivityLog().info(f'[ptz] {self.host}: go to preset {token}' + (f' ({name})' if name else ''))
         self.active_preset = token
         self._call('preset', f'<tptz:GotoPreset {TPTZ}><tptz:ProfileToken>{escape(self.profile)}</tptz:ProfileToken>'
                              f'<tptz:PresetToken>{escape(token)}</tptz:PresetToken></tptz:GotoPreset>', done)
@@ -422,4 +424,8 @@ def _presets(answer):
 
 def preset_label(camera, token, name):
     """How a preset is shown: our name for it (preset_names), else the camera's, else its number."""
+    if 'preset_names' not in camera and camera.get('url'):     # a source made for a room: the names of the one remembered, once
+        from blink.webrtc.extravideo import saved_sources
+        saved = next((source for source in saved_sources() if source.get('url') == camera['url']), {})
+        camera['preset_names'] = dict(saved.get('preset_names') or {})
     return (camera.get('preset_names') or {}).get(token) or name or f'Preset {token}'

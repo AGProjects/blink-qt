@@ -8247,13 +8247,24 @@ class ConferenceDialog(base_class, ui_class):
         source_buttons.addWidget(self.video_source_remove_button)
         source_buttons.addStretch(1)
         sources_layout.addLayout(source_buttons)
-        # Track speakers (blink.webrtc.director): each checked camera with PTZ follows whoever it has in sight
-        self.track_speaker_button = QCheckBox(translate('conference_dialog', 'Track speakers'), self.video_sources_widget)
-        self.track_speaker_button.setToolTip(translate('conference_dialog', 'Each camera with pan and tilt (PTZ) follows whoever it has in sight, on its own. '
-                                                                            'What the conference shows and its audio are not changed. D in the conference turns it on or off'))
-        self.track_speaker_button.setChecked(str(ui_settings().value(self.TRACK_SPEAKER_KEY, 'false')).lower() == 'true')
-        self.track_speaker_button.toggled.connect(lambda checked: ui_settings().setValue(self.TRACK_SPEAKER_KEY, 'true' if checked else 'false'))
-        sources_layout.addWidget(self.track_speaker_button)
+        # Follow me (blink.webrtc.tracker.FollowMe, the one setting): the cameras we bring with PTZ keep us in the picture
+        from PyQt6.QtWidgets import QComboBox
+        from blink.webrtc.tracker import FOLLOW_CHOICES, follow_choice, set_follow_choice
+        follow_row = QHBoxLayout()
+        follow_label = QLabel(translate('conference_dialog', 'Follow me:'), self.video_sources_widget)
+        self.follow_me_combo = QComboBox(self.video_sources_widget)
+        for choice, label in FOLLOW_CHOICES:
+            self.follow_me_combo.addItem(translate('conference_dialog', label), choice)
+        self.follow_me_combo.setCurrentIndex(max(0, self.follow_me_combo.findData(follow_choice())))
+        tip = translate('conference_dialog', 'Your cameras with pan and tilt (PTZ), the one you send and those you add, turn to keep you in the picture: '
+                                             'off, or how quickly. What the conference shows and its audio are not changed. D in the conference turns it on or off')
+        follow_label.setToolTip(tip)
+        self.follow_me_combo.setToolTip(tip)
+        self.follow_me_combo.currentIndexChanged.connect(lambda index: set_follow_choice(self.follow_me_combo.itemData(index)))
+        follow_row.addWidget(follow_label)
+        follow_row.addWidget(self.follow_me_combo)
+        follow_row.addStretch(1)
+        sources_layout.addLayout(follow_row)
         self.grid_layout.addWidget(self.video_sources_widget, 2, 1)
         self.video_sources_label.hide()
         self.video_sources_widget.hide()
@@ -8502,7 +8513,7 @@ class ConferenceDialog(base_class, ui_class):
 
     # Profiles
 
-    PROFILES_KEY = 'conference_dialog/profiles'     # [{name, room, audio, video, invitees: [[key, name]], sources: [video line keys], track_speaker}]
+    PROFILES_KEY = 'conference_dialog/profiles'     # [{name, room, audio, video, invitees: [[key, name]], sources: [video line keys], follow_me: off/calm/normal/fast}]
 
     def _profiles(self):
         import json
@@ -8545,8 +8556,11 @@ class ConferenceDialog(base_class, ui_class):
         self._add_invitees([(key, name) for key, name in profile.get('invitees') or [] if key])
         if profile.get('sources') is not None:
             self._checked_keys = set(profile['sources'])        # what is not here any more is left out; a camera stays checked
-        if profile.get('track_speaker') is not None:
-            self.track_speaker_button.setChecked(bool(profile['track_speaker']))
+        choice = profile.get('follow_me')       # off, calm, normal, fast; older profiles: track_speaker (on or off)
+        if choice is None and profile.get('track_speaker') is not None:
+            choice = 'normal' if profile['track_speaker'] else 'off'
+        if choice is not None and self.follow_me_combo.findData(choice) >= 0:
+            self.follow_me_combo.setCurrentIndex(self.follow_me_combo.findData(choice))
         self._load_video_sources()
         self._update_media_labels()
         self._update_accept_button()
@@ -8556,13 +8570,13 @@ class ConferenceDialog(base_class, ui_class):
         invitees = [[item.data(Qt.ItemDataRole.UserRole), item.data(NameRole) or ''] for item in (self.invite_list.item(number) for number in range(self.invite_list.count()))]
         sources = self._checked_video_source_keys()
         return dict(name=name, room=self.room_button.currentText().strip(), audio=self.audio_button.isChecked(), video=self.video_button.isChecked(),
-                    invitees=invitees, sources=sources, track_speaker=self.track_speaker_button.isChecked())
+                    invitees=invitees, sources=sources, follow_me=self.follow_me_combo.currentData())
 
     def _SH_ProfileSaveClicked(self):
         from PyQt6.QtWidgets import QInputDialog
         current = self.profile_combo.currentData()
         name, ok = QInputDialog.getText(self, translate('conference_dialog', 'Save profile'),
-                                        translate('conference_dialog', 'Profile name (the room, audio and video, the videos, Track speakers and the invitees are saved):'),
+                                        translate('conference_dialog', 'Profile name (the room, audio and video, the videos, Follow me and the invitees are saved):'),
                                         text=current or self.room_button.currentText().strip())
         name = name.strip()
         if not ok or not name:
@@ -8595,7 +8609,6 @@ class ConferenceDialog(base_class, ui_class):
     # everything else goes as extra feeds under us (blink.webrtc.extravideo). An older gateway takes
     # one video per participant: a single choice among the cameras and screens.
 
-    TRACK_SPEAKER_KEY = 'conference_dialog/track_speaker'
     VIDEO_SOURCES_KEY = 'conference_dialog/video_sources'      # the checked lines: ["camera:<device>", "screen:<device>", "rtsp:<url>"]
 
     @staticmethod
@@ -8633,7 +8646,7 @@ class ConferenceDialog(base_class, ui_class):
             tooltip = translate('conference_dialog', 'Network camera %s, sent at %s (right click to change)') % (data['url'], data.get('resolution') or '640x360')
         if data['kind'] == 'camera' and self._local_camera_has_ptz(data['name']):
             text += self.PTZ_SUFFIX
-            tooltip += translate('conference_dialog', ', with pan, tilt or zoom (PTZ): Track speakers can turn it')
+            tooltip += translate('conference_dialog', ', with pan, tilt or zoom (PTZ): Follow me can turn it')
         item = QListWidgetItem(('    ' if self._multiple_feeds else '') + text)
         item.setToolTip(tooltip)
         item.setData(Qt.ItemDataRole.UserRole, data)
@@ -8675,7 +8688,7 @@ class ConferenceDialog(base_class, ui_class):
                 if other.get('kind') == 'rtsp' and other.get('url') == data['url'] and not item.text().endswith(self.PTZ_SUFFIX):
                     self.video_sources.blockSignals(True)
                     item.setText(item.text() + self.PTZ_SUFFIX)
-                    item.setToolTip(item.toolTip() + translate('conference_dialog', ', with pan, tilt or zoom (PTZ): Track speakers can turn it'))
+                    item.setToolTip(item.toolTip() + translate('conference_dialog', ', with pan, tilt or zoom (PTZ): Follow me can turn it'))
                     self.video_sources.blockSignals(False)
         probe(data, answered)
 
@@ -8989,9 +9002,8 @@ class ConferenceDialog(base_class, ui_class):
             # without audio: the microphone starts muted; without a camera checked: the camera starts off (until the screen is shared); removes SIP audio to the room
             video_room = join_video_conference(account, video_uri, audio=audio, video=bool(camera), target=target, extra_sources=extras, screen=screen)
             if video_room is not None:
-                video_room.track_speaker = self.track_speaker_button.isChecked()     # started by the window once the cameras are there
-                if video_room.track_speaker:
-                    ActivityLog().info(f'[conference] Tracking speakers with the cameras that have PTZ')
+                if self.follow_me_combo.currentData() != 'off':     # Follow me: started by the window once the cameras are there
+                    ActivityLog().info(f'[conference] Follow me ({self.follow_me_combo.currentData()}) with the cameras that have PTZ')
             from blink.webrtc import room_chat_session
             existing = room_chat_session(video_room) if video_room is not None else None
             streams = [] if existing is not None else [StreamDescription('chat')]
