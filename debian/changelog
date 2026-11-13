@@ -1,3 +1,11 @@
+blink (7.2.10) unstable; urgency=medium
+
+  * Fix losing incoming PGP messages with non latin characters
+  * Store incoming encrypted messages before decrypting them
+  * Keep messages that cannot be decrypted, retry them later
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Fri, 13 Nov 2026 09:41:00 -0300
+
 blink (7.2.9) unstable; urgency=medium
 
   * Fix storing unique messages per account
