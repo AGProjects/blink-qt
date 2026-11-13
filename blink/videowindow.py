@@ -28,7 +28,10 @@ from datetime import datetime
 from itertools import count
 from math import ceil, floor
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 from PyQt6.QtCore import Qt, QEvent, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSettings, QSize, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QColor, QKeySequence, QShortcut, QDesktopServices, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QRegion
@@ -654,6 +657,8 @@ def frame_has_picture(frame):
         data = frame.data
         if width < 16 or height < 16 or len(data) < width * height * 4:
             return False
+        if np is None:
+            return _frame_has_picture_slow(memoryview(data).cast('B'), width, height)
         sample = np.frombuffer(data, dtype=np.uint8, count=width * height * 4).reshape((height, width, 4))[::8, ::8]
     except Exception:
         return False
@@ -663,6 +668,25 @@ def frame_has_picture(frame):
         return False
     values = sample[..., channels]
     return int(values.max()) > 40 or float(values.std()) > 6
+
+
+def _frame_has_picture_slow(data, width, height):
+    """frame_has_picture without numpy: the same every 8th pixel of every 8th row."""
+    stride = width * 4
+    planes = [bytearray() for _ in range(4)]
+    for y in range(0, height, 8):
+        row = data[y * stride:(y + 1) * stride]
+        for c in range(4):
+            planes[c] += row[c::32].tobytes()
+    channels = [plane for plane in planes if plane.count(255) != len(plane)]
+    if not channels:
+        return False
+    if max(max(plane) for plane in channels) > 40:
+        return True
+    n = sum(len(plane) for plane in channels)
+    mean = sum(sum(plane) for plane in channels) / n
+    variance = sum(sum((v - mean) ** 2 for v in plane) for plane in channels) / n
+    return variance > 36
 
 
 def local_is_screen():
