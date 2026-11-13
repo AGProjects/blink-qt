@@ -1,3 +1,9 @@
+blink (7.2.11) unstable; urgency=medium
+
+  * Fix video window failing to load when numpy is not installed
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Fri, 13 Nov 2026 14:01:00 -0300
+
 blink (7.2.10) unstable; urgency=medium
 
   * Fix losing incoming PGP messages with non latin characters

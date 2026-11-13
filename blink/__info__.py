@@ -5,7 +5,7 @@ __project__ = "blink"
 __summary__ = "Blink Qt"
 __webpage__ = "https://icanblink.com/"
 
-__version__ = "7.2.10"
+__version__ = "7.2.11"
 
 __date__ = "Nov 13th, 2026"
 
