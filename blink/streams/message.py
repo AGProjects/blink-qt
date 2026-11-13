@@ -264,6 +264,14 @@ class MessageStream(object, metaclass=MediaStreamType):
 
     @run_in_thread('pgp')
     def decrypt(self, message):
+        try:
+            self._decrypt(message)
+        except Exception as e:
+            # never silent: the message is reported as not decrypted (its stored ciphertext stays)
+            log.error(f'Decryption of {getattr(message, "id", None)} failed: {e!r}')
+            NotificationCenter().post_notification('PGPMessageDidNotDecrypt', sender=self.blink_session, data=NotificationData(message=message, error=f'Decryption failed: {e}'))
+
+    def _decrypt(self, message):
         session = self.blink_session
         notification_center = NotificationCenter()
 

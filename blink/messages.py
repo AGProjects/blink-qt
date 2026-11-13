@@ -3173,6 +3173,11 @@ class MessageManager(object, metaclass=Singleton):
                                                       sender=blink_session,
                                                       data=data)
             else:
+                if not (x_replicated_message or account is not blink_session.account):
+                    # stored first, as received: whatever happens to the decryption, the message is
+                    # not lost (the background decryptor retries the ciphertext of a row left undecrypted)
+                    from blink.history import MessageHistory
+                    MessageHistory().add_from_session(blink_session, message, 'incoming')
                 blink_session.fake_streams.get('messages').decrypt(message)
             return
 
@@ -3373,6 +3378,9 @@ class MessageManager(object, metaclass=Singleton):
             MessageHistory().update_decrypted_message(message.id, message.content)
             notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=message))
             return
+        # the row was stored with its ciphertext when the message came: the plaintext replaces it
+        from blink.history import MessageHistory
+        MessageHistory().update_decrypted_message(message.id, message.content)
         notification_center.post_notification('BlinkMessageDidDecrypt', sender=session, data=NotificationData(message=message))
         self._handle_incoming_message(message, session, notification.data.account)
 
@@ -3389,12 +3397,22 @@ class MessageManager(object, metaclass=Singleton):
         notification_center = NotificationCenter()
         notification_center.post_notification('BlinkMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=notification.data.error))
 
+        if isinstance(message, BlinkMessage):
+            # its row (stored with the ciphertext when it came) is kept, marked as not opened, for a later key
+            from blink.history import MessageHistory
+            MessageHistory().mark_undecryptable_message(msg_id, notification.data.error)
+            ActivityLog().warning(f'[pgp] Message {msg_id} from {session.contact_uri.uri} could not be decrypted, kept encrypted: {notification.data.error}')
+
         if message.direction == 'outgoing':
             return
 
         if msg_id in self._journal_decrypts:
             self._journal_decrypts.discard(msg_id)
             return      # from a first sync: its sender is not told now
+
+        if isinstance(message, BlinkMessage):
+            # shown (and counted unread) as an encrypted message, as one that came before we had a key
+            notification_center.post_notification('BlinkGotMessage', sender=session, data=NotificationData(message=message, account=session.account))
 
         self.send_imdn_message(session, msg_id, message.timestamp, 'error')
 

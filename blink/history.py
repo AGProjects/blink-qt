@@ -1823,6 +1823,11 @@ class MessageHistory(object, metaclass=Singleton):
                 row.has_link = has_link(row.content_type, plaintext) or 0
         return rows
 
+    @run_in_thread('db')
+    def mark_undecryptable_message(self, message_id, error):
+        """store_undecryptable_message, from any thread."""
+        self.store_undecryptable_message(message_id, error)
+
     def store_undecryptable_message(self, message_id, error):
         """In the db thread: the ciphertext of this message would not open with our key
         (decrypted '2', as a live message that failed); returns the rows."""
