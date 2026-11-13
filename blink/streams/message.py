@@ -24,6 +24,21 @@ from blink.logging import MessagingTrace as log
 from blink.util import run_in_gui_thread, UniqueFilenameGenerator
 
 
+def pgp_plaintext(decrypted_message):
+    """The text of a decrypted PGP message, from the literal packet's raw bytes as UTF-8.
+
+    pgpy's own view decodes a 't' literal as latin-1 and a 'u' literal as UTF-8, and
+    rejects text literals that are not valid in their declared encoding; the raw
+    bytes avoid both. Invalid UTF-8 is replaced rather than dropping the message.
+    """
+    contents = getattr(getattr(decrypted_message, '_message', None), '_contents', None)
+    if contents is None:
+        contents = decrypted_message.message
+        if isinstance(contents, str):
+            return contents
+    return bytes(contents).decode('utf-8', 'replace')
+
+
 __all__ = ['MessageStream', 'create_account_keys']
 
 
@@ -265,6 +280,7 @@ class MessageStream(object, metaclass=MediaStreamType):
             pgpMessage = PGPMessage.from_blob(message.content)
         except (ValueError, NotImplementedError) as e:
             log.warning(f'Decryption error for {msg_id}, not a PGPMessage: {e}')
+            notification_center.post_notification('PGPMessageDidNotDecrypt', sender=session, data=NotificationData(message=message, error=f'Not a PGP message: {e}'))
             return
 
         key_list = [(session.account, self.private_key)] if self.private_key is not None else []
@@ -279,13 +295,8 @@ class MessageStream(object, metaclass=MediaStreamType):
                 #log.debug(f'-- Decryption error for {msg_id} from {session.contact_uri.uri} with {account.id} : {error}')
                 continue
             else:
-                try:
-                    message.content = decrypted_message.message.decode() if isinstance(decrypted_message.message, bytearray) else decrypted_message.message.encode('latin1').decode()
-                except (UnicodeDecodeError, UnicodeEncodeError) as e:
-                    log.debug(f'-- Decoding error for {msg_id} from {session.contact_uri.uri} with {account.id} : {str(e)}')
-                else:
-                    #log.info(f'Message decrypted: {msg_id}')
-                    notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
+                message.content = pgp_plaintext(decrypted_message)
+                notification_center.post_notification('PGPMessageDidDecrypt', sender=session, data=NotificationData(message=message, account=account))
                 return
 
         log.debug(f'-- Message {msg_id} from {session.contact_uri.uri} decryption error: {error}')
