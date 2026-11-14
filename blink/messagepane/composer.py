@@ -6,7 +6,7 @@ the peer is told so (is-composing active, renewed every 10 s while typing,
 idle when the text is cleared). Pasting inserts plain text; pasted or dropped
 files are handed on (filesDropped) to be sent, as are the ones from the
 paperclip menu (as on Blink for macOS; Take a Photo... and Grab a Screenshot...,
-then Choose Files... and Paste from Clipboard).
+or Grab a Screenshot without Blink..., which hides Blink's windows first, then Choose Files... and Paste from Clipboard).
 
 In reply mode (set_reply) a line above the text says what is being answered,
 with a button to cancel; the next message sent is that reply. In edit mode
@@ -358,9 +358,11 @@ class Composer(QWidget):
         menu = self.attach_menu
         menu.clear()
         grab = menu.addAction(translate('message_pane', 'Grab a Screenshot…'), self._take_screenshot)
+        grab_hidden = menu.addAction(translate('message_pane', 'Grab a Screenshot without Blink…'), self._take_screenshot_without_blink)
         if PortalScreenshot._busy is not None:
-            grab.setEnabled(False)
-            grab.setToolTip(translate('message_pane', 'A screenshot is already being taken'))
+            for action in (grab, grab_hidden):
+                action.setEnabled(False)
+                action.setToolTip(translate('message_pane', 'A screenshot is already being taken'))
         from blink.messagepane.camera import camera_available
         photo = menu.addAction(translate('message_pane', 'Take a Photo…'), self._take_photo)
         available, why = camera_available()
@@ -410,6 +412,10 @@ class Composer(QWidget):
     def _take_screenshot(self):
         from blink.screenshot import PortalScreenshot
         PortalScreenshot.take(lambda path: path and self.filesDropped.emit([path]))
+
+    def _take_screenshot_without_blink(self):
+        from blink.screenshot import PortalScreenshot
+        PortalScreenshot.take(lambda path: path and self.filesDropped.emit([path]), hide_blink=True)
 
     def text(self):
         return self.edit.toPlainText()

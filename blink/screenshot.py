@@ -5,6 +5,9 @@ screen), else with a screenshot tool found on the system.
     PortalScreenshot.take(done) calls done(path) with the saved picture, or done(None)
     when the user cancelled or nothing could take it.
 
+    PortalScreenshot.take(done, hide_blink=True) first hides Blink's windows, waits a
+second for them to be gone, and puts them back afterwards.
+
 GNOME Shell's screenshot UI also puts the picture on the clipboard, and on some
 versions the portal then answers with an error (response 2) and no file even though
 the picture was taken. So the clipboard is watched while the screenshot is taken: a
@@ -17,7 +20,7 @@ import shutil
 import tempfile
 import uuid
 
-from PyQt6.QtCore import QMimeData, QObject, QProcess, QTimer, QUrl, pyqtSlot
+from PyQt6.QtCore import QMimeData, QObject, QProcess, Qt, QTimer, QUrl, pyqtSlot
 from PyQt6.QtGui import QGuiApplication
 try:
     from PyQt6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage, QDBusObjectPath, QDBusVariant
@@ -47,17 +50,23 @@ class PortalScreenshot(QObject):
     _busy = None        # one screenshot at a time
 
     clipboard_settle = 400  # ms to let the clipboard owner's change reach us after the portal answers
+    hide_delay = 1000       # ms to let Blink's windows get out of the way before the screenshot
 
     @classmethod
-    def take(cls, done):
+    def take(cls, done, hide_blink=False):
         if cls._busy is not None:
             return
         cls._busy = cls(done)
-        cls._busy._start()
+        if hide_blink:
+            cls._busy._hide_windows()
+            QTimer.singleShot(cls.hide_delay, cls._busy._start)
+        else:
+            cls._busy._start()
 
     def __init__(self, done):
         super().__init__()
         self.done = done
+        self.hidden_windows = []
         self.request_path = None
         self.process = None
         self.saved_clipboard = None
@@ -68,6 +77,10 @@ class PortalScreenshot(QObject):
 
     def _complete(self, path, cancelled):
         PortalScreenshot._busy = None
+        try:
+            self._restore_windows()
+        except Exception as e:
+            ActivityLog().warning(f'[ui] Cannot restore the windows after the screenshot: {e!r}')
         try:
             path = self._take_back_clipboard(path, cancelled)
         except Exception as e:
@@ -85,6 +98,40 @@ class PortalScreenshot(QObject):
         clipboard.dataChanged.connect(self._clipboard_changed)
         if not self._start_portal():
             self._start_tool()
+
+    # Blink's windows
+
+    def _hide_windows(self):
+        """Take Blink's windows off the screen. Hidden rather than minimized: a minimize is only a
+        request that the desktop may ignore or animate slowly (and Wayland gives no way back from it),
+        while a hidden window is gone at once, from the screen and from the screenshot picker."""
+        from PyQt6.QtWidgets import QApplication
+        self.active_window = QApplication.activeWindow()
+        for window in QApplication.topLevelWidgets():
+            if not window.isVisible() or window.windowType() not in (Qt.WindowType.Window, Qt.WindowType.Dialog):
+                continue
+            self.hidden_windows.append((window, window.windowState(), window.geometry()))
+        for window, state, geometry in self.hidden_windows:
+            window.hide()
+
+    def _restore_windows(self):
+        windows, self.hidden_windows = self.hidden_windows, []
+        for window, state, geometry in windows:
+            try:
+                window.setWindowState(state)
+                if not state & (Qt.WindowState.WindowMaximized | Qt.WindowState.WindowFullScreen):
+                    window.setGeometry(geometry)
+                window.show()
+            except RuntimeError:  # deleted meanwhile
+                continue
+        window = getattr(self, 'active_window', None) or (windows[0][0] if windows else None)
+        self.active_window = None
+        if window is not None:
+            try:
+                window.raise_()
+                window.activateWindow()
+            except RuntimeError:
+                pass
 
     # The clipboard
 
