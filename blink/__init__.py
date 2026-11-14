@@ -154,16 +154,33 @@ class Blink(QApplication, metaclass=QSingleton):
                                   'SIPSessionNewOutgoing', 'SIPSessionNewIncoming', 'SIPSessionDidStart', 'SIPSessionDidEnd', 'SIPSessionDidFail',
                                   'SIPSessionWillTryNextRoute')
 
+    def _raise_main_window(self, token=None):
+        """Another Blink was started on this data directory: this one to the front instead."""
+        main_window = getattr(self, 'main_window', None)
+        if main_window is None:
+            return
+        if token:       # the launcher's activation token: Wayland lets the window take the focus with it
+            os.environ['XDG_ACTIVATION_TOKEN'] = token
+        try:
+            main_window._bring_to_front()
+        finally:
+            os.environ.pop('XDG_ACTIVATION_TOKEN', None)
+
     def __init__(self):
         super(Blink, self).__init__(sys.argv)
         from blink import instance_lock
         if not instance_lock.acquire():
-            # another Blink uses this data directory: both would overwrite the configuration
+            # another Blink uses this data directory: both would overwrite the configuration. It comes to the
+            # front instead; the warning only when it does not answer
             pid = instance_lock.holder()
+            if instance_lock.ask_to_raise():
+                ActivityLog().info(f'Blink is already running' + (f' (process {pid})' if pid else '') + ', brought to the front')
+                sys.exit(0)
             ActivityLog().error(f'Blink is already running' + (f' (process {pid})' if pid else '') + f' with data directory {ApplicationData.directory}, not starting a second instance')
             QMessageBox.critical(None, 'Blink', 'Blink is already running%s with data directory %s.\n\nTwo instances would overwrite each other\'s accounts and settings, so this one does not start.'
                                  % (f' (process {pid})' if pid else '', ApplicationData.directory))
             sys.exit(1)
+        instance_lock.listen(self._raise_main_window)      # a second Blink started: this one comes to the front
         from blink import profiles
         try:
             switched = profiles.apply_pending_switch()      # before anything reads the configuration

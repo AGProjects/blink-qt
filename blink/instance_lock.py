@@ -8,6 +8,10 @@ its lifetime; a second one finds it taken and does not start.
 
 The lock goes with the process: it is released when Blink exits or crashes, and before
 the exec of a restart (the new image takes it again).
+
+A second one started by hand asks the first to come to the front instead (a local socket named
+after the data directory, listen() and ask_to_raise()): no warning, it just exits. The warning
+is left for a first instance that does not answer (an older Blink, or one stuck).
 """
 
 import os
@@ -20,7 +24,7 @@ except ImportError:         # Windows: no guard
     fcntl = None
 
 
-__all__ = ['acquire', 'release', 'holder']
+__all__ = ['acquire', 'release', 'holder', 'listen', 'ask_to_raise']
 
 
 _file = None
@@ -69,3 +73,58 @@ def release():
         pass
     _file.close()
     _file = None
+
+
+# Bring the running instance to the front
+
+_server = None
+
+
+def _socket_name():
+    import hashlib
+    return 'blink-' + hashlib.sha1(os.path.realpath(ApplicationData.directory).encode()).hexdigest()[:16]
+
+
+def listen(raise_window):
+    """Called by the instance holding the lock: raise_window(activation token or None) when a second one asks."""
+    global _server
+    from PyQt6.QtNetwork import QLocalServer
+    QLocalServer.removeServer(_socket_name())     # one left by a crashed instance (we hold the lock: it is not in use)
+    server = QLocalServer()
+    server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
+    if not server.listen(_socket_name()):
+        return False
+
+    def connected():
+        while server.hasPendingConnections():
+            socket = server.nextPendingConnection()
+
+            def read(socket=socket):
+                data = bytes(socket.readAll()).decode('utf-8', 'replace')
+                if data.startswith('raise'):
+                    token = data[len('raise'):].strip() or None
+                    raise_window(token)
+                    socket.write(b'ok')
+                    socket.flush()
+                socket.disconnectFromServer()
+            socket.readyRead.connect(read)
+            socket.disconnected.connect(socket.deleteLater)
+    server.newConnection.connect(connected)
+    _server = server
+    return True
+
+
+def ask_to_raise(timeout=2000):
+    """Called by a second instance: True when the running one answered (it comes to the front). The launcher's
+    activation token goes along, so that a Wayland compositor lets the window take the focus."""
+    from PyQt6.QtNetwork import QLocalSocket
+    socket = QLocalSocket()
+    socket.connectToServer(_socket_name())
+    if not socket.waitForConnected(timeout):
+        return False
+    token = os.environ.get('XDG_ACTIVATION_TOKEN') or os.environ.get('DESKTOP_STARTUP_ID') or ''
+    socket.write(f'raise {token}'.encode())
+    socket.flush()
+    answered = socket.waitForReadyRead(timeout) and bytes(socket.readAll()) == b'ok'
+    socket.disconnectFromServer()
+    return answered
