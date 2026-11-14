@@ -6,6 +6,10 @@ mixer is made again: the session waits for it), and switched back off when no st
 else wants it on (AG CuteMusic's mixer as the device, blink/cutemusic.py: its music mode).
 
 The call's audio stream is AudioStream(stereo=True): it offers only the codecs that carry stereo (Opus).
+
+Incoming: an offer asking for stereo Opus (AudioStream.offered_stereo) switches the SDK to stereo while the call
+rings, so that it is answered in stereo; the stream moves to the stereo mixer when it is accepted (the SDK). Only
+when no other audio call is in progress: making the mixer again under a call in progress would take its audio away.
 """
 
 from PyQt6.QtCore import QObject, QTimer
@@ -33,6 +37,7 @@ class StereoCalls(QObject, metaclass=QSingleton):
     def __init__(self):
         super().__init__()
         self._sessions = []         # the stereo calls made, while they last
+        self._incoming = []         # the stereo offers answered in stereo (sipsimple sessions), while they last
         self._engaged = False       # the SDK put in stereo here (to be put back)
         self._timer = QTimer(self, interval=2000)
         self._timer.timeout.connect(self._check)
@@ -55,11 +60,32 @@ class StereoCalls(QObject, metaclass=QSingleton):
                 self._timer.start()
         QTimer.singleShot(delay, call)
 
+    def incoming(self, session, audio_stream):
+        """A new incoming session: answered in stereo if it asks for stereo Opus and stereo calls are enabled."""
+        if not stereo_available() or not getattr(audio_stream, 'offered_stereo', False):
+            return
+        settings = SIPSimpleSettings()
+        if not settings.audio.stereo:
+            from blink.sessions import SessionManager
+            others = [blink_session for blink_session in SessionManager().sessions
+                      if blink_session.sip_session is not session and 'audio' in blink_session.streams
+                      and str(getattr(blink_session, 'state', '') or '').startswith(('connecting', 'connected'))]
+            if others:
+                ActivityLog().info('[audio] Stereo offer answered in mono: another audio call is in progress')
+                return
+            settings.audio.stereo = True
+            settings.save()
+            self._engaged = True
+            ActivityLog().info('[audio] Incoming stereo offer: the audio in stereo (Opus stereo, no echo cancellation)')
+        self._incoming.append(session)
+        self._timer.start()
+
     def _check(self):
         self._sessions = [session for session in self._sessions
                           if str(getattr(session, 'state', '') or '').startswith(('connecting', 'connected'))
                           or getattr(session, 'state', None) in ('initialized', 'initializing')]
-        if self._sessions:
+        self._incoming = [session for session in self._incoming if getattr(session, 'state', None) not in (None, 'terminating', 'terminated')]
+        if self._sessions or self._incoming:
             return
         self._timer.stop()
         if not self._engaged:

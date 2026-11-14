@@ -344,7 +344,10 @@ class SessionInfoPanel(base_class, ui_class):
             self.traffic_graph.update()
 
     def _update_rtp_stream(self, blink_session, stream_info, value_label, connection_label, encryption_label):
-        value_label.setText(stream_info.codec or translate('chat_window', 'N/A'))
+        codec = stream_info.codec
+        if codec and getattr(stream_info, 'stereo', False):        # a stereo call (blink/stereo.py)
+            codec += ' ' + translate('sessions', 'Stereo')
+        value_label.setText(codec or translate('chat_window', 'N/A'))
         if stream_info.ice_status == 'succeeded':
             if 'relay' in {candidate.type.lower() for candidate in (stream_info.local_rtp_candidate, stream_info.remote_rtp_candidate)}:
                 connection_label.setPixmap(self.pixmaps.relay_connection)

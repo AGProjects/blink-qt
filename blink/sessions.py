@@ -180,9 +180,20 @@ class MSRPStreamInfo(object, metaclass=ABCMeta):
 
 
 class AudioStreamInfo(RTPStreamInfo):
+    def __init__(self):
+        super(AudioStreamInfo, self).__init__()
+        self.stereo = False
+
+    def update(self, stream):
+        super(AudioStreamInfo, self).update(stream)
+        if stream is not None:
+            self.stereo = bool(getattr(stream, 'stereo_active', False))      # a stereo call (blink/stereo.py)
+
     @property
     def codec(self):
-        return '{} {}kHz'.format(self.codec_name.capitalize(), self.sample_rate//1000) if self.codec_name else None
+        if not self.codec_name:
+            return None
+        return '{} {}kHz'.format(self.codec_name.capitalize(), self.sample_rate//1000)
 
 
 class VideoStreamInfo(RTPStreamInfo):
@@ -2292,6 +2303,14 @@ class AudioSessionWidget(base_class, ui_class):
         self.srtp_label.hovered = False
         self.srtp_label.installEventFilter(self)
 
+        # a stereo call (blink/stereo.py): two interlocked rings, as on a stereo radio, left of the lock
+        self.stereo_label = QLabel(self)
+        self.stereo_label.setFixedSize(25, 25)
+        self.stereo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stereo_label.setToolTip(translate('sessions', 'Stereo call (Opus stereo, no echo cancellation)'))
+        self.stream_layout.insertWidget(self.stream_layout.indexOf(self.srtp_label), self.stereo_label)
+        self.stereo_label.setVisible(bool(session.stereo))
+
         self._ui_label_palettes = {label: QPalette(label.palette()) for label in (self.latency_label, self.packet_loss_label)}
         self.apply_theme(initial=True)
         follow_theme(self)
@@ -2325,8 +2344,28 @@ class AudioSessionWidget(base_class, ui_class):
         self._theme_pixmaps[dark] = pixmaps
         return pixmaps
 
+    def _stereo_pixmap(self):
+        """The stereo symbol: two interlocked rings in the tile's text color."""
+        size = 18
+        ratio = self.devicePixelRatioF() or 1.0
+        pixmap = QPixmap(round(size * ratio), round(size * ratio))
+        pixmap.setDevicePixelRatio(ratio)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(self.palette().color(QPalette.ColorRole.WindowText))
+        pen.setWidthF(1.6)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        radius = 4.6
+        for dx in (-3.0, 3.0):
+            painter.drawEllipse(QPointF(size / 2 + dx, size / 2), radius, radius)
+        painter.end()
+        return pixmap
+
     def apply_theme(self, initial=False):
         self.tls_label.setPixmap(self.pixmaps.blue_lock)
+        self.stereo_label.setPixmap(self._stereo_pixmap())
         if initial:
             self.srtp_label.setPixmap(self.pixmaps.orange_lock if self.srtp_label.isEnabled() else self.pixmaps.grey_lock)
         else:
@@ -2561,6 +2600,7 @@ class AudioSessionItem(object):
         self.status = None
         self.type = 'Audio'
         self.codec_info = ''
+        self.stereo = False
         self.tls = False
         self.srtp = False
         self.latency = 0
@@ -2706,6 +2746,18 @@ class AudioSessionItem(object):
 
     srtp = property(_get_srtp, _set_srtp)
     del _get_srtp, _set_srtp
+
+    def _get_stereo(self):
+        return self.__dict__['stereo']
+
+    def _set_stereo(self, value):
+        if self.__dict__.get('stereo', None) == value:
+            return
+        self.__dict__['stereo'] = value
+        self.widget.stereo_label.setVisible(bool(value))
+
+    stereo = property(_get_stereo, _set_stereo)
+    del _get_stereo, _set_stereo
 
     def _get_tls(self):
         return self.__dict__['tls']
@@ -2864,6 +2916,7 @@ class AudioSessionItem(object):
             if self.media_connected:
                 self.type = self._connected_type()
             self.codec_info = audio_info.codec
+            self.stereo = audio_info.stereo
             if audio_info.encryption is not None:
                 self.widget.srtp_label.setToolTip(translate('sessions', 'Media is encrypted using %s (%s)') % (audio_info.encryption, audio_info.encryption_cipher))
             else:
@@ -9704,6 +9757,10 @@ class SessionManager(object, metaclass=Singleton):
             incoming_request.finished.connect(self._SH_IncomingRequestFinished)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
             incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
+            if audio_stream is not None:
+                # a stereo offer, with stereo calls enabled: the SDK in stereo while it rings (blink/stereo.py)
+                from blink.stereo import StereoCalls
+                StereoCalls().incoming(session, audio_stream)
 
         session.send_ring_indication()
 

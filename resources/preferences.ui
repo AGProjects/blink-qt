@@ -2266,7 +2266,7 @@
            <item row="7" column="1" colspan="2">
             <widget class="QLabel" name="stereo_note_label">
              <property name="text">
-              <string>Adds Start Stereo Audio Call to the contact menus. A stereo call offers only Opus, and echo cancellation is off during stereo calls: use a headset.</string>
+              <string>Adds Start Stereo Audio Call to the contact menus and answers stereo calls in stereo. A stereo call offers only Opus, and echo cancellation is off during stereo calls: use a headset.</string>
              </property>
              <property name="wordWrap">
               <bool>true</bool>
