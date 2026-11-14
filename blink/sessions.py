@@ -2259,6 +2259,25 @@ def _tile_background(band, body):
     return QBrush(background)
 
 
+def stereo_pixmap(color, size=18, ratio=1.0):
+    """The stereo symbol (a stereo call, blink/stereo.py): two interlocked rings, as on a stereo radio."""
+    ratio = ratio or 1.0
+    pixmap = QPixmap(round(size * ratio), round(size * ratio))
+    pixmap.setDevicePixelRatio(ratio)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    pen = QPen(color)
+    pen.setWidthF(1.6 * size / 18)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    radius = 4.6 * size / 18
+    for dx in (-3.0, 3.0):
+        painter.drawEllipse(QPointF(size / 2 + dx * size / 18, size / 2), radius, radius)
+    painter.end()
+    return pixmap
+
+
 class AudioSessionWidget(base_class, ui_class):
     def __init__(self, session, parent=None):
         super(AudioSessionWidget, self).__init__(parent)
@@ -2345,23 +2364,8 @@ class AudioSessionWidget(base_class, ui_class):
         return pixmaps
 
     def _stereo_pixmap(self):
-        """The stereo symbol: two interlocked rings in the tile's text color."""
-        size = 18
-        ratio = self.devicePixelRatioF() or 1.0
-        pixmap = QPixmap(round(size * ratio), round(size * ratio))
-        pixmap.setDevicePixelRatio(ratio)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(self.palette().color(QPalette.ColorRole.WindowText))
-        pen.setWidthF(1.6)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        radius = 4.6
-        for dx in (-3.0, 3.0):
-            painter.drawEllipse(QPointF(size / 2 + dx, size / 2), radius, radius)
-        painter.end()
-        return pixmap
+        """The stereo symbol in the tile's text color."""
+        return stereo_pixmap(self.palette().color(QPalette.ColorRole.WindowText), 18, self.devicePixelRatioF())
 
     def apply_theme(self, initial=False):
         self.tls_label.setPixmap(self.pixmaps.blue_lock)
@@ -7680,6 +7684,21 @@ class IncomingDialog(IncomingDialogBase, ui_class):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not activate)
         super(IncomingDialog, self).show()
 
+    def show_stereo(self, answered_in_stereo):
+        """The caller offers stereo (Opus stereo=1): the stereo symbol next to the audio button, in the accent color
+        when the call is answered in stereo, greyed out when in mono (blink/stereo.py)."""
+        label = QLabel(self)
+        label.setFixedSize(32, 32)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        role = QPalette.ColorRole.Highlight if answered_in_stereo else QPalette.ColorRole.PlaceholderText
+        label.setPixmap(stereo_pixmap(self.palette().color(role), 26, self.devicePixelRatioF()))
+        if answered_in_stereo:
+            label.setToolTip(translate('incoming_dialog', 'Stereo call: answered in stereo (Opus stereo, no echo cancellation: use a headset)'))
+        else:
+            label.setToolTip(translate('incoming_dialog', 'The caller offers stereo, answered in mono (Enable Stereo Mode is off, or another call is in progress)'))
+        self.stream_icon_layout.insertWidget(self.stream_icon_layout.indexOf(self.audio_stream), label)
+        self.stereo_label = label
+
     @property
     def streams(self):
         return self.audio_stream, self.chat_stream, self.screensharing_stream, self.video_stream
@@ -7800,6 +7819,9 @@ class IncomingRequest(QObject):
         address = '%s@%s' % (session.remote_identity.uri.user, session.remote_identity.uri.host)
         self.dialog.uri_label.setText(address)
         self.dialog.username_label.setText(contact.name or session.remote_identity.display_name or address)
+        if audio_stream is not None and getattr(audio_stream, 'offered_stereo', False):
+            # the SDK is already in stereo when the call will be answered in stereo (StereoCalls.incoming)
+            self.dialog.show_stereo(bool(getattr(SIPSimpleSettings().audio, 'stereo', False)))
         # a conference focus calling because someone invited us (REFER): shown as that person
         # inviting us to the room, from the Referred-By the focus copies into its INVITE
         inviter = None if proposal else _conference_inviter(session)
@@ -9761,15 +9783,16 @@ class SessionManager(object, metaclass=Singleton):
                 blink_session.init_incoming(session, [chat_stream], contact, contact_uri, reinitialize=reinitialize)
                 return
 
+            if audio_stream is not None:
+                # a stereo offer, with stereo calls enabled: the SDK in stereo while it rings (blink/stereo.py)
+                from blink.stereo import StereoCalls
+                StereoCalls().incoming(session, audio_stream)
+
             dialog = IncomingDialog()  # Build the dialog without a parent in order to be displayed on the current workspace on Linux.
             incoming_request = IncomingRequest(dialog, session, contact, contact_uri, proposal=False, audio_stream=audio_stream, video_stream=video_stream, chat_stream=chat_stream, screensharing_stream=screensharing_stream)
             incoming_request.finished.connect(self._SH_IncomingRequestFinished)
             incoming_request.accepted.connect(self._SH_IncomingRequestAccepted)
             incoming_request.rejected.connect(self._SH_IncomingRequestRejected)
-            if audio_stream is not None:
-                # a stereo offer, with stereo calls enabled: the SDK in stereo while it rings (blink/stereo.py)
-                from blink.stereo import StereoCalls
-                StereoCalls().incoming(session, audio_stream)
 
         session.send_ring_indication()
 
