@@ -20,6 +20,7 @@ from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.session import IllegalStateError
 
+from blink import cutemusic
 from blink.aboutpanel import AboutPanel
 from blink.camera_formats import log_camera_formats, usable_cameras
 from blink.accounts import AccountModel, ActiveAccountModel, ServerToolsAccountModel
@@ -397,8 +398,8 @@ class MainWindow(base_class, ui_class):
         Each side is checked against its own list: a microphone need not be a speaker too."""
         SIPApplication.engine._ua.refresh_sound_devices()
         settings = SIPSimpleSettings()
-        inputs = set(SIPApplication.engine.input_devices) | {'system_default', None}
-        outputs = set(SIPApplication.engine.output_devices) | {'system_default', None}
+        inputs = set(cutemusic.visible(SIPApplication.engine.input_devices)) | {'system_default', None}
+        outputs = set(cutemusic.visible(SIPApplication.engine.output_devices)) | {'system_default', None}
         changed = False
         for name, available in (('input_device', inputs), ('output_device', outputs), ('alert_device', outputs)):
             device = getattr(settings.audio, name)
@@ -741,7 +742,7 @@ class MainWindow(base_class, ui_class):
 
         self.output_device_menu.addSeparator()
 
-        for device in SIPApplication.engine.output_devices:
+        for device in cutemusic.visible(SIPApplication.engine.output_devices):
             action = action_map[device] = self.output_device_menu.addAction(device)
             action.setData(device)
             action.setCheckable(True)
@@ -764,7 +765,7 @@ class MainWindow(base_class, ui_class):
 
         self.input_device_menu.addSeparator()
 
-        for device in SIPApplication.engine.input_devices:
+        for device in cutemusic.visible(SIPApplication.engine.input_devices):
             action = action_map[device] = self.input_device_menu.addAction(device)
             action.setData(device)
             action.setCheckable(True)
@@ -787,7 +788,7 @@ class MainWindow(base_class, ui_class):
 
         self.alert_device_menu.addSeparator()
 
-        for device in SIPApplication.engine.output_devices:
+        for device in cutemusic.visible(SIPApplication.engine.output_devices):
             action = action_map[device] = self.alert_device_menu.addAction(device)
             action.setData(device)
             action.setCheckable(True)
@@ -813,12 +814,21 @@ class MainWindow(base_class, ui_class):
             self.devices_menu.removeAction(action)
             action.deleteLater()
         self.combined_device_actions = []
-        outputs = list(SIPApplication.engine.output_devices)
-        inputs = set(SIPApplication.engine.input_devices)
-        devices = [device for device in outputs if device in inputs and device.split(':', 1)[0].strip().lower() not in self.combined_device_exclusions]
-        if not devices:
-            return
+        outputs = cutemusic.visible(SIPApplication.engine.output_devices)      # AG CuteMusic's mixer only while it runs
+        inputs = set(cutemusic.visible(SIPApplication.engine.input_devices))
+        devices = [device for device in outputs if device in inputs and device != cutemusic.DEVICE and
+                   device.split(':', 1)[0].strip().lower() not in self.combined_device_exclusions]
         first = self.devices_menu.actions()[0] if self.devices_menu.actions() else None
+        # AG CuteMusic's mixer, always first: chosen as any other while it runs, grayed out otherwise (how to get it)
+        available = cutemusic.DEVICE in outputs and cutemusic.DEVICE in inputs
+        action = QAction(cutemusic.DEVICE if available else f'{cutemusic.DEVICE} ({cutemusic.unavailable_reason()})', self.devices_menu)
+        action.setCheckable(True)
+        action.setEnabled(available)
+        action.setToolTip(cutemusic.DEVICE_HINT if available else cutemusic.unavailable_hint())
+        action.setData(cutemusic.DEVICE)
+        action.triggered.connect(partial(self._AH_CombinedAudioDeviceTriggered, cutemusic.DEVICE))
+        self.devices_menu.insertAction(first, action)
+        self.combined_device_actions.append(action)
         short_names = [device.split(':', 1)[0].strip() or device for device in devices]
         for device, short in zip(devices, short_names):
             label = short if short_names.count(short) == 1 else device
@@ -2203,6 +2213,18 @@ class MainWindow(base_class, ui_class):
     def _NH_SIPApplicationDidStart(self, notification):
         self.load_audio_devices()
         self.load_video_devices()
+        # AG CuteMusic's mixer (blink/cutemusic.py): listed while it runs; gone, a mixer chosen falls back
+        self.cutemusic_watcher = cutemusic.Watcher(self)
+        self.cutemusic_calls = cutemusic.CallPublisher(self)      # who is in the call, for AG CuteMusic's BLINK strip
+        engine = SIPApplication.engine
+        ActivityLog().info(f'[audio] {cutemusic.DEVICE}: '
+                           f'{"an input" if cutemusic.DEVICE in engine.input_devices else "not an input"} and '
+                           f'{"an output" if cutemusic.DEVICE in engine.output_devices else "not an output"} of the engine, '
+                           f'AG CuteMusic {"running" if self.cutemusic_watcher.running else "not running"} ({cutemusic.RUNNING}); '
+                           f'engine inputs: {", ".join(engine.input_devices)}')
+        self.cutemusic_watcher.changed.connect(self._cutemusic_changed)
+        if not self.cutemusic_watcher.running and cutemusic.DEVICE in (SIPSimpleSettings().audio.input_device, SIPSimpleSettings().audio.output_device):
+            self._cutemusic_changed(False)
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
         notification.center.add_observer(self, name='AudioDevicesDidChange')
         notification.center.add_observer(self, name='VideoDevicesDidChange')
@@ -2211,6 +2233,14 @@ class MainWindow(base_class, ui_class):
         state = getattr(AccountState, blink_settings.presence.current_state.state, AccountState.Available)
         self.account_state.setState(state, blink_settings.presence.current_state.note)
         MessageManager()
+
+    def _cutemusic_changed(self, running):
+        """AG CuteMusic started or quit: its mixer listed or not (and, chosen, the system default instead)."""
+        self.refresh_devices()
+        self.output_device_menu.clear()
+        self.input_device_menu.clear()
+        self.alert_device_menu.clear()
+        self.load_audio_devices()
 
     def _NH_AudioDevicesDidChange(self, notification):
         self.output_device_menu.clear()  # because actions are owned by the menu and only referenced by their corresponding action groups,
@@ -2265,6 +2295,7 @@ class MainWindow(base_class, ui_class):
                 self._check_device_action(self.output_devices_group, settings.audio.output_device, 'audio output')
             if 'audio.input_device' in notification.data.modified:
                 self._check_device_action(self.input_devices_group, settings.audio.input_device, 'audio input')
+                cutemusic.apply_music_mode()        # AG CuteMusic's mixer: echo cancelling off while it is the input
             if 'audio.alert_device' in notification.data.modified:
                 self._check_device_action(self.alert_devices_group, settings.audio.alert_device, 'alert')
             if 'video.device' in notification.data.modified:

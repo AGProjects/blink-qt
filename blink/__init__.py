@@ -659,6 +659,9 @@ class Blink(QApplication, metaclass=QSingleton):
 
     def _NH_SIPApplicationWillEnd(self, notification):
         ActivityLog().info('Stopping Blink')
+        calls = getattr(getattr(self, 'main_window', None), 'cutemusic_calls', None)
+        if calls is not None:
+            calls.stop()        # AG CuteMusic no longer shows our calls
         self.ip_address_monitor.stop()
         if getattr(self, 'reactor_watch', None) is not None:
             self.reactor_watch.stop()

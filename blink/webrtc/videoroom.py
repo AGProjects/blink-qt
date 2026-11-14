@@ -735,7 +735,11 @@ class VideoroomSession(QObject):
         playback = [self._mixer, _make('audioconvert'), _make('audioresample')]
         if _has('webrtcechoprobe'):
             playback.append(_make('webrtcechoprobe', 'echoprobe'))
-        playback.append(_make('autoaudiosink', 'speakers'))
+        from blink import cutemusic
+        if cutemusic.selected() and cutemusic.running() and _has('pulsesink'):     # AG CuteMusic's mixer: into its BLINK strip
+            playback.append(_make('pulsesink', 'speakers', device=cutemusic.SINK))
+        else:
+            playback.append(_make('autoaudiosink', 'speakers'))
         self._add_chain(playback)
 
         self.publisher = webrtcbin = _make('webrtcbin', 'publisher', bundle_policy='max-bundle')
@@ -750,12 +754,21 @@ class VideoroomSession(QObject):
         # from an SSRC it was not told, and the offer is made before the microphone has produced caps
         import random
         self._audio_ssrc = random.randint(1, 0xffffffff)
-        microphone = [_make('autoaudiosrc', 'microphone'), _make('audioconvert'), _make('audioresample')]
-        if _has('webrtcdsp') and _has('webrtcechoprobe'):
+        from blink import cutemusic
+        if cutemusic.selected() and cutemusic.running() and _has('pulsesrc'):      # AG CuteMusic's mixer: its karaoke
+            source = _make('pulsesrc', 'microphone', device=cutemusic.SOURCE)
+        else:
+            source = _make('autoaudiosrc', 'microphone')
+        microphone = [source, _make('audioconvert'), _make('audioresample')]
+        # echo cancelling as the SIP audio's setting (Preferences, Audio): off, the input is taken as music (a karaoke
+        # shared to the call, an instrument): stereo as it comes, untouched, at a music bitrate
+        from sipsimple.configuration.settings import SIPSimpleSettings
+        echo_cancelling = SIPSimpleSettings().audio.echo_canceller.enabled
+        if echo_cancelling and _has('webrtcdsp') and _has('webrtcechoprobe'):
             microphone += [_make('capsfilter', caps=Gst.Caps.from_string('audio/x-raw,rate=48000,channels=1')), _make('webrtcdsp', 'dsp', probe='echoprobe', noise_suppression=False, gain_control=False)]    # echo cancelling only, as the SIP audio
         self._volume = _make('volume', 'micvolume', mute=self.audio_muted)
         microphone += [self._volume] + ([_make('level', 'level-self', interval=LEVEL_INTERVAL, post_messages=True)] if _has('level') else []) + [_make('audioconvert'), _make('audioresample'), _make('queue', max_size_time=200 * Gst.MSECOND, leaky='downstream'),
-                       _make('opusenc', bitrate=64000, audio_type='generic', complexity=10, inband_fec=True),
+                       _make('opusenc', bitrate=64000 if echo_cancelling else 128000, audio_type='generic', complexity=10, inband_fec=True),
                        _make('rtpopuspay', pt=OPUS_PT, ssrc=self._audio_ssrc)]
         self._add_chain(microphone)
         audio_caps = Gst.Caps.from_string(f'application/x-rtp,media=audio,encoding-name=OPUS,payload={OPUS_PT},clock-rate=48000,encoding-params=(string)2,ssrc=(uint){self._audio_ssrc}')

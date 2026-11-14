@@ -27,6 +27,7 @@ from sipsimple.threading import run_in_thread
 from sipsimple.threading.green import run_in_green_thread
 from sipsimple.util import ISOTimestamp
 
+from blink import cutemusic
 from blink.accounts import AddAccountDialog
 from blink.camera_formats import resolution_support, usable_cameras
 from blink.configuration.settings import H264_LEVELS, BlinkSettings
@@ -887,7 +888,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.audio_input_device_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.audio_input_device_button.insertSeparator(1)
         self.audio_input_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
-        for device in SIPApplication.engine.input_devices:
+        for device in cutemusic.visible(SIPApplication.engine.input_devices):
             self.audio_input_device_button.addItem(device, device)
         self.audio_input_device_button.addItem(translate('preferences_window', 'None'), None)
         self.audio_input_device_button.setCurrentIndex(self.audio_input_device_button.findData(settings.audio.input_device))
@@ -896,7 +897,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.audio_output_device_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.audio_output_device_button.insertSeparator(1)
         self.audio_output_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
-        for device in SIPApplication.engine.output_devices:
+        for device in cutemusic.visible(SIPApplication.engine.output_devices):
             self.audio_output_device_button.addItem(device, device)
         self.audio_output_device_button.addItem(translate('preferences_window', 'None'), None)
         self.audio_output_device_button.setCurrentIndex(self.audio_output_device_button.findData(settings.audio.output_device))
@@ -905,7 +906,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.audio_alert_device_button.addItem(translate('preferences_window', 'System Default'), 'system_default')
         self.audio_alert_device_button.insertSeparator(1)
         self.audio_alert_device_button.setItemData(1, Separator)  # prevent the separator from being selected (must have different itemData than the None device)
-        for device in SIPApplication.engine.output_devices:
+        for device in cutemusic.visible(SIPApplication.engine.output_devices):
             self.audio_alert_device_button.addItem(device, device)
         self.audio_alert_device_button.addItem(translate('preferences_window', 'None'), None)
         self.audio_alert_device_button.setCurrentIndex(self.audio_alert_device_button.findData(settings.audio.alert_device))
