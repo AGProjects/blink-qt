@@ -9267,6 +9267,15 @@ class SessionManager(object, metaclass=Singleton):
             else:
                 account = AccountManager().default_account
 
+        # the contact's Enable Stereo (shared over XCAP): an audio call without video made in stereo (blink/stereo.py)
+        if connect and sibling is None and not any(stream.type == 'video' for stream in streams) and \
+                any(stream.type == 'audio' and 'stereo' not in stream.attributes for stream in streams):
+            from blink.stereo import StereoCalls, contact_wants_stereo
+            if contact_wants_stereo(contact):
+                ActivityLog().info(f'[audio] {getattr(contact_uri, "uri", contact_uri)}: Enable Stereo is on for this contact, calling in stereo')
+                StereoCalls().start(contact, contact_uri, account=account, streams=streams)
+                return None
+
         if any(stream.type == 'video' for stream in streams) and is_conference_uri(getattr(contact_uri, 'uri', contact_uri), account):
             from blink.webrtc import conference_video_available, join_video_conference, local_room_host, media_available, room_target
             user, host = split_uri(getattr(contact_uri, 'uri', contact_uri))

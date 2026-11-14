@@ -455,6 +455,13 @@ class Blink(QApplication, metaclass=QSingleton):
         activity.info('SIP device ID: %s' % settings.instance_id)
         activity.info('Core audio codecs: %s' % ', '.join(self.available_codecs))
         activity.info('Configured audio codecs: %s' % ', '.join(settings.rtp.audio_codec_list))
+        # stereo calls (blink/stereo.py): an SDK with stereo audio (audio.stereo), and Opus
+        if not hasattr(settings.audio, 'stereo'):
+            activity.info('Stereo audio: not supported by this SDK')
+        elif 'opus' not in [codec.lower() for codec in self.available_codecs]:
+            activity.info('Stereo audio: supported by the SDK, but Opus is not available')
+        else:
+            activity.info('Stereo audio: supported (Opus stereo), Enable Stereo Mode %s, audio %s' % ('on' if settings.audio.enable_stereo else 'off', 'in stereo' if settings.audio.stereo else 'in mono'))
         activity.info('Core video codecs: %s' % ', '.join(self.available_video_codecs))
         activity.info('Configured video codecs: %s' % ', '.join(settings.rtp.video_codec_list))
         activity.info('Audio devices: input %s, output %s, alert %s' % (settings.audio.input_device, settings.audio.output_device, settings.audio.alert_device))

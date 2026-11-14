@@ -8953,6 +8953,8 @@ class ContactEditorDialog(base_class, ui_class):
         self.presence.setChecked(True)
         self.presence_policy.setChecked(True)
         self.preferred_media.setCurrentIndex(self.preferred_media.findData('messages'))   # new contacts default to messages
+        self.stereo.setChecked(False)
+        self.stereo.setEnabled(stereo_available())        # Preferences, Audio: Enable Stereo Mode
         self.original_groups = []
         self.selected_groups = [target_group.settings] if target_group is not None and is_selectable_group(target_group.settings) else []
         self._update_groups_button()
@@ -8976,6 +8978,8 @@ class ContactEditorDialog(base_class, ui_class):
         self.presence_policy.setChecked(contact.presence.policy == 'allow')
         self.auto_answer.setChecked(contact.auto_answer)
         self.auto_download_media.setChecked(bool(contact.auto_download_media))
+        self.stereo.setChecked(bool(getattr(contact, 'stereo', False)))
+        self.stereo.setEnabled(stereo_available())        # Preferences, Audio: Enable Stereo Mode
         self.preferred_media.setCurrentIndex(self.preferred_media.findData(preferred_media_choice(contact.preferred_media)))
         self.original_groups =[group for group in self._selectable_groups() if contact.id in {member.id for member in group.contacts}]
         self.selected_groups = list(self.original_groups)
@@ -9170,6 +9174,8 @@ class ContactEditorDialog(base_class, ui_class):
             contact.presence.policy = 'allow' if self.presence_policy.isChecked() else 'block'
             contact.auto_answer = self.auto_answer.isChecked()
         contact.auto_download_media = self.auto_download_media.isChecked()     # shared: replicated to the other devices
+        if stereo_available():
+            contact.stereo = self.stereo.isChecked()        # shared: audio calls to this contact in stereo (blink/stereo.py)
         preferred_media = self.preferred_media.currentData() or 'messages'
         if self.edited_contact is None or preferred_media != preferred_media_choice(contact.preferred_media):
             contact.preferred_media = preferred_media     # a legacy value (audio+chat) is kept unless the choice changed

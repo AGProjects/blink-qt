@@ -20,13 +20,21 @@ from blink.logging import ActivityLog
 from blink.util import QSingleton
 
 
-__all__ = ['StereoCalls', 'stereo_available']
+__all__ = ['StereoCalls', 'stereo_available', 'contact_wants_stereo']
 
 
 def stereo_available():
     """Whether stereo calls are offered: enabled in the preferences, and an SDK that has stereo audio."""
     settings = SIPSimpleSettings()
     return bool(getattr(settings.audio, 'enable_stereo', False)) and hasattr(settings.audio, 'stereo')
+
+
+def contact_wants_stereo(contact):
+    """Whether audio calls to contact are made in stereo: Enable Stereo Mode on, and the contact's own Enable Stereo
+    (shared over XCAP with Blink for macOS)."""
+    if not stereo_available() or getattr(contact, 'type', None) != 'addressbook':
+        return False
+    return bool(getattr(getattr(contact, 'settings', None), 'stereo', False))
 
 
 class StereoCalls(QObject, metaclass=QSingleton):
@@ -42,7 +50,8 @@ class StereoCalls(QObject, metaclass=QSingleton):
         self._timer = QTimer(self, interval=2000)
         self._timer.timeout.connect(self._check)
 
-    def start(self, contact, contact_uri, account=None):
+    def start(self, contact, contact_uri, account=None, streams=None):
+        """A stereo call: streams as create_session takes them (default: audio only), the audio made stereo."""
         from blink.sessions import SessionManager, StreamDescription
         settings = SIPSimpleSettings()
         delay = 0
@@ -54,7 +63,9 @@ class StereoCalls(QObject, metaclass=QSingleton):
             ActivityLog().info('[audio] Stereo call: the audio in stereo (Opus stereo, no echo cancellation)')
 
         def call():
-            session = SessionManager().create_session(contact, contact_uri, [StreamDescription('audio', stereo=True)], account=account)
+            descriptions = [StreamDescription('audio', stereo=True) if stream.type == 'audio' else stream
+                            for stream in (streams or [StreamDescription('audio')])]
+            session = SessionManager().create_session(contact, contact_uri, descriptions, account=account)
             if session is not None:
                 self._sessions.append(session)
                 self._timer.start()
