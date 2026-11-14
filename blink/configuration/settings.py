@@ -41,6 +41,7 @@ class AudioSettingsExtension(AudioSettings):
     recordings_directory = Setting(type=ApplicationDataPath, default=ApplicationDataPath('recordings'))
     sample_rate = Setting(type=SampleRate, default=32000)
     echo_canceller = EchoCancellerSettingsExtension
+    enable_stereo = Setting(type=bool, default=False)       # Start Stereo Audio Call in the contact menus (blink/stereo.py)
 
 
 # Video: VGA, constrained baseline H.264 at level 3.0 (the level for 640x480, so the SDP

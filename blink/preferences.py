@@ -449,6 +449,7 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         self.audio_output_device_button.activated[int].connect(self._SH_AudioOutputDeviceButtonActivated)
         self.audio_sample_rate_button.activated[int].connect(self._SH_AudioSampleRateButtonActivated)
         self.enable_echo_cancelling_button.clicked.connect(self._SH_EnableEchoCancellingButtonClicked)
+        self.enable_stereo_button.clicked.connect(self._SH_EnableStereoButtonClicked)
         self.tail_length_slider.valueChanged.connect(self._SH_TailLengthSliderValueChanged)
 
         # Audio codecs
@@ -979,6 +980,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         # Audio devices
         self.load_audio_devices()
         self.enable_echo_cancelling_button.setChecked(settings.audio.echo_canceller.enabled)
+        # stereo calls need an SDK with stereo audio (python3-sipsimple 5.7: audio.stereo, AudioStream(stereo=...))
+        stereo_sdk = hasattr(settings.audio, 'stereo')
+        self.enable_stereo_button.setVisible(stereo_sdk)
+        self.stereo_note_label.setVisible(stereo_sdk)
+        self.enable_stereo_button.setChecked(settings.audio.enable_stereo and stereo_sdk)
         with blocked_qt_signals(self.tail_length_slider):
             self.tail_length_slider.setValue(settings.audio.echo_canceller.tail_length)
         self.audio_sample_rate_button.clear()
@@ -1972,6 +1978,11 @@ class PreferencesWindow(base_class, ui_class, metaclass=QSingleton):
         text = self.audio_sample_rate_button.itemData(index)
         settings = SIPSimpleSettings()
         settings.audio.sample_rate = text
+        settings.save()
+
+    def _SH_EnableStereoButtonClicked(self, checked):
+        settings = SIPSimpleSettings()
+        settings.audio.enable_stereo = checked
         settings.save()
 
     def _SH_EnableEchoCancellingButtonClicked(self, checked):

@@ -70,6 +70,7 @@ from blink.screensharing.support import can_share_my_screen, can_view_screens, v
 from blink.resources import ApplicationData, Resources, IconManager, themed_icon, load_ui_type
 from blink.account_storage import AccountStorage, contact_picture, storage_account, valid_name
 from blink.avatars import avatar_icon, circular_icon
+from blink.stereo import StereoCalls, stereo_available
 from blink.sessions import SessionManager, StreamDescription
 from blink.message_envelopes import this_device_id
 from blink.pgp_keyids import address_keys
@@ -7103,6 +7104,7 @@ class ContactListView(QListView):
         self.actions.delete_permanently = QAction(translate("contact_list", "Delete Permanently"), self, triggered=self._AH_DeletePermanently)
         self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
+        self.actions.start_stereo_audio_call = QAction(translate("contact_list", "Start Stereo Audio Call"), self, triggered=self._AH_StartStereoAudioCall)
         self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction(translate("contact_list", "Start MSRP Chat"), self, triggered=self._AH_StartChatSession)
         self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
@@ -7226,6 +7228,13 @@ class ContactListView(QListView):
                     call_item.triggered.connect(partial(self._AH_StartAudioCall, uri))
                     call_submenu.addAction(call_item)
 
+                if stereo_available():
+                    call_submenu = menu.addMenu(translate('contact_list', 'Start Stereo Audio Call'))
+                    for uri in contact.uris:
+                        call_item = QAction(uri_label(uri), self)
+                        call_item.triggered.connect(partial(self._AH_StartStereoAudioCall, uri))
+                        call_submenu.addAction(call_item)
+
                 call_submenu = menu.addMenu(translate('contact_list', 'Start Video Call'))
                 call_submenu.setEnabled(not conference or conference_video_available())    # a room's video is WebRTC (blink.webrtc.videoroom)
                 for uri in contact.uris:
@@ -7268,6 +7277,8 @@ class ContactListView(QListView):
             else:
                 menu.addAction(self.actions.send_sms)
                 menu.addAction(self.actions.start_audio_call)
+                if stereo_available():       # Preferences, Audio: Enable Stereo Mode (blink/stereo.py)
+                    menu.addAction(self.actions.start_stereo_audio_call)
                 menu.addAction(self.actions.start_video_call)
                 menu.addAction(self.actions.send_files)
                 if vnc_screen_sharing_offered():
@@ -7276,6 +7287,7 @@ class ContactListView(QListView):
                 menu.addAction(self.actions.start_chat_session)
 
                 self.actions.start_audio_call.setEnabled(can_call)
+                self.actions.start_stereo_audio_call.setEnabled(can_call)
                 self.actions.start_video_call.setEnabled(can_call and (not conference or conference_video_available()))     # a room's video is WebRTC (blink.webrtc.videoroom)
                 self.actions.start_chat_session.setEnabled(can_call)
                 self.actions.send_sms.setEnabled(can_call and not conference)     # a room is joined (MSRP, RTP), it has no messages
@@ -7578,6 +7590,10 @@ class ContactListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
 
+    def _AH_StartStereoAudioCall(self, uri=None):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        StereoCalls().start(contact, uri or contact.uri)
+
     def _AH_StartVideoCall(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
@@ -7753,6 +7769,7 @@ class ContactSearchListView(QListView):
         self.actions.delete_selection = QAction(translate("contact_list", "Delete Selection"), self, triggered=self._AH_DeleteSelection)
         self.actions.undo_last_delete = QAction(translate("contact_list", "Undo Last Delete"), self, triggered=self._AH_UndoLastDelete)
         self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
+        self.actions.start_stereo_audio_call = QAction(translate("contact_list", "Start Stereo Audio Call"), self, triggered=self._AH_StartStereoAudioCall)
         self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction(translate("contact_list", "Start MSRP Chat"), self, triggered=self._AH_StartChatSession)
         self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
@@ -7818,6 +7835,8 @@ class ContactSearchListView(QListView):
         else:
             contact = selected_items[0]
             menu.addAction(self.actions.start_audio_call)
+            if stereo_available():       # Preferences, Audio: Enable Stereo Mode (blink/stereo.py)
+                menu.addAction(self.actions.start_stereo_audio_call)
             menu.addAction(self.actions.start_video_call)
             menu.addAction(self.actions.start_chat_session)
             menu.addAction(self.actions.send_sms)
@@ -7842,6 +7861,7 @@ class ContactSearchListView(QListView):
             can_call = account_manager.default_account is not None and contact.uri is not None
             can_transfer = contact.uri is not None and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
             self.actions.start_audio_call.setEnabled(can_call)
+            self.actions.start_stereo_audio_call.setEnabled(can_call)
             self.actions.start_video_call.setEnabled(can_call and (not is_conference_contact(contact) or conference_video_available()))     # a room's video is WebRTC (blink.webrtc.videoroom)
             self.actions.start_chat_session.setEnabled(can_call)
             conference = is_conference_contact(contact)
@@ -8011,6 +8031,10 @@ class ContactSearchListView(QListView):
         session_manager = SessionManager()
         session_manager.create_session(contact, uri or contact.uri, [StreamDescription('audio')])
 
+    def _AH_StartStereoAudioCall(self, uri=None):
+        contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        StereoCalls().start(contact, uri or contact.uri)
+
     def _AH_StartVideoCall(self, uri=None):
         contact = self.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
         session_manager = SessionManager()
@@ -8125,6 +8149,7 @@ class ContactDetailView(QListView):
         self.actions.make_uri_default = QAction(translate("contact_list", "Set Address As Default"), self, triggered=self._AH_MakeURIDefault)
         self.actions.send_sms = QAction(translate("contact_list", "Send Messages"), self, triggered=self._AH_SendSMS)
         self.actions.start_audio_call = QAction(translate("contact_list", "Start Audio Call"), self, triggered=self._AH_StartAudioCall)
+        self.actions.start_stereo_audio_call = QAction(translate("contact_list", "Start Stereo Audio Call"), self, triggered=self._AH_StartStereoAudioCall)
         self.actions.start_video_call = QAction(translate("contact_list", "Start Video Call"), self, triggered=self._AH_StartVideoCall)
         self.actions.start_chat_session = QAction(translate("contact_list", "Start MSRP Chat"), self, triggered=self._AH_StartChatSession)
         self.actions.send_files = QAction(translate("contact_list", "Send File(s)..."), self, triggered=self._AH_SendFiles)
@@ -8188,6 +8213,8 @@ class ContactDetailView(QListView):
             return
         menu.addAction(self.actions.send_sms)
         menu.addAction(self.actions.start_audio_call)
+        if stereo_available():       # Preferences, Audio: Enable Stereo Mode (blink/stereo.py)
+            menu.addAction(self.actions.start_stereo_audio_call)
         menu.addAction(self.actions.start_video_call)
         menu.addAction(self.actions.send_files)
         if vnc_screen_sharing_offered():
@@ -8206,6 +8233,7 @@ class ContactDetailView(QListView):
         can_call = account_manager.default_account is not None and contact_has_uris
         can_transfer = contact_has_uris and session_manager.active_session is not None and session_manager.active_session.state == 'connected'
         self.actions.start_audio_call.setEnabled(can_call)
+        self.actions.start_stereo_audio_call.setEnabled(can_call)
         self.actions.start_video_call.setEnabled(can_call and (not is_conference_contact(model.contact) or conference_video_available()))     # a room's video is WebRTC (blink.webrtc.videoroom)
         self.actions.start_chat_session.setEnabled(can_call)
         conference = is_conference_contact(model.contact)
@@ -8320,6 +8348,16 @@ class ContactDetailView(QListView):
             selected_uri = uri or contact.uri
         session_manager = SessionManager()
         session_manager.create_session(contact, selected_uri, [StreamDescription('audio')])
+
+    def _AH_StartStereoAudioCall(self, uri=None):
+        contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)
+        selected_indexes = self.selectionModel().selectedIndexes()
+        item = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else None
+        if isinstance(item, ContactURI):
+            selected_uri = item.uri
+        else:
+            selected_uri = uri or contact.uri
+        StereoCalls().start(contact, selected_uri)
 
     def _AH_StartVideoCall(self, uri=None):
         contact = self.contact_list.selectionModel().selectedIndexes()[0].data(Qt.ItemDataRole.UserRole)

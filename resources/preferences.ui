@@ -2145,7 +2145,7 @@
            <item row="0" column="1">
             <widget class="QComboBox" name="audio_input_device_button"/>
            </item>
-           <item row="6" column="0" colspan="4">
+           <item row="8" column="0" colspan="4">
             <spacer name="audio_spacer_2">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
@@ -2253,6 +2253,23 @@
             <widget class="QCheckBox" name="enable_echo_cancelling_button">
              <property name="text">
               <string>Enable Echo Cancelling</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="1" colspan="2">
+            <widget class="QCheckBox" name="enable_stereo_button">
+             <property name="text">
+              <string>Enable Stereo Mode</string>
+             </property>
+            </widget>
+           </item>
+           <item row="7" column="1" colspan="2">
+            <widget class="QLabel" name="stereo_note_label">
+             <property name="text">
+              <string>Adds Start Stereo Audio Call to the contact menus. A stereo call offers only Opus, and echo cancellation is off during stereo calls: use a headset.</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
              </property>
             </widget>
            </item>
@@ -4148,6 +4165,7 @@
   <tabstop>audio_sample_rate_button</tabstop>
   <tabstop>enable_echo_cancelling_button</tabstop>
   <tabstop>tail_length_slider</tabstop>
+  <tabstop>enable_stereo_button</tabstop>
   <tabstop>audio_codecs_list</tabstop>
   <tabstop>enable_answering_machine_button</tabstop>
   <tabstop>answer_delay</tabstop>
