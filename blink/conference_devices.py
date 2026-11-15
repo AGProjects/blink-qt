@@ -110,6 +110,22 @@ class Device(object):
         return name or ('WebRTC' if self.webrtc else None)
 
 
+def _has_audio(endpoint):
+    """Whether a leg carries audio itself (a SIP device), not only chat."""
+    for media in endpoint:
+        media_type = getattr(media, 'media_type', None)
+        if media_type is not None and getattr(media_type, 'value', media_type) == 'audio':
+            return True
+    return False
+
+
+def _other_device(chat_endpoint, gateway_endpoint):
+    """Whether a chat leg and a WebRTC leg say they are of different devices: both name theirs, and not the same."""
+    instance = normalize_id(_text(gateway_endpoint, 'instance_id'))
+    participant = normalize_id(_text(chat_endpoint, 'participant_id'))
+    return instance is not None and participant is not None and instance != participant
+
+
 def devices(user):
     """The devices of a conference-info <user>, in document order; one (without endpoints) when it tells none."""
     endpoints = [endpoint for endpoint in user if endpoint.entity is not None]
@@ -125,7 +141,10 @@ def devices(user):
             group.append(endpoint)
         else:
             unpaired.append(endpoint)
-    free = [group for group in groups if len(group) == 1]
+    # a leg left to pair with a WebRTC leg by its name or as the last one: a chat leg (its device's audio and video
+    # are in the video room), not a leg with audio of its own (a SIP device: Blink on a desktop next to the same
+    # account in the video room from a phone), nor one that names another device than the WebRTC leg does
+    free = [group for group in groups if len(group) == 1 and not _has_audio(group[0])]
     left = []
     for endpoint in unpaired:
         name = _display_text(endpoint)
@@ -135,7 +154,7 @@ def devices(user):
             free.remove(candidates[0])
         else:
             left.append(endpoint)
-    if len(left) == 1 and len(free) == 1:
+    if len(left) == 1 and len(free) == 1 and not _other_device(free[0][0], left[0]):
         free[0].append(left.pop())
     groups.extend([endpoint] for endpoint in left)
     return [Device(user, group) for group in groups]
