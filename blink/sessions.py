@@ -38,6 +38,20 @@ from zope.interface import implementer
 from sipsimple.account import Account, AccountManager, BonjourAccount
 from sipsimple.application import SIPApplication
 from sipsimple.audio import AudioConference, WavePlayer
+try:
+    from sipsimple.streams.rtp.audio import signal_level_to_dbov
+except ImportError:     # an SDK without RFC 6465 audio levels: the same conversion, for our own VU meters
+    import math as _math
+
+    def signal_level_to_dbov(level):
+        """A conference bridge level (pjmedia's u-law scale, 0 silence to 127 full scale) as -dBov (0 loudest, 127 silence)."""
+        level = max(0, min(127, int(level)))
+        if level == 0:
+            return 127
+        magnitude = ((((level & 0x0f) << 3) + 0x84) << ((level >> 4) & 0x07)) - 0x84
+        if magnitude <= 0:
+            return 127
+        return max(0, min(127, int(round(-20 * _math.log10(magnitude / 32768.0)))))
 from sipsimple.configuration.datatypes import Path
 from sipsimple.configuration.settings import SIPSimpleSettings
 from sipsimple.core import SIPCoreError, SIPURI, ToHeader
@@ -1691,11 +1705,17 @@ class SMPVerificationHandler(object):
 
 
 class ClientConference(object):
+    # how often the participants get the levels of who they hear (RFC 6465 CSRC audio levels)
+    csrc_levels_interval = 50   # ms
+
     def __init__(self):
         self.sessions = []
         self.stream_map = {}
         self.audio_conference = AudioConference()
         self.audio_conference.hold()
+        self._csrc_levels_timer = QTimer()
+        self._csrc_levels_timer.setInterval(self.csrc_levels_interval)
+        self._csrc_levels_timer.timeout.connect(self._send_csrc_levels)
 
     def add_session(self, session):
         audio_stream = session.streams.get('audio')
@@ -1703,12 +1723,58 @@ class ClientConference(object):
         self.stream_map[session] = audio_stream
         if audio_stream is not None:
             self.audio_conference.add(audio_stream)
+        if not self._csrc_levels_timer.isActive():
+            self._csrc_levels_timer.start()
 
     def remove_session(self, session):
         self.sessions.remove(session)
         audio_stream = self.stream_map.pop(session)
         if audio_stream is not None:
             self.audio_conference.remove(audio_stream)
+            self._set_csrc_levels(audio_stream, [])     # no longer mixed: it names nobody
+        if not self.sessions:
+            self._csrc_levels_timer.stop()
+
+    def _send_csrc_levels(self):
+        """Tell each participant whose audio it gets from the conference, and how loud (RFC 6465, and the left/right
+        companion on a stereo mixer): the others it hears, by the SSRC they send us, and us, by the SSRC we send it."""
+        streams = [stream for stream in self.stream_map.values() if stream is not None and stream.state == 'ESTABLISHED']
+        targets = [stream for stream in streams if getattr(stream, 'sends_csrc_levels', False)]     # False on an SDK without RFC 6465 levels
+        if not targets:
+            return
+        sources = []        # (stream or None for us, level, left, right)
+        for stream in streams:
+            if stream.on_hold or stream.muted:
+                continue
+            (tx_left, tx_right), (rx_left, rx_right) = stream.signal_level_channels
+            sources.append((stream, signal_level_to_dbov(max(rx_left, rx_right)), signal_level_to_dbov(rx_left), signal_level_to_dbov(rx_right)))
+        device = self.audio_conference.device
+        if not self.audio_conference.on_hold and device.producer_slot is not None and not device.mixer.muted:
+            try:
+                (tx_left, tx_right), (rx_left, rx_right) = device.mixer.get_signal_level_channels(device.producer_slot)
+            except Exception:
+                pass
+            else:
+                sources.append((None, signal_level_to_dbov(max(rx_left, rx_right)), signal_level_to_dbov(rx_left), signal_level_to_dbov(rx_right)))
+        sources.sort(key=lambda source: source[1])     # the loudest first
+        for target in targets:
+            levels = []
+            for stream, level, left, right in sources:
+                if stream is target:
+                    continue
+                csrc = target.ssrc if stream is None else stream.remote_ssrc
+                if csrc is not None:
+                    levels.append((csrc, level, left, right))
+            self._set_csrc_levels(target, levels[:15])
+
+    @staticmethod
+    def _set_csrc_levels(stream, levels):
+        if not hasattr(stream, 'set_csrc_levels'):
+            return
+        try:
+            stream.set_csrc_levels(levels)
+        except Exception as e:
+            log.warning('Could not set the conference audio levels of %s: %s' % (stream, e))
 
     def hold(self):
         self.audio_conference.hold()
@@ -1794,6 +1860,42 @@ def conference_has_files(item):
     return blink_session is not None and blink_session.is_conference and files_model is not None and files_model.rowCount() > 0
 
 
+VU_FLOOR_DBOV = 60     # -dBov shown as an empty VU meter; 0 dBov fills it
+VU_STEPS = 12          # the steps of a VU meter
+
+
+def dbov_vu(level):
+    """An RFC 6465 level (-dBov, 0 loudest, 127 silence) as the part of a VU meter that is lit, 0 to 1."""
+    return max(0.0, 1.0 - min(level, VU_FLOOR_DBOV) / VU_FLOOR_DBOV)
+
+
+def mixer_vu(level):
+    """A conference bridge level (AudioMixer.get_signal_level, 0-127) as the part of a VU meter that is lit."""
+    return dbov_vu(signal_level_to_dbov(level))
+
+
+def speaker_vu_pixmap(icon, levels, size, ratio):
+    """The audio icon of a participant with its VU meter at its right: a bar per channel, lit from the bottom."""
+    bar, gap = 3, 1
+    width = size + len(levels) * (bar + gap) + 1
+    pixmap = QPixmap(QSize(width, size) * ratio)
+    pixmap.setDevicePixelRatio(ratio)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.drawPixmap(0, 0, QIcon(Resources.get(icon)).pixmap(QSize(size, size), ratio))
+    height = size - 4
+    for index, level in enumerate(levels):
+        rect = QRectF(size + 1 + index * (bar + gap), 2, bar, height)
+        painter.fillRect(rect, QColor(128, 128, 128, 60))
+        lit = rect.adjusted(0, height * (1 - level), 0, 0)
+        if lit.height() > 0:
+            color = QColor(220, 60, 40) if level > 0.95 else QColor(230, 180, 30) if level > 0.8 else QColor(60, 180, 75)
+            painter.fillRect(lit, color)
+    painter.end()
+    return pixmap
+
+
 @implementer(IObserver)
 class ConferenceParticipant(object):
 
@@ -1822,6 +1924,8 @@ class ConferenceParticipant(object):
         self.direct_ids = []         # the participant_ids of its own SIP legs (its MSRP chat)
         self.this_device = False     # it is us, this Blink
         self.multi_device = False    # its account is in the room from more than one device
+        self.audio_ssrcs = set()     # the SSRCs of its audio, as the focus receives it (conference-info <src-id>)
+        self.audio_levels = None     # its VU meter (a fraction lit, per channel), from the focus' RFC 6465 levels; None: none
 
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
@@ -1890,11 +1994,17 @@ class ConferenceParticipant(object):
         if this_device is not None:
             self.this_device = this_device
         self.active_media.clear()
+        self.audio_ssrcs = set()
         for media in chain(*data):
             if media.media_type.value == 'message':
                 self.active_media.add('chat')
             else:
                 self.active_media.add(media.media_type.value)
+            if media.media_type.value == 'audio' and getattr(media, 'src_id', None) is not None:
+                try:
+                    self.audio_ssrcs.add(int(str(media.src_id.value)) & 0xffffffff)
+                except (TypeError, ValueError):
+                    pass
         audio_endpoints = [endpt for endpt in data if any(media.media_type == 'audio' for media in endpt)]
         self.on_hold = all(endpt.status == 'on-hold' for endpt in audio_endpoints) if audio_endpoints else False
         old_radios = {radio.entity: radio for radio in self.radios}
@@ -1914,6 +2024,15 @@ class ConferenceParticipant(object):
             if value != getattr(self, attr):
                 NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
                 break
+
+    def set_audio_levels(self, levels):
+        """Its VU meter: a fraction lit per channel (one or two), None for none. Quantized: a change of a step
+        repaints its row."""
+        if levels is not None:
+            levels = tuple(round(level * VU_STEPS) / VU_STEPS for level in levels)
+        if levels != self.audio_levels:
+            self.audio_levels = levels
+            NotificationCenter().post_notification('ConferenceParticipantDidChange', sender=self)
 
     def handle_notification(self, notification):
         handler = getattr(self, '_NH_%s' % notification.name, Null)
@@ -1935,11 +2054,85 @@ class ServerConference(object):
         self.participants = {}
         self.pending_additions = set()
         self.pending_removals = set()
+        self.bridge_ssrcs = set()       # the SSRCs of the room's audio bridge: the WebRTC participants' audio, mixed
 
         self.shared_files = []
 
+        # the participants' VU meters, from the RFC 6465 audio levels the focus sends in our audio
+        self._levels_timer = QTimer()
+        self._levels_timer.setInterval(self.levels_interval)
+        self._levels_timer.timeout.connect(self._update_audio_levels)
+        self._levels_log_state = None   # what was last logged about the RFC 6465 levels: logged on each change
+
         notification_center = NotificationCenter()
         notification_center.add_observer(self, sender=session)
+
+    levels_interval = 100       # ms between VU meter updates
+    levels_max_age = 1000       # ms: levels older than this (the focus stopped sending them) are silence
+
+    def _update_audio_levels(self):
+        """Each participant's VU meter: the level the focus gives (RFC 6465) for the SSRC of its audio
+        (conference-info <src-id>); ours, which the focus does not mix back to us, from what we send."""
+        session = self.session
+        stream = session.streams.get('audio') if session is not None else None
+        if stream is None or not getattr(stream, 'receives_csrc_levels', False):
+            if stream is not None and stream.state == 'ESTABLISHED':
+                if not hasattr(stream, 'receives_csrc_levels'):
+                    self._log_levels('sdk', 'python3-sipsimple has no RFC 6465 audio level support')
+                else:
+                    self._log_levels('not-negotiated', 'the focus did not negotiate RFC 6465 audio levels (csrc-audio-level extmap) for our audio: no VU meters')
+            for participant in self.participants.values():
+                participant.set_audio_levels(None)
+            return
+        sources, age = stream.csrc_levels
+        fresh = age is not None and age <= self.levels_max_age
+        level_id, lr_id = getattr(stream, '_rx_csrc_level_ext', (0, 0))
+        negotiated = f'csrc-audio-level extmap {level_id}' + (f', csrc-audio-level-lr extmap {lr_id}' if lr_id else ', no left/right levels')
+        if age is None:
+            self._log_levels('negotiated', f'RFC 6465 audio levels negotiated ({negotiated}), none received yet')
+        elif not fresh:
+            self._log_levels('stale', f'RFC 6465 audio levels stopped: the last came {age} ms ago')
+        else:
+            mapped = {ssrc for participant in self.participants.values() for ssrc in participant.audio_ssrcs} | self.bridge_ssrcs
+            csrcs = [csrc for csrc, level, left, right in sources]
+            unknown = [csrc for csrc in csrcs if csrc not in mapped]
+            missing = sum(1 for participant in self.participants.values() if not participant.audio_ssrcs and 'audio' in participant.active_media
+                          and not (participant.webrtc and self.bridge_ssrcs))
+            self._log_levels(('receiving', len(csrcs), len(unknown), missing),
+                             f'RFC 6465 audio levels received ({negotiated}): {len(csrcs)} source(s) {csrcs}'
+                             + (f', {len(unknown)} not in conference-info <src-id> {unknown}' if unknown else ', all matched to participants')
+                             + (f', {missing} audio participant(s) without <src-id>' if missing else ''))
+        levels = {csrc: (level, left, right) for csrc, level, left, right in sources} if fresh else {}
+        stereo = bool(getattr(stream, 'stereo_active', False))
+        our_ssrc = stream.ssrc
+        for participant in self.participants.values():
+            ssrcs = participant.audio_ssrcs
+            if not ssrcs and participant.webrtc and not participant.this_device:
+                # in the video room: its audio reaches the room through the bridge, mixed with the other WebRTC ones'
+                ssrcs = self.bridge_ssrcs
+            if not ssrcs:
+                participant.set_audio_levels(None)
+                continue
+            if our_ssrc is not None and our_ssrc in ssrcs:
+                (tx_left, tx_right), _ = stream.signal_level_channels
+                if stream.muted or stream.on_hold:
+                    tx_left = tx_right = 0
+                participant.set_audio_levels((mixer_vu(tx_left), mixer_vu(tx_right)) if stereo else (mixer_vu(max(tx_left, tx_right)),))
+                continue
+            found = [levels[ssrc] for ssrc in ssrcs if ssrc in levels]
+            if not found:
+                participant.set_audio_levels((0.0, 0.0) if stereo else (0.0,))
+                continue
+            level, left, right = min(found)     # the loudest of its audio streams
+            participant.set_audio_levels((dbov_vu(left), dbov_vu(right)) if stereo else (dbov_vu(level),))
+
+    def _log_levels(self, state, text):
+        """Log what is known about the focus' RFC 6465 audio levels, once per change."""
+        if state == self._levels_log_state:
+            return
+        self._levels_log_state = state
+        party, info = self._describe()
+        ActivityLog().info(f'[conference] {party}: {text} ({info})')
 
     def participant_for(self, uri, prefer=()):
         """A participant of the account uri (sip: stripped): one in prefer if any, else the first of its devices; None for none."""
@@ -2020,14 +2213,18 @@ class ServerConference(object):
             ActivityLog().info(f'[conference] {party} is a conference focus (isfocus in its Contact), subscribing to its conference-info ({info})')
             if self.session.contact_uri is not None:
                 remember_focus(self.session.contact_uri.uri, self.session.account)
+            self._levels_log_state = None
+            self._levels_timer.start()
 
     def _NH_BlinkSessionDidEnd(self, notification):
+        self._levels_timer.stop()
         if self.sip_session is not None:
             notification.center.remove_observer(self, sender=self.sip_session)
         self.sip_session = None
         self.participants.clear()
 
     def _NH_BlinkSessionWasDeleted(self, notification):
+        self._levels_timer.stop()
         notification.center.remove_observer(self, sender=notification.sender)
         self.session = None
 
@@ -2042,7 +2239,17 @@ class ServerConference(object):
         from blink.contacts import URIUtils
         conference_info = notification.data.conference_info
         users = dict((self.sip_prefix_re.sub('', str(user.entity)), user) for user in notification.data.conference_info.users)
-        # the room's audio bridge (sylk-janus-audio-bridge: the WebRTC side of the room) is plumbing, not a participant
+        # the room's audio bridge (sylk-janus-audio-bridge: the WebRTC side of the room) is plumbing, not a participant;
+        # the SSRC of its audio (<src-id>) is the video room's mix: the level of the WebRTC participants (RFC 6465)
+        self.bridge_ssrcs = set()
+        for uri, user in users.items():
+            if re.search(r';app=[^;]*bridge', uri):
+                for media in chain(*user):
+                    if media.media_type is not None and media.media_type.value == 'audio' and getattr(media, 'src_id', None) is not None:
+                        try:
+                            self.bridge_ssrcs.add(int(str(media.src_id.value)) & 0xffffffff)
+                        except (TypeError, ValueError):
+                            pass
         users = {uri: user for uri, user in users.items() if not re.search(r';app=[^;]*bridge', uri)}
 
         # a participant per device of each account (blink.conference_devices), known again on each update by
@@ -4236,6 +4443,14 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
         self.chat_icon.installEventFilter(self)
         self.video_icon.installEventFilter(self)
         self.screen_sharing_icon.installEventFilter(self)
+        # a stereo call (blink/stereo.py): the stereo symbol before the audio icon, as in the audio tile
+        self.stereo_icon = QLabel(self)
+        self.stereo_icon.setObjectName('stereo_icon')
+        self.stereo_icon.setToolTip(translate('sessions', 'Stereo audio (Opus stereo, no echo cancellation)'))
+        self.stereo_icon.hide()
+        self.stereo_icon.installEventFilter(self)
+        self.stream_icons_layout.insertWidget(self.stream_icons_layout.indexOf(self.audio_icon), self.stereo_icon)
+        self._stereo_color = None
         self.widget_layout.invalidate()
         self.widget_layout.activate()
         # self.setAttribute(103) # Qt.WidgetAttribute.WA_DontShowOnScreen == 103 and is missing from pyqt, but is present in qt and pyside -Dan
@@ -4309,6 +4524,13 @@ class ChatSessionWidget(ListItemThemeMixin, base_class, ui_class):
         from blink.webrtc import active_videoroom
         webrtc = contact_uri is not None and active_videoroom(contact_uri.uri) is not None
         self.audio_icon.setVisible(webrtc or 'audio' in session.blink_session.streams)
+        stereo = not webrtc and 'audio' in session.blink_session.streams and bool(getattr(session.blink_session.info.streams.audio, 'stereo', False))
+        if stereo:
+            color = self.palette().color(self.foregroundRole())
+            if color != self._stereo_color:
+                self._stereo_color = color
+                self.stereo_icon.setPixmap(stereo_pixmap(color, 12, screen_ratio()))
+        self.stereo_icon.setVisible(stereo)
         self.video_icon.setVisible(webrtc or 'video' in session.blink_session.streams)
         self.screen_sharing_icon.setVisible('screen-sharing' in session.blink_session.streams)
         self.unread_label.setVisible(bool(session.blink_session.contact.unread_messages))
@@ -4558,6 +4780,14 @@ class ChatSessionItem(object):
     def _NH_BlinkSessionDidChangeHoldState(self, notification):
         self.widget.hold_icon.setVisible(self.blink_session.on_hold)
         notification.center.post_notification('ChatSessionItemDidChange', sender=self)
+
+    def _NH_BlinkSessionInfoUpdated(self, notification):
+        # the stereo symbol: the audio is stereo once its stream is (AudioStreamInfo.stereo)
+        if 'media' in notification.data.elements:
+            stereo = bool(getattr(self.blink_session.info.streams.audio, 'stereo', False))
+            if stereo != self.widget.stereo_icon.isVisibleTo(self.widget):
+                self.widget.update_content(self)
+                notification.center.post_notification('ChatSessionItemDidChange', sender=self)
 
     def _NH_BlinkSessionDidAddParticipant(self, notification):
         self.widget.update_content(self)    # the participants count on the second line
@@ -7058,6 +7288,15 @@ class ConferenceParticipantWidget(ChatSessionWidget):
             self.media_labels[media] = label
 
     def update_content(self, participant):
+        audio_levels = participant.audio_levels
+        if audio_levels != getattr(self, '_audio_levels', None):
+            self._audio_levels = audio_levels
+            icon = dict(self.media_icons)['audio']
+            size = QSize(self.media_icon_size, self.media_icon_size)
+            if audio_levels is None:
+                self.media_labels['audio'].setPixmap(QIcon(Resources.get(icon)).pixmap(size, screen_ratio()))
+            else:
+                self.media_labels['audio'].setPixmap(speaker_vu_pixmap(icon, audio_levels, self.media_icon_size, screen_ratio()))
         self.unread_label.hide()    # a chat session badge, nothing to count for a participant
         self.setDisabled(participant.pending_request)
         self.name_label.setText(participant.name)
@@ -7164,6 +7403,10 @@ class ConferenceParticipantItem(object):
     @property
     def radio_state(self):
         return self.participant.radio_state
+
+    @property
+    def audio_levels(self):
+        return self.participant.audio_levels
 
     @property
     def icon(self):
@@ -8247,6 +8490,16 @@ class ConferenceDialog(base_class, ui_class):
         self.media_layout.removeWidget(self.chat_button)
         self.media_layout.insertWidget(0, self.chat_button)
         self.media_layout.insertWidget(self.media_layout.indexOf(self.audio_button) + 1, self.video_button)
+        # Mono or Stereo, next to Audio: the room's SIP audio in stereo (Opus stereo, blink.stereo) when chosen
+        from PyQt6.QtWidgets import QComboBox as _QComboBox
+        self.channels_combo = _QComboBox(self)
+        self.channels_combo.addItem(translate('conference_dialog', 'Mono'), 'mono')
+        self.channels_combo.addItem(translate('conference_dialog', 'Stereo'), 'stereo')
+        self.channels_combo.setSizeAdjustPolicy(_QComboBox.SizeAdjustPolicy.AdjustToContents)
+        stereo = ui_settings().value('conference_dialog/stereo', False)
+        self.channels_combo.setCurrentIndex(1 if str(stereo).lower() in ('true', '1') else 0)
+        self.channels_combo.currentIndexChanged.connect(lambda index: ui_settings().setValue('conference_dialog/stereo', self.channels_combo.currentData() == 'stereo'))
+        self.media_layout.insertWidget(self.media_layout.indexOf(self.audio_button) + 1, self.channels_combo)
         self.chat_button.setChecked(True)
         self.chat_button.setEnabled(False)
         self.chat_button.setToolTip(translate('conference_dialog', 'The room\'s chat is always joined'))
@@ -8373,6 +8626,8 @@ class ConferenceDialog(base_class, ui_class):
 
         self.audio_button.clicked.connect(self._SH_MediaButtonClicked)
         self.chat_button.clicked.connect(self._SH_MediaButtonClicked)
+        self.audio_button.toggled.connect(self._update_channels_combo)
+        self.video_button.toggled.connect(self._update_channels_combo)
         self.room_button.editTextChanged.connect(self._SH_RoomButtonEditTextChanged)
         self.accepted.connect(self.join_conference)
         geometry = ui_settings().value("conference_dialog/geometry")
@@ -8414,6 +8669,28 @@ class ConferenceDialog(base_class, ui_class):
 
     def _SH_MediaButtonClicked(self, checked):
         self._update_accept_button()
+
+    def _stereo_chosen(self):
+        """Whether the room's audio is joined in stereo: Stereo chosen, for SIP audio (not with Video, which is WebRTC)."""
+        from blink.stereo import stereo_available
+        return (self.channels_combo.currentData() == 'stereo' and stereo_available() and self.audio_button.isChecked()
+                and not (self.video_button.isChecked() and not self.video_button.isHidden()))
+
+    def _update_channels_combo(self, *args):
+        from blink.stereo import stereo_available
+        settings = SIPSimpleSettings()
+        if not hasattr(settings.audio, 'stereo'):
+            self.channels_combo.setEnabled(False)
+            self.channels_combo.setToolTip(translate('conference_dialog', 'Stereo audio is not supported by this SDK'))
+        elif not stereo_available():
+            self.channels_combo.setEnabled(False)
+            self.channels_combo.setToolTip(translate('conference_dialog', 'Stereo needs Enable Stereo Mode in the audio preferences'))
+        elif self.video_button.isChecked() and not self.video_button.isHidden():
+            self.channels_combo.setEnabled(False)
+            self.channels_combo.setToolTip(translate('conference_dialog', 'With video the audio goes over WebRTC: Mono or Stereo is for SIP audio'))
+        else:
+            self.channels_combo.setEnabled(self.audio_button.isChecked())
+            self.channels_combo.setToolTip(translate('conference_dialog', 'The room\'s audio in mono, or in stereo (Opus stereo, no echo cancellation)'))
 
     def _uncheck_network_cameras(self):
         """Another room: the network cameras are not sent there unless chosen again."""
@@ -8527,6 +8804,7 @@ class ConferenceDialog(base_class, ui_class):
         self._fill_profiles()       # no profile chosen: the last room, as it was joined
         self._load_video_sources()
         self._update_media_labels()
+        self._update_channels_combo()
         self._update_accept_button()
         self.raise_()
         super(ConferenceDialog, self).show()
@@ -8627,6 +8905,8 @@ class ConferenceDialog(base_class, ui_class):
                 self._applying_profile = False
         self.audio_button.setChecked(bool(profile.get('audio', True)))
         self.video_button.setChecked(bool(profile.get('video', True)))
+        if profile.get('stereo') is not None:
+            self.channels_combo.setCurrentIndex(1 if profile['stereo'] else 0)
         self.invite_list.clear()
         self._add_invitees([(key, name) for key, name in profile.get('invitees') or [] if key])
         if profile.get('sources') is not None:
@@ -8645,6 +8925,7 @@ class ConferenceDialog(base_class, ui_class):
         invitees = [[item.data(Qt.ItemDataRole.UserRole), item.data(NameRole) or ''] for item in (self.invite_list.item(number) for number in range(self.invite_list.count()))]
         sources = self._checked_video_source_keys()
         return dict(name=name, room=self.room_button.currentText().strip(), audio=self.audio_button.isChecked(), video=self.video_button.isChecked(),
+                    stereo=self.channels_combo.currentData() == 'stereo',
                     invitees=invitees, sources=sources, follow_me=self.follow_me_combo.currentData())
 
     def _SH_ProfileSaveClicked(self):
@@ -9020,6 +9301,9 @@ class ConferenceDialog(base_class, ui_class):
         # moment, and a changed room unchecks the network cameras
         invitees = self._invitees()
         audio, video = self.audio_button.isChecked(), self.video_button.isChecked() and not self.video_button.isHidden()
+        self._join_stereo = self._stereo_chosen()
+        if audio and self.channels_combo.currentData() == 'stereo' and not self._join_stereo:
+            ActivityLog().info(f'[conference] Stereo chosen for {conference_uri}, joined in mono: {self.channels_combo.toolTip() or "not available"}')
         sources = self._chosen_video_sources() if video else None
         if video:
             self._save_checked_video_sources()
@@ -9088,6 +9372,17 @@ class ConferenceDialog(base_class, ui_class):
                 streams.append(StreamDescription('audio'))
             if self.chat_button.isChecked():
                 streams.append(StreamDescription('chat'))
+            if audio and getattr(self, '_join_stereo', False):
+                # stereo: the SDK switched to stereo first (blink.stereo), the session made once the stereo mixer is there
+                ActivityLog().info(f'[conference] Join {sip_uri} with stereo audio' + (f', inviting {", ".join(invitees)}' if invitees else ''))
+                from blink.stereo import StereoCalls
+                inviters = self._inviters
+
+                def joined(session):
+                    if invitees and session is not None:
+                        inviters.add(ConferenceInviter(session, account, invitees, inviters))
+                StereoCalls().start(contact, contact_uri, account=account, streams=streams, on_session=joined)
+                return
             ActivityLog().info(f'[conference] Join {sip_uri}' + (f', inviting {", ".join(invitees)}' if invitees else ''))
         session = session_manager.create_session(contact, contact_uri, streams, account=account) if streams else None
         if session is not None and video_room is not None:

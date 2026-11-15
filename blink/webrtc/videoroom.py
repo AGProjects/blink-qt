@@ -17,6 +17,9 @@ what is played (webrtcdsp/webrtcechoprobe allow one probe per process):
     webrtcbin (feed) -> decodebin -+-> video: convert -> appsink -> the tile
                                    +-> audio: convert/resample -> audiomixer -> webrtcechoprobe -> speakers
 
+AG Podcast Mixer chosen as the input (AG CuteMusic running): the microphone is an appsrc reading the link's
+to-call ring and the speakers an appsink writing from-call (blink.webrtc.podcast_mixer).
+
 The camera is the SDK's (SIPApplication.video_device), read through a frame
 renderer like any other view of it, so the camera chosen in Blink, the screen
 included, is what the room sees.
@@ -466,6 +469,26 @@ def _contact_name(uri):
 SPEAKING_DB = -38              # dBFS peak of decoded audio (GStreamer level) above which a participant speaks
 SPEAKING_SIP_LEVEL = 25        # the same for the room's audio levels of SIP participants (the mixer's 0-255 scale)
 SPEAKING_HOLD = 0.6            # s speaking lasts after the last loud level, so a tile does not flicker between words
+VU_FLOOR_DB = -60              # dBFS shown as an empty VU meter; 0 dBFS fills it
+SIP_LEVEL_DB = 48              # the mixer's level (0-127, u-law: 8 segments of 6 dB) spans this many dB below full scale
+
+
+def vu_fraction(db):
+    """A level in dBFS as the part of a VU meter that is lit, 0 to 1."""
+    if db is None or db <= VU_FLOOR_DB:
+        return 0.0
+    return min(1.0, (db - VU_FLOOR_DB) / -VU_FLOOR_DB)
+
+
+def sip_level_db(level):
+    """The mixer's level (SylkServer's room audio levels, 0-127 on pjmedia's u-law scale) in dBFS, None for silence."""
+    try:
+        level = float(level)
+    except (TypeError, ValueError):
+        return None
+    if level <= 0:
+        return None
+    return (min(level, 127.0) / 127.0 - 1.0) * SIP_LEVEL_DB
 LEVEL_INTERVAL = 150 * 1000000 # ns between GStreamer level messages
 
 
@@ -475,6 +498,7 @@ class Participant(QObject):
     frameReady = pyqtSignal(QImage)     # emitted on a streaming thread; connections from the GUI are queued
     changed = pyqtSignal()
     speakingChanged = pyqtSignal(bool)  # from the level of its audio (WebRTC) or the room's audio levels (SIP)
+    levelsChanged = pyqtSignal()        # self.levels: the VU meter of its tile
 
     def __init__(self, publisher):
         super(Participant, self).__init__()
@@ -497,6 +521,7 @@ class Participant(QObject):
         self.stats = {}             # (type, kind) -> fields, from its webrtcbin's get-stats (the info panel)
         self.speaking = False
         self._speaking_until = 0.0
+        self.levels = []            # its audio's level per channel (one, or left and right), 0 to 1 of a VU meter
         self.webrtcbin = None
         self.elements = []          # what this feed added to the pipeline
         self.mixer_pads = []
@@ -538,6 +563,13 @@ class Participant(QObject):
             self.speaking = speaking
             self.speakingChanged.emit(speaking)
 
+    def set_levels(self, levels):
+        """GUI thread: the level of each channel of its audio, 0 to 1 (vu_fraction)."""
+        levels = list(levels or [])
+        if levels != self.levels:
+            self.levels = levels
+            self.levelsChanged.emit()
+
     def update(self, publisher):
         if 'muted' in publisher and publisher.get('muted') is not None and bool(publisher['muted']) != self.muted:
             self.muted = bool(publisher['muted'])
@@ -560,6 +592,7 @@ class VideoroomSession(QObject):
     raisedHandsChanged = pyqtSignal(object)     # publisher ids with a raised hand (ours is self.id)
     mutedByOther = pyqtSignal(str)              # who muted everyone (our microphone muted with them)
     speakingChanged = pyqtSignal(bool)          # our own microphone: speaking or not (after mute)
+    levelsChanged = pyqtSignal(object)          # our own microphone: its level per channel, 0 to 1 (after mute)
     inviteStatus = pyqtSignal(str, str, int, str)   # uri, state (progress, success, failed), SIP code, reason
 
     def __init__(self, account, room, audio=True, video=True, target=None):
@@ -594,6 +627,7 @@ class VideoroomSession(QObject):
         self._mixer = None
         self._volume = None
         self._camera_src = None
+        self._podcast_mixer = None      # (MixerSource, MixerSink): AG CuteMusic's mixer chosen (podcast_mixer.py)
         self._camera_caps = None
         self._camera_renderer = None
         self._blurring = False      # the camera comes from blink.webrtc.background_blur
@@ -699,6 +733,12 @@ class VideoroomSession(QObject):
             pipeline, self.pipeline = self.pipeline, None
             pipeline.set_state(Gst.State.NULL)
             pipeline.get_bus().set_sync_handler(None, None)
+        if getattr(self, '_podcast_mixer', None) is not None:
+            (source, sink), self._podcast_mixer = self._podcast_mixer, None
+            source.stop()
+            sink.stop()
+            self.log(f'AG Podcast Mixer: {source.underruns} underruns and {source.drops} drops from to-call, '
+                     f'{sink.dropped_frames} frames dropped writing from-call')
         self.publisher = None
         if self.connection is not None:
             try:
@@ -736,8 +776,16 @@ class VideoroomSession(QObject):
         if _has('webrtcechoprobe'):
             playback.append(_make('webrtcechoprobe', 'echoprobe'))
         from blink import cutemusic
-        if cutemusic.selected() and cutemusic.running() and _has('pulsesink'):     # AG CuteMusic's mixer: into its BLINK strip
-            playback.append(_make('pulsesink', 'speakers', device=cutemusic.SINK))
+        self._podcast_mixer = None
+        if cutemusic.selected() and cutemusic.running():       # AG CuteMusic's mixer: the link's rings (podcast_mixer.py)
+            from blink.webrtc import podcast_mixer
+            try:
+                self._podcast_mixer = podcast_mixer.open_link(Gst, _make)
+            except (OSError, ValueError) as e:
+                self.log(f'{cutemusic.DEVICE} chosen, but its rings cannot be used ({e}): the system default devices instead', 'warning')
+        if self._podcast_mixer is not None:
+            playback += [_make('audioconvert'), _make('audioresample'), self._podcast_mixer[1].element]    # into its BLINK strip
+            self.log(f'audio through {cutemusic.DEVICE} ({cutemusic.LINK_DIR})')
         else:
             playback.append(_make('autoaudiosink', 'speakers'))
         self._add_chain(playback)
@@ -754,9 +802,8 @@ class VideoroomSession(QObject):
         # from an SSRC it was not told, and the offer is made before the microphone has produced caps
         import random
         self._audio_ssrc = random.randint(1, 0xffffffff)
-        from blink import cutemusic
-        if cutemusic.selected() and cutemusic.running() and _has('pulsesrc'):      # AG CuteMusic's mixer: its karaoke
-            source = _make('pulsesrc', 'microphone', device=cutemusic.SOURCE)
+        if self._podcast_mixer is not None:        # AG CuteMusic's mixer: its karaoke
+            source = self._podcast_mixer[0].element
         else:
             source = _make('autoaudiosrc', 'microphone')
         microphone = [source, _make('audioconvert'), _make('audioresample')]
@@ -806,6 +853,8 @@ class VideoroomSession(QObject):
         self.log(f'offering video {", ".join(name for name, pt in sorted(offered, key=lambda item: -item[1]))}')
 
         self.pipeline.set_state(Gst.State.PLAYING)
+        if self._podcast_mixer is not None:
+            self._podcast_mixer[0].start()
 
         promise = Gst.Promise.new_with_change_func(self._on_offer_created, None)
         webrtcbin.emit('create-offer', None, promise)
@@ -1285,16 +1334,25 @@ class VideoroomSession(QObject):
                     peaks = structure.get_value('peak')
                     peak = max(peaks) if peaks else -100.0
                 except (TypeError, ValueError):
-                    peak = -100.0
-                call_in_gui_thread(self._level, message.src.get_name()[6:], peak > SPEAKING_DB)
+                    peaks, peak = [], -100.0
+                try:
+                    decays = list(structure.get_value('decay') or peaks)     # the peak, falling slowly: what a VU meter shows
+                except (TypeError, ValueError):
+                    decays = list(peaks or [])
+                levels = [vu_fraction(db) for db in decays]
+                call_in_gui_thread(self._level, message.src.get_name()[6:], peak > SPEAKING_DB, levels)
         elif message.type == Gst.MessageType.WARNING:
             warning, debug = message.parse_warning()
             call_in_gui_thread(self.log, f'GStreamer warning in {message.src.get_name() if message.src else "?"}: {warning.message}', 'debug')
         return Gst.BusSyncReply.DROP
 
-    def _level(self, feed, loud):
+    def _level(self, feed, loud, levels=None):
         if feed == 'self':
             loud = loud and not self.audio_muted
+            levels = [0.0] * len(levels or []) if self.audio_muted else list(levels or [])
+            if levels != getattr(self, 'levels', None):
+                self.levels = levels
+                self.levelsChanged.emit(levels)
             now = monotonic()
             if loud:
                 self._speaking_until = now + SPEAKING_HOLD
@@ -1306,6 +1364,8 @@ class VideoroomSession(QObject):
         participant = self.feeds.get(feed)
         if participant is not None:
             participant.set_level(loud)
+            if levels is not None:
+                participant.set_levels(levels)
 
     def _EH_conference_audio_levels(self, message):
         # SIP participants: the mixer's levels, rx being what comes from them (their speech)
@@ -1321,6 +1381,11 @@ class VideoroomSession(QObject):
                 participant.set_level(float(level) > SPEAKING_SIP_LEVEL)
             except (TypeError, ValueError):
                 pass
+            # its VU meter: left and right in a stereo room (rx_peak_lr, SylkServer with stereo rooms), else one
+            channels = entry.get('rx_peak_lr') or entry.get('rx_lr')
+            if not (isinstance(channels, (list, tuple)) and len(channels) == 2):
+                channels = [level]
+            participant.set_levels([vu_fraction(sip_level_db(value)) for value in channels])
 
     def _bus_error(self, source, text, debug):
         if self.state == 'terminated':

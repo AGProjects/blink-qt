@@ -281,7 +281,9 @@ class RTPLog(object, metaclass=Singleton):
             else:
                 text += '%s %s RTP endpoints %s:%d <-> %s:%d\n' % (when, media, stream.local_rtp_address, stream.local_rtp_port, stream.remote_rtp_address, stream.remote_rtp_port)
         if stream.codec and stream.sample_rate:
-            text += '%s %s call established using %s codec at %sHz\n' % (when, media, _text(stream.codec), stream.sample_rate)
+            text += '%s %s call established using %s codec at %sHz%s\n' % (when, media, _text(stream.codec), stream.sample_rate, _channels_text(stream))
+        if stream.type == 'audio':
+            text += '%s Audio levels (RFC 6465): %s\n' % (when, _csrc_levels_text(stream))
         if stream.encryption.active:
             text += '%s RTP %s stream is encrypted with %s (%s)\n' % (when, stream.type, stream.encryption.type, _text(stream.encryption.cipher))
         # the account's setting verbatim: the preferences label can read "disabled" for a stored sdes_optional
@@ -403,7 +405,7 @@ class RTPLog(object, metaclass=Singleton):
         if stream.local_rtp_address and stream.local_rtp_port and stream.remote_rtp_address and stream.remote_rtp_port:
             text += '%s %s RTP endpoints %s:%d <-> %s:%d\n' % (notification.datetime, media, stream.local_rtp_address, stream.local_rtp_port, stream.remote_rtp_address, stream.remote_rtp_port)
         if stream.codec and stream.sample_rate:
-            text += '%s %s call established using %s codec at %sHz\n' % (notification.datetime, media, _text(stream.codec), stream.sample_rate)
+            text += '%s %s call established using %s codec at %sHz%s\n' % (notification.datetime, media, _text(stream.codec), stream.sample_rate, _channels_text(stream))
         self.write(text)
 
     def _NH_RTPStreamICENegotiationDidSucceed(self, notification):
@@ -501,3 +503,35 @@ class RTPLog(object, metaclass=Singleton):
                     self.write('%s     %s stream (codec=%s) — %s' % (when, kind, codec, reason))
                 except (TypeError, ValueError):
                     pass
+
+
+def _channels_text(stream):
+    """, in stereo / , in mono for an audio stream (stereo: a stereo mixer, Opus and the peer asking for stereo)."""
+    if stream.type != 'audio':
+        return ''
+    stereo = getattr(stream, 'stereo_active', None)
+    if stereo is None:
+        return ''
+    if stereo:
+        return ', in stereo'
+    mixer_channels = getattr(getattr(stream, 'mixer', None), 'channel_count', 1)
+    asked = getattr(stream, 'stereo', None)
+    if asked and mixer_channels != 2:
+        return ', in mono (stereo asked, but the audio mixer is mono)'
+    if asked or mixer_channels == 2:
+        return ', in mono (stereo asked, the peer did not answer stereo Opus)'
+    return ', in mono'
+
+
+def _csrc_levels_text(stream):
+    """Whether the participants' levels (RFC 6465) were negotiated for this audio stream, and how."""
+    if not hasattr(stream, 'receives_csrc_levels'):
+        return 'not supported by this SDK'
+    rx = getattr(stream, '_rx_csrc_level_ext', (0, 0))
+    tx = getattr(stream, '_csrc_level_ext', (0, 0))
+    parts = []
+    if rx[0]:
+        parts.append('received (extmap %d%s)' % (rx[0], ', left/right extmap %d' % rx[1] if rx[1] else ''))
+    if tx[0]:
+        parts.append('sent (extmap %d%s)' % (tx[0], ', left/right extmap %d' % tx[1] if tx[1] else ''))
+    return ', '.join(parts) if parts else 'not negotiated by the remote party'

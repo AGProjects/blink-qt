@@ -88,6 +88,50 @@ def _paint_speaking(painter, rect, compact=False):
     painter.drawRoundedRect(rect.adjusted(width / 2, width / 2, -width / 2, -width / 2), TILE_RADIUS, TILE_RADIUS)
 
 
+VU_SEGMENTS = 12           # LEDs of a VU meter
+VU_YELLOW = 0.7            # the part of the meter from which its LEDs are yellow
+VU_RED = 0.9               # and red
+VU_COLORS = (QColor(52, 199, 89), QColor(255, 204, 0), QColor(255, 59, 48))
+
+
+def _paint_vu_meter(painter, rect, levels, corner, muted=False):
+    """A LED VU meter in a tile: a column of LEDs per channel (one, or left and right), lit to each channel's
+    level (0 to 1). In the corner across from the name pill (its other side, the other edge): clear of the
+    name and of the raised hand badge, which sits beside the name."""
+    if not levels:
+        return
+    channels = levels[:2]
+    height = max(36.0, min(rect.height() * 0.32, 110.0))
+    led_width, gap = 6.0, 2.0
+    led_gap = 1.5
+    padding = 4.0
+    width = len(channels) * led_width + (len(channels) - 1) * gap + 2 * padding
+    vertical, horizontal = corner
+    x = rect.left() + NAME_PILL_MARGIN if horizontal == 'right' else rect.right() - NAME_PILL_MARGIN - width
+    y = rect.bottom() - NAME_PILL_MARGIN - height if vertical == 'top' else rect.top() + NAME_PILL_MARGIN
+    painter.save()
+    painter.setClipping(False)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(0, 0, 0, 140))
+    painter.drawRoundedRect(QRectF(x, y, width, height), 4, 4)
+    # fewer LEDs in a small tile, each at least 3 pixels high
+    segments = max(6, min(VU_SEGMENTS, int((height - 2 * padding + led_gap) / (3 + led_gap))))
+    led_height = (height - 2 * padding - (segments - 1) * led_gap) / segments
+    for index, level in enumerate(channels):
+        lit = 0 if muted else int(round(max(0.0, min(1.0, level)) * segments))
+        left = x + padding + index * (led_width + gap)
+        for segment in range(segments):
+            fraction = (segment + 1) / segments
+            color = VU_COLORS[2] if fraction > VU_RED else VU_COLORS[1] if fraction > VU_YELLOW else VU_COLORS[0]
+            if segment >= lit:
+                color = QColor(color)
+                color.setAlpha(45)
+            top = y + height - padding - (segment + 1) * led_height - segment * led_gap
+            painter.setBrush(color)
+            painter.drawRoundedRect(QRectF(left, top, led_width, led_height), 1, 1)
+    painter.restore()
+
+
 TILE_GAP = 6
 TILE_RADIUS = 8
 GRID_MAX = 8                # tiles in the grid (4x2); the others go in the carousel
@@ -303,6 +347,7 @@ class ParticipantTile(_PtzControls, QWidget):
         participant.frameReady.connect(self.set_image)
         participant.changed.connect(self.update)
         participant.speakingChanged.connect(self._SH_SpeakingChanged)
+        participant.levelsChanged.connect(self.update)
         # one of our extra videos from a camera with PTZ: an RTSP one (ONVIF) or a second USB one (V4L2)
         self._ptz_setup()
         self.released = False
@@ -329,6 +374,7 @@ class ParticipantTile(_PtzControls, QWidget):
             self.participant.frameReady.disconnect(self.set_image)
             self.participant.changed.disconnect(self.update)
             self.participant.speakingChanged.disconnect(self._SH_SpeakingChanged)
+            self.participant.levelsChanged.disconnect(self.update)
         except TypeError:
             pass
 
@@ -498,6 +544,8 @@ class ParticipantTile(_PtzControls, QWidget):
             _paint_hand(painter, rect, self.label_corner, compact)
         if self.participant.speaking and not (self.picked or self.replaceable):
             _paint_speaking(painter, rect, compact)
+        if not compact and not self.replaceable:
+            _paint_vu_meter(painter, rect, self.participant.levels, self.label_corner, self.participant.muted)
         ptz_shown = not compact and not self.replaceable and self.ptz_shown
         if not compact and self.underMouse() and not self.replaceable and self.participant.video is True and not (ptz_shown and self.ptz.presets):
             parts = [self.participant.video_codec or '', '%d kbit/s' % round(self.bitrate / 1000) if self._sample is not None else '']
@@ -653,6 +701,7 @@ class LocalTile(_PtzControls, QWidget):
         self.label_corner = ('bottom', 'left')
         self.hand = False
         self.speaking = False
+        self.levels = []            # our microphone's level per channel, 0 to 1 (the VU meter)
         self.blurred = False        # the picture comes from blink.webrtc.background_blur
         self.surface = VideoSurface(self, framerate=None)
         self.surface.mirror = True
@@ -851,6 +900,7 @@ class _LocalOverlay(QWidget):
         if rect.height() < COMPACT_TILE_HEIGHT:
             return      # in the carousel: the name is the tooltip
         _paint_name_pill(painter, rect, 'Me', self.tile.muted, self.tile.label_corner, _label_avoid(self))
+        _paint_vu_meter(painter, rect, self.tile.levels, self.tile.label_corner, self.tile.muted)
         if self.tile.surface.isVisible():
             from blink.webrtc.ptzcontrols import paint_target
             paint_target(painter, rect, 'camera', mirror=self.tile.surface.mirror, crop=self.tile.surface.crop)
@@ -1383,6 +1433,7 @@ class VideoroomWindow(QWidget):
         session.speakersChanged.connect(self._SH_SpeakersChanged)
         session.raisedHandsChanged.connect(self._SH_RaisedHandsChanged)
         session.speakingChanged.connect(self._SH_LocalSpeakingChanged)
+        session.levelsChanged.connect(self._SH_LocalLevelsChanged)
         session.mutedByOther.connect(lambda who: self.flash(f'Muted by {who}'))
         session.inviteStatus.connect(self._SH_InviteStatus)
         self._camera_observer = _CameraObserver(self)
@@ -1797,6 +1848,10 @@ class VideoroomWindow(QWidget):
             QTimer.singleShot(600, lambda: chat_window.show_session(session))      # once its tile is in the window
 
     # Raised hands, muting, removing (as Sylk Mobile)
+
+    def _SH_LocalLevelsChanged(self, levels):
+        self.local_tile.levels = levels
+        self.local_tile.overlay.update()
 
     def _SH_LocalSpeakingChanged(self, speaking):
         # alone in the room nobody hears us: no green border

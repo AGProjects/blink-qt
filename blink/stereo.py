@@ -50,8 +50,9 @@ class StereoCalls(QObject, metaclass=QSingleton):
         self._timer = QTimer(self, interval=2000)
         self._timer.timeout.connect(self._check)
 
-    def start(self, contact, contact_uri, account=None, streams=None):
-        """A stereo call: streams as create_session takes them (default: audio only), the audio made stereo."""
+    def start(self, contact, contact_uri, account=None, streams=None, on_session=None):
+        """A stereo call: streams as create_session takes them (default: audio only), the audio made stereo;
+        on_session(session) once the session is made (None when it was not)."""
         from blink.sessions import SessionManager, StreamDescription
         settings = SIPSimpleSettings()
         delay = 0
@@ -69,6 +70,8 @@ class StereoCalls(QObject, metaclass=QSingleton):
             if session is not None:
                 self._sessions.append(session)
                 self._timer.start()
+            if on_session is not None:
+                on_session(session)
         QTimer.singleShot(delay, call)
 
     def incoming(self, session, audio_stream):

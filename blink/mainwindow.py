@@ -2220,7 +2220,7 @@ class MainWindow(base_class, ui_class):
         ActivityLog().info(f'[audio] {cutemusic.DEVICE}: '
                            f'{"an input" if cutemusic.DEVICE in engine.input_devices else "not an input"} and '
                            f'{"an output" if cutemusic.DEVICE in engine.output_devices else "not an output"} of the engine, '
-                           f'AG CuteMusic {"running" if self.cutemusic_watcher.running else "not running"} ({cutemusic.RUNNING}); '
+                           f'AG CuteMusic {"running" if self.cutemusic_watcher.running else "not running"} (link directory {cutemusic.LINK_DIR}); '
                            f'engine inputs: {", ".join(engine.input_devices)}')
         self.cutemusic_watcher.changed.connect(self._cutemusic_changed)
         if not self.cutemusic_watcher.running and cutemusic.DEVICE in (SIPSimpleSettings().audio.input_device, SIPSimpleSettings().audio.output_device):
@@ -2235,7 +2235,8 @@ class MainWindow(base_class, ui_class):
         MessageManager()
 
     def _cutemusic_changed(self, running):
-        """AG CuteMusic started or quit: its mixer listed or not (and, chosen, the system default instead)."""
+        """AG CuteMusic started or quit: the engine's devices read again, no restart (the SDK's AG Podcast Mixer comes
+        and goes with it); its mixer listed or not (and, chosen, the system default instead)."""
         self.refresh_devices()
         self.output_device_menu.clear()
         self.input_device_menu.clear()
@@ -2247,7 +2248,8 @@ class MainWindow(base_class, ui_class):
         self.input_device_menu.clear()   # clearing the menus will result in the actions automatically disappearing from the corresponding
         self.alert_device_menu.clear()   # action groups as well
         if self.session_model.active_sessions:
-            added_devices = set(notification.data.new_devices).difference(notification.data.old_devices)
+            # a headset plugged in during a call is used at once; AG CuteMusic's mixer starting is not: it is chosen
+            added_devices = set(notification.data.new_devices).difference(notification.data.old_devices) - {cutemusic.DEVICE}
             if added_devices:
                 new_device = added_devices.pop()
                 settings = SIPSimpleSettings()

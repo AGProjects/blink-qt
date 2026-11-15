@@ -105,6 +105,26 @@ if platform.system() == 'Darwin':
 web_logging = QLoggingCategory('qt.webengine')
 web_logging.setFilterRules('*.info=false')
 
+
+def conference_audio_levels_support():
+    """Whether the SDK reads and sends RFC 6465 CSRC audio levels (the participants' VU meters in a conference), in
+    its Python layer (sipsimple.streams.rtp.audio) and in its core (patches 65 and 66 built in)."""
+    try:
+        from sipsimple.streams.rtp.audio import AudioStream
+    except ImportError:
+        return 'not supported by this SDK'
+    python_rx = hasattr(AudioStream, 'receives_csrc_levels')
+    python_tx = hasattr(AudioStream, 'sends_csrc_levels')
+    if not (python_rx or python_tx):
+        return 'not supported by this SDK'
+    from sipsimple.core import AudioTransport
+    core_rx = hasattr(AudioTransport, 'get_rx_csrc_levels')
+    core_tx = hasattr(AudioTransport, 'set_csrc_levels')
+    parts = []
+    parts.append('receiving from a conference focus %s' % ('supported' if python_rx and core_rx else 'not supported' + (' (the SDK core was not rebuilt with pjsip patch 66)' if python_rx else '')))
+    parts.append('sending in local conferences %s' % ('supported' if python_tx and core_tx else 'not supported' + (' (the SDK core was not rebuilt with pjsip patch 65)' if python_tx else '')))
+    return ', '.join(parts)
+
 class IPAddressMonitor(object):
     """
     An object which monitors the IP address used for the default route of the
@@ -462,6 +482,7 @@ class Blink(QApplication, metaclass=QSingleton):
             activity.info('Stereo audio: supported by the SDK, but Opus is not available')
         else:
             activity.info('Stereo audio: supported (Opus stereo), Enable Stereo Mode %s, audio %s' % ('on' if settings.audio.enable_stereo else 'off', 'in stereo' if settings.audio.stereo else 'in mono'))
+        activity.info('Conference audio levels (RFC 6465): %s' % conference_audio_levels_support())
         activity.info('Core video codecs: %s' % ', '.join(self.available_video_codecs))
         activity.info('Configured video codecs: %s' % ', '.join(settings.rtp.video_codec_list))
         activity.info('Audio devices: input %s, output %s, alert %s' % (settings.audio.input_device, settings.audio.output_device, settings.audio.alert_device))

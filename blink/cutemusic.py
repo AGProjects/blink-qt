@@ -1,39 +1,42 @@
-"""AG CuteMusic's mixer as a sound device: "AG Podcast Mixer" (docs/jamming-ag-cutemusic.md).
+"""AG CuteMusic's mixer as a sound device: "AG Podcast Mixer" (docs/jamming-ag-cutemusic.md,
+docs/podcast-mixer-link-migration.md).
 
-AG CuteMusic, while it runs, makes the sound server devices behind an ALSA device of that name (its package's
-/etc/alsa/conf.d/60-ag-cute-music.conf): what Blink records from it is the karaoke (the singer, and the music), what
-Blink plays on it goes to AG CuteMusic's mixer, heard in the singer's headset.
+The AG Podcast Mixer link (python3-sipsimple docs/PodcastMixerLink.md): AG CuteMusic and Blink exchange PCM through
+two shared-memory rings in the link directory (agpm.link_dir()), which the SDK turns into an audio device of that
+name. What Blink records from it is the karaoke (the singer, and the music), what Blink plays on it goes to AG
+CuteMusic's mixer, heard in the singer's headset.
 
-- The device is listed (Devices menu, Preferences) only while AG CuteMusic runs: it holds the lock on
-  $XDG_RUNTIME_DIR/ag-cute-music/mixer then. Watched every 2 s (Watcher); when it quits, a chosen mixer falls back to
-  the system default (MainWindow.refresh_devices), as an unplugged headset.
+- The device is listed (Devices menu, Preferences) only while AG CuteMusic runs: it holds mixer.lock in the link
+  directory then. Watched every 2 s (Watcher); when it starts or quits the engine's sound devices are read again
+  (MainWindow.refresh_devices), so the device comes and goes without a restart; a chosen mixer that is gone falls
+  back to the system default, as an unplugged headset.
+- Blink holds blink.lock in the link directory while it runs (CallPublisher): AG CuteMusic shows its BLINK strip.
 - Chosen as the input, the call carries music: echo cancelling off and 48 kHz (SIP), stereo at a music bitrate
   (WebRTC rooms, videoroom.py). The settings are changed while it is chosen and put back when another input is
   (apply_music_mode), so Preferences show what is in effect.
-- WebRTC rooms play and record the sound server's devices themselves (pulsesrc, pulsesink: SOURCE, SINK).
-- Who is in the call, for the mixer's BLINK strip: the calls and rooms in progress written to CALLS (CallPublisher),
-  private to the user, removed when Blink quits.
+- WebRTC rooms read and write the link's rings themselves (blink/webrtc/podcast_mixer.py: an appsrc on to-call, an
+  appsink on from-call), as the SDK's device does for SIP calls.
+- Who is in the call, for the mixer's BLINK strip: the calls and rooms in progress written to CALLS, calls.json in the
+  link directory (CallPublisher), private to the user, removed when Blink quits.
 """
 
-import fcntl
 import json
 import os
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
+from blink import agpm
 from blink.logging import ActivityLog
 from blink.resources import ApplicationData
 
 
-__all__ = ['DEVICE', 'DEVICE_HINT', 'installed', 'unavailable_reason', 'unavailable_hint', 'SOURCE', 'SINK', 'running', 'visible', 'selected', 'apply_music_mode', 'Watcher', 'CallPublisher']
+__all__ = ['DEVICE', 'DEVICE_HINT', 'installed', 'unavailable_reason', 'unavailable_hint', 'running', 'visible', 'selected', 'apply_music_mode', 'Watcher', 'CallPublisher']
 
 
-DEVICE = 'AG Podcast Mixer'           # the ALSA device's description: its name in the device lists
-SOURCE = 'cutemusic_mixer_out'          # what is sent (the sound server's names)
-SINK = 'cutemusic_mixer_in'             # what is played
-RUNNING = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/ag-cute-music-{os.getuid()}', 'ag-cute-music', 'mixer')
+DEVICE = agpm.DEVICE                    # 'AG Podcast Mixer': its name in the device lists
+LINK_DIR = agpm.link_dir()               # the SDK's pjmedia_agpm_dir(): mixer.lock, blink.lock, the rings, calls.json
 MUSIC_SAMPLE_RATE = 48000
-CALLS = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or f'/tmp/blink-{os.getuid()}', 'blink', 'calls.json')
+CALLS = agpm.path('calls.json')
 
 
 DEVICE_HINT = 'AG CuteMusic\'s mixer: your microphone, music and jingles go out in the call, the others come back on their own fader'
@@ -49,45 +52,50 @@ def installed():
 def unavailable_reason():
     """Why the mixer cannot be chosen now, a few words for its menu item."""
     import platform
-    if platform.system() != 'Linux':
-        return 'Linux only'
+    if platform.system() == 'Windows':
+        return 'not on Windows'
     if not installed():
         return 'sudo apt install ag-cute-music'       # shown in the menu: a grayed item's tool tip may not be
-    if not running():
-        return 'start AG CuteMusic'
-    return 'restart Blink'      # AG CuteMusic runs, but this Blink started before its device was set up
+    return 'start AG CuteMusic'     # (running, the device is listed at the Watcher's next refresh)
 
 
 def unavailable_hint():
     """The menu item's tool tip: what to do."""
     import platform
-    if platform.system() != 'Linux':
-        return 'AG CuteMusic\'s mixer works as a sound device on Linux'
+    if platform.system() == 'Windows':
+        return 'AG CuteMusic\'s mixer is not a sound device on Windows yet'
     if not installed():
         return 'Install AG CuteMusic to use its mixer in calls:  sudo apt install ag-cute-music'
-    if not running():
-        return 'Start AG CuteMusic to use its mixer in calls'
-    return 'AG CuteMusic set up its sound device after Blink started: quit and start Blink again'
+    return 'Start AG CuteMusic to use its mixer in calls'
 
 
 def running():
-    """Whether AG CuteMusic runs with its mixer as a device (it holds the lock on RUNNING)."""
+    """Whether AG CuteMusic runs with its mixer as a device: it holds mixer.lock in the link directory (or the SDK
+    says so: the lock and the rings are there)."""
+    if agpm.mixer_running():
+        return True
     try:
-        with open(RUNNING) as file:
-            try:
-                fcntl.flock(file.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
-            except OSError:
-                return True
-            fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-            return False
-    except OSError:
+        from sipsimple.application import SIPApplication
+        return bool(SIPApplication.engine.podcast_mixer_available)
+    except Exception:       # the engine not started, or an SDK without the link
         return False
 
 
 def visible(devices):
-    """The devices to list: the mixer only while AG CuteMusic runs."""
+    """The devices to list: the mixer only while AG CuteMusic runs, and once (the SDK's device and the ALSA device of
+    the same name, AG CuteMusic's share.py, are both there on Linux until the cleanup)."""
     devices = list(devices)
-    return devices if DEVICE not in devices or running() else [device for device in devices if device != DEVICE]
+    if DEVICE not in devices:
+        return devices
+    shown = running()
+    listed = []
+    for device in devices:
+        if device == DEVICE:
+            if not shown:
+                continue
+            shown = False
+        listed.append(device)
+    return listed
 
 
 def selected(settings=None):
@@ -163,16 +171,23 @@ class Watcher(QObject):
 # Who is in the call
 
 class CallPublisher(QObject):
-    """The calls and rooms in progress, in CALLS for AG CuteMusic's mixer (its BLINK strip shows who is there):
+    """Blink seen by AG CuteMusic: blink.lock held in the link directory while Blink runs (its BLINK strip shown), and
+    the calls and rooms in progress, in CALLS for AG CuteMusic's mixer (its BLINK strip shows who is there):
         {"calls": [{"kind": "call", "name": ..., "address": ..., "held": <put on hold here>},
                    {"kind": "room", "name": <room>, "participants": [<name>, ...]}]}
     Read every second from Blink's own lists (the sessions with audio that are connected, the rooms joined), not
     kept from notifications: nothing is left behind when one is missed. The calls not on hold first (switching
-    calls puts the other on hold: the one talked to comes first). Written when it changes; removed when Blink quits
-    (stop)."""
+    calls puts the other on hold: the one talked to comes first). Written when it changes; removed, and blink.lock
+    released, when Blink quits (stop)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._lock = agpm.ProcessLock('blink.lock')
+        try:
+            if not self._lock.acquire():        # another Blink (another profile) holds it: AG CuteMusic sees one
+                ActivityLog().info(f'[audio] Another Blink holds {agpm.path("blink.lock")}')
+        except OSError as e:
+            ActivityLog().warning(f'[audio] Cannot hold {agpm.path("blink.lock")}: {e}')
         self._written = None
         self._timer = QTimer(self, interval=1000)
         self._timer.timeout.connect(self._update)
@@ -235,3 +250,4 @@ class CallPublisher(QObject):
             os.unlink(CALLS)
         except OSError:
             pass
+        self._lock.release()

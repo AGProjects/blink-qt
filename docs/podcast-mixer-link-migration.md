@@ -1,6 +1,6 @@
 # AG Podcast Mixer link: what is still to migrate
 
-Status as of 2026-11-14. The protocol, the SDK device and the ring layout are in python3-sipsimple
+Status as of 2026-11-15. The protocol, the SDK device and the ring layout are in python3-sipsimple
 `docs/PodcastMixerLink.md`; the jamming / interview set-up as it is today on Linux is in
 `docs/jamming-ag-cutemusic.md`.
 
@@ -24,6 +24,9 @@ No sound server modules, no ALSA configuration, no driver, no root.
 | AG CuteMusic | `cutemusic/link.py`, `cutemusic/agpm.py`. The mic and TO CALLS go to `to-call`, the BLINK strip plays `from-call`, `mixer.lock` is held while the mixer is on. share.py (PulseAudio / ALSA) runs next to it on Linux. Works on macOS (osxaudiosrc / osxaudiosink). |
 | Blink for macOS | `CuteMusic.py`: the device is refreshed as AG CuteMusic starts and quits (no restart), music mode (echo cancelling off, 48 kHz, stereo, the settings before put back), `blink.lock`, `calls.json`. Never switched to on its own. Stereo calls (`StereoCalls.py`). |
 | Tested | AG CuteMusic → Blink for macOS → stereo SIP call → Blink Qt and back, on macOS, 2026-11-14. |
+| Blink Qt (phase 3, items 1, 2, 4) | `blink/agpm.py` (copy of the SDK's). `blink/cutemusic.py`: `running()` on `mixer.lock` or `engine.podcast_mixer_available`, `CALLS` = `calls.json` in the link directory, `blink.lock` held by `CallPublisher` (released at quit). The Watcher's refresh (`MainWindow.refresh_devices` → `refresh_sound_devices()`) makes the device come and go; the "restart Blink" reason and hint are gone. The mixer appearing during a call is not switched to on its own (`_NH_AudioDevicesDidChange`). `visible()` lists it once. Not yet tested. |
+| Blink Qt WebRTC rooms | `blink/webrtc/podcast_mixer.py`: `MixerSource` (an `appsrc` fed from `to-call` by a 10 ms clock thread: 20 ms priming, silence on underrun, back to 20 ms above 60 ms) and `MixerSink` (an `appsink`, sync, writing `from-call`, drops counted). `videoroom.py` uses them when the mixer is chosen and running, the system default devices when the rings cannot be opened; counts logged when the room ends. The pulsesrc / pulsesink path and `cutemusic.SOURCE` / `SINK` are gone. Ring logic tested with a stub writer; not yet tested in a room. One writer, one reader: a SIP call on the SDK's device during a room on the mixer is not guarded. |
+| AG CuteMusic (items 5, 9) | `share.blink_running()` (`~/.blink/lock`) and the "quit and start Blink again" message are gone: `agpm.blink_running()` or a Blink writing `from-call`. The BLINK strip plays `from-call` when a Blink writes it (or share.py is not up), share.py's sink monitor otherwise. |
 
 ## Still to do: 1-to-1 SIP calls
 
@@ -42,10 +45,13 @@ No sound server modules, no ALSA configuration, no driver, no root.
    - Gone: AG CuteMusic's "quit and start Blink again" message.
 3. **The duplicate device on Linux.** With the new SDK, Blink Qt lists two "AG Podcast Mixer" devices: the ALSA PCM
    set up by share.py (`/etc/alsa/conf.d/60-ag-cute-music.conf`, or `~/.config/alsa/ag-cute-music.conf`) and the
-   SDK's. Blink chooses a device by name and pjmedia lists ALSA's first, so the old path would win. To decide:
-   - (a) Blink Qt leaves the ALSA one out of its device lists when the SDK's device is there;
-   - (b) AG CuteMusic stops advertising the ALSA device (its `hint`) while the link runs, keeping share.py's modules
-     for older Blinks. This is the simpler option.
+   SDK's. Blink chooses a device by name and pjmedia lists ALSA's first, so the old path would win. Decided: the SDK
+   leaves it out (patch 63, part 5: `alsa_dev.c` skips an ALSA hint described as `PJMEDIA_AGPM_DEVICE_NAME`).
+   Blink Qt alone could only hide the second entry (it does, `visible()`), not choose it; AG CuteMusic cannot stop
+   advertising the hint at runtime, it is in `/etc/alsa/conf.d`. share.py's modules stay for older SDKs until
+   phase 7. Code done (2026-11-15: patch 63 part 5 is in `deps/pjsip`; share.py's PCM has
+   `hint { description "AG Podcast Mixer" }`, so its DESC matches exactly). Needs an SDK rebuild and a check that
+   Blink Qt lists one "AG Podcast Mixer" with share.py's modules up and `visible()` bypassed.
 4. **Music mode** (`apply_music_mode()`) unchanged: it already keys on the device name.
 5. **AG CuteMusic's BLINK strip** follows: once Blink Qt uses the SDK's device, `window.py` plays `from-call` on Linux
    too, not share.py's sink monitor. Today it chooses share.py's whenever share.py's devices are up.
@@ -72,9 +78,6 @@ No sound server modules, no ALSA configuration, no driver, no root.
 
 ## Later: conferences and rooms
 
-- **Blink Qt WebRTC rooms** (`blink/webrtc/videoroom.py`): `appsrc` reading `to-call` and `appsink` writing
-  `from-call` (`agpm.py` copied into `blink/`), replacing `pulsesrc device=cutemusic_mixer_out` /
-  `pulsesink device=cutemusic_mixer_in`.
 - **Blink for macOS WebRTC rooms:** libwebrtc does not use pjmedia. An Objective-C class implementing
   WebRTC.framework's `RTCAudioDevice` protocol (the framework has
   `initWithEncoderFactory:decoderFactory:audioDevice:`) feeds the room from `to-call` and writes `from-call`. The
