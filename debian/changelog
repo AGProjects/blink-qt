@@ -1,3 +1,13 @@
+blink (7.3.0) unstable; urgency=medium
+
+  * Added stereo one to one and conference calls support
+  * Added podcast integration with AG CuteMusic app
+  * Added conference participants audio level meters
+  * Show conference participants in the audio drawer
+  * Added participant context menu with remove from conference and info
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Sun, 15 Nov 2026 19:13:00 -0300
+
 blink (7.2.11) unstable; urgency=medium
 
   * Fix video window failing to load when numpy is not installed
