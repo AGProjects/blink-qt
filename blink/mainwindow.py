@@ -8,7 +8,7 @@ from functools import partial
 from PyQt6.QtCore import Qt, QRectF, QSettings, QSize, QTimer, QUrl, QTranslator
 from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
-from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressBar, QSplitter, QToolButton, QWidget
+from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressBar, QSizePolicy, QSplitter, QToolButton, QVBoxLayout, QWidget
 
 from application.notification import IObserver, NotificationCenter
 from application.python import Null, limit
@@ -33,7 +33,7 @@ from blink.launcher import LauncherBadge
 from blink.logging import ActivityLog
 from blink.messagepane import MessagePane
 from blink.preferences import PreferencesWindow
-from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, StreamDescription
+from blink.sessions import ConferenceDialog, SessionManager, AudioSessionModel, ConferenceParticipantListView, StreamDescription
 from blink.configuration.datatypes import IconDescriptor, FileURL, PresenceState
 from blink.configuration.settings import BlinkSettings
 from blink.presence import PendingWatcherDialog
@@ -237,6 +237,51 @@ class MainWindow(base_class, ui_class):
         self.session_model = AudioSessionModel(self)
         self.session_list.setModel(self.session_model)
         self.session_list.selectionModel().selectionChanged.connect(self._SH_SessionListSelectionChanged)
+        # the participants of the selected call when it is a conference, under the calls (as the
+        # chat window shows them): the chat item's model of that session, shared with the chat window
+        self.sessions_layout.removeWidget(self.session_list)
+        self.sessions_splitter = QSplitter(Qt.Orientation.Vertical, self.sessions_panel)
+        self.sessions_splitter.setObjectName('sessions_splitter')
+        self.sessions_splitter.setChildrenCollapsible(False)
+        self.sessions_splitter.setHandleWidth(5)
+        self.sessions_splitter.addWidget(self.session_list)
+        # the participants, with a button above them to the conference's chat (joined with audio and
+        # chat, the chat window does not come up by itself)
+        self.audio_participants_panel = QWidget(self.sessions_splitter)
+        self.audio_participants_panel.setObjectName('audio_participants_panel')
+        panel_layout = QVBoxLayout(self.audio_participants_panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+        self.conference_chat_button = QToolButton(self.audio_participants_panel)
+        self.conference_chat_button.setObjectName('conference_chat_button')
+        self.conference_chat_button.setText(translate('main_window', 'Conference chat'))
+        self.conference_chat_button.setIcon(QIcon(Resources.get('icons/chat.svg')))
+        self.conference_chat_button.setIconSize(QSize(18, 18))
+        self.conference_chat_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.conference_chat_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.conference_chat_button.setMinimumHeight(34)
+        self.conference_chat_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.conference_chat_button.setToolTip(translate('main_window', 'Open the chat of the conference in the chat window'))
+        self.conference_chat_button.setStyleSheet('QToolButton { margin: 4px 5px; padding: 4px; font-weight: bold; }')
+        self.conference_chat_button.clicked.connect(self._SH_ConferenceChatButtonClicked)
+        self.conference_chat_button.hide()
+        panel_layout.addWidget(self.conference_chat_button)
+        self.audio_participants_list = ConferenceParticipantListView(self.audio_participants_panel)
+        self.audio_participants_list.setObjectName('audio_participants_list')
+        self.audio_participants_list.setDragDropMode(self.audio_participants_list.DragDropMode.DropOnly)    # drop contacts to invite them, as in the chat window
+        self.audio_participants_list.setMouseTracking(True)     # hover: the remove cross
+        self.audio_participants_list.setAlternatingRowColors(True)
+        self.audio_participants_list.setSelectionMode(self.audio_participants_list.SelectionMode.NoSelection)
+        self.audio_participants_list.setStyleSheet('QListView { border: none; border-top: 1px solid palette(mid); }')
+        panel_layout.addWidget(self.audio_participants_list, 1)
+        self.audio_participants_panel.hide()
+        self.sessions_splitter.addWidget(self.audio_participants_panel)
+        self.sessions_splitter.setStretchFactor(0, 3)
+        self.sessions_splitter.setStretchFactor(1, 2)
+        self.sessions_layout.insertWidget(0, self.sessions_splitter)
+        self._audio_participants_model = None
+        self.session_model.modelReset.connect(self._update_audio_participants)
+        self.session_model.rowsRemoved.connect(self._update_audio_participants)
 
         # History
         self.history_manager = HistoryManager()
@@ -851,6 +896,10 @@ class MainWindow(base_class, ui_class):
         for action in getattr(self, 'combined_device_actions', []):
             if not action.isSeparator():
                 action.setChecked(settings.audio.input_device == action.data() == settings.audio.output_device)
+                if action.data() == cutemusic.DEVICE and not action.isEnabled():
+                    # what to do, as it is now (AG CuteMusic started, its mixer still off): read each time the menu opens
+                    action.setText(f'{cutemusic.DEVICE} ({cutemusic.unavailable_reason()})')
+                    action.setToolTip(cutemusic.unavailable_hint())
 
     def _AH_CombinedAudioDeviceTriggered(self, device, checked=False):
         settings = SIPSimpleSettings()
@@ -1888,7 +1937,39 @@ class MainWindow(base_class, ui_class):
         self.search_for_people_action.setEnabled(server_tools_enabled)
         self.history_on_server_action.setEnabled(server_tools_enabled)
 
+    def _update_audio_participants(self, *args):
+        """The participants list under the calls: the selected call's conference participants, hidden
+        when the selected call is not a conference (or nothing is selected, or nobody is in the room yet)."""
+        indexes = self.session_list.selectionModel().selectedIndexes()
+        item = indexes[0].data(Qt.ItemDataRole.UserRole) if indexes else None
+        blink_session = getattr(item, 'blink_session', None)
+        chat_item = getattr(getattr(blink_session, 'items', None), 'chat', None)
+        model = getattr(chat_item, 'participants_model', None)
+        if model is not self._audio_participants_model:
+            previous = self._audio_participants_model
+            if previous is not None:
+                for signal in (previous.rowsInserted, previous.rowsRemoved, previous.modelReset):
+                    try:
+                        signal.disconnect(self._update_audio_participants)
+                    except TypeError:
+                        pass
+            self._audio_participants_model = model
+            if model is not None:
+                for signal in (model.rowsInserted, model.rowsRemoved, model.modelReset):
+                    signal.connect(self._update_audio_participants)
+            self.audio_participants_list.setModel(model)
+        self._audio_participants_session = blink_session
+        self.conference_chat_button.setVisible(blink_session is not None and bool(blink_session.is_conference) and 'chat' in blink_session.streams
+                                               and str(blink_session.state or '').startswith('connected'))
+        self.audio_participants_panel.setVisible(model is not None and model.rowCount() > 0)
+
+    def _SH_ConferenceChatButtonClicked(self):
+        blink_session = getattr(self, '_audio_participants_session', None)
+        if blink_session is not None:
+            QApplication.instance().chat_window.show_session(blink_session)
+
     def _SH_SessionListSelectionChanged(self, selected, deselected):
+        self._update_audio_participants()
         selected_indexes = selected.indexes()
         active_session = selected_indexes[0].data(Qt.ItemDataRole.UserRole) if selected_indexes else Null
         if active_session.client_conference:
@@ -1900,9 +1981,11 @@ class MainWindow(base_class, ui_class):
 
     def _SH_AudioSessionModelAddedSession(self, session_item):
         # a call, with or without video: it shows in the audio drawer, the video window
-        # comes up only once the remote picture arrives
-        streams = session_item.blink_session.streams
-        if 'chat' not in streams and 'screen-sharing' not in streams:
+        # comes up only once the remote picture arrives; a conference (audio with chat, from Join
+        # Conference) shows in the audio drawer too, its participants under it
+        blink_session = session_item.blink_session
+        streams = blink_session.streams
+        if blink_session.is_conference or ('chat' not in streams and 'screen-sharing' not in streams):
             self.switch_view_button.view = SwitchViewButton.SessionView
 
     def _SH_AudioSessionModelRemovedSession(self, session_item):

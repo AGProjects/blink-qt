@@ -43,7 +43,7 @@ from blink.contact_mangler import mangled_name, mangling_enabled
 from blink.contacts import URIUtils
 from blink.history import HistoryManager
 from blink.logging import ActivityLog, MessagingTrace as log
-from blink.hidpi import svg_pixmap, sharpen_ui_pixmaps
+from blink.hidpi import screen_ratio, svg_pixmap, sharpen_ui_pixmaps
 from blink.message_envelopes import FILE_TRANSFER_CONTENT_TYPE, file_transfer_category, file_transfer_envelope
 from blink.messagepane.chat import ChatItem, ChatTranscriptModel, SenderAvatars, save_inline_image
 from blink.messagepane.composer import Composer
@@ -55,7 +55,7 @@ from blink.messages import MessageManager, BlinkMessage, msrp_message_id, send_m
 from blink import radio_ptt
 from blink.resources import IconManager, Resources, ui_settings, load_ui_type
 from blink.screensharing.support import can_share_my_screen, can_view_screens, vnc_screen_sharing_offered
-from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand
+from blink.sessions import ChatSessionModel, ChatSessionListView, SessionManager, StreamDescription, BlinkFileTransfer, conference_has_files, session_can_expand, stereo_pixmap
 from blink.util import run_in_gui_thread, call_later, translate
 from blink.webrtc import active_videoroom
 from blink.widgets.color import ColorHelperMixin, follow_theme, is_dark_theme, secondary_text_color
@@ -1756,6 +1756,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         # prepare self.session_widget so we can take over some of its painting and behaviour
         self.session_widget.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.session_widget.hovered = False
+        # a stereo call: the stereo symbol before the audio icon, as the tile in the list has it
+        self.stereo_icon = QLabel(self.stream_icons)
+        self.stereo_icon.setObjectName('stereo_icon')
+        self.stereo_icon.setToolTip(translate('chat_window', 'Stereo audio (Opus stereo, no echo cancellation)'))
+        self.stereo_icon.hide()
+        self.stream_icons_layout.insertWidget(self.stream_icons_layout.indexOf(self.audio_icon), self.stereo_icon)
+        self._stereo_color = None
 
     def _get_selected_session(self):
         try:
@@ -1813,6 +1820,13 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         self.composing_icon.setVisible(widget.composing_icon.isVisibleTo(widget))
         self.audio_icon.setVisible(widget.audio_icon.isVisibleTo(widget))
         self.audio_icon.setEnabled(widget.audio_icon.isEnabledTo(widget))
+        stereo = widget.stereo_icon.isVisibleTo(widget)
+        if stereo:
+            color = self.session_widget.palette().color(self.session_widget.foregroundRole())
+            if color != self._stereo_color:
+                self._stereo_color = color
+                self.stereo_icon.setPixmap(stereo_pixmap(color, 12, screen_ratio()))
+        self.stereo_icon.setVisible(stereo)
         self.chat_icon.setVisible(widget.chat_icon.isVisibleTo(widget))
         self.chat_icon.setEnabled(widget.chat_icon.isEnabledTo(widget))
         self.video_icon.setVisible(widget.video_icon.isVisibleTo(widget))
@@ -2714,6 +2728,8 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             if session_videoroom(notification.sender) is not None:
                 call_later(.5, self.show_in_background, notification.sender)     # joined with video: its window is in front
+            elif self._audio_drawer_only(notification.sender):
+                self._select_session(notification.sender)   # ready for the Chat button of its audio tile
             elif self.session_model.rowCount():
                 # raised now, in the user's action (a call, an accepted transfer): see NewIncoming
                 if self._shows_session(notification.sender) and self._select_session(notification.sender):
@@ -2741,8 +2757,20 @@ class ChatWindow(base_class, ui_class, ColorHelperMixin):
         if notification.sender.stream_descriptions.types.intersection(self.__streamtypes__):
             if session_videoroom(notification.sender) is not None:
                 self.show_in_background(notification.sender)
-            else:
+            elif not self._audio_drawer_only(notification.sender):
                 self.show()
+
+    def _audio_drawer_only(self, session):
+        """A conference joined with audio and chat while this window is not in view: the call is in the
+        audio drawer of the main window, this window opens from the Chat button of its tile. With this
+        window in view, or a conference with chat alone, it comes up as for any chat."""
+        if self.isVisible() and not self.isMinimized():
+            return False
+        try:
+            types = session.stream_descriptions.types
+        except AttributeError:
+            return False
+        return bool(getattr(session, 'is_conference', False)) and 'audio' in types and 'chat' in types
 
     # use BlinkSessionNewIncoming/Outgoing to show the chat window if there is a chat stream available (like with reinitialize) instead of using the sessionAdded signal from the model -Dan
     # or maybe not. sessionAdded means it was added to the model, while during NewIncoming/Outgoing we do not know that yet. but then we have a problem with the DidReinitialize since

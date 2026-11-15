@@ -30,7 +30,7 @@ from blink.logging import ActivityLog
 from blink.resources import ApplicationData
 
 
-__all__ = ['DEVICE', 'DEVICE_HINT', 'installed', 'unavailable_reason', 'unavailable_hint', 'running', 'visible', 'selected', 'apply_music_mode', 'Watcher', 'CallPublisher']
+__all__ = ['DEVICE', 'DEVICE_HINT', 'installed', 'app_running', 'unavailable_reason', 'unavailable_hint', 'running', 'visible', 'selected', 'apply_music_mode', 'Watcher', 'CallPublisher']
 
 
 DEVICE = agpm.DEVICE                    # 'AG Podcast Mixer': its name in the device lists
@@ -49,6 +49,31 @@ def installed():
         os.path.exists(os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'), 'alsa', 'ag-cute-music.conf'))
 
 
+def app_running():
+    """Whether AG CuteMusic runs, its mixer on or not (it holds mixer.lock only while the mixer's POWER is on)."""
+    import sys
+    if sys.platform.startswith('linux'):
+        try:
+            for pid in os.listdir('/proc'):
+                if not pid.isdigit() or int(pid) == os.getpid():
+                    continue
+                try:
+                    with open(f'/proc/{pid}/cmdline', 'rb') as file:
+                        arguments = file.read().split(b'\0')
+                except OSError:
+                    continue
+                if any(os.path.basename(argument) == b'ag-cute-music' for argument in arguments[:2]):
+                    return True
+            return False
+        except OSError:
+            return False
+    import subprocess
+    try:
+        return subprocess.run(['pgrep', '-f', 'ag-cute-music'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def unavailable_reason():
     """Why the mixer cannot be chosen now, a few words for its menu item."""
     import platform
@@ -56,7 +81,9 @@ def unavailable_reason():
         return 'not on Windows'
     if not installed():
         return 'sudo apt install ag-cute-music'       # shown in the menu: a grayed item's tool tip may not be
-    return 'start AG CuteMusic'     # (running, the device is listed at the Watcher's next refresh)
+    if app_running():
+        return 'turn on POWER in AG CuteMusic\'s mixer'   # it runs, its mixer is off
+    return 'start AG CuteMusic and turn on POWER in its mixer'     # (running, the device is listed at the Watcher's next refresh)
 
 
 def unavailable_hint():
@@ -66,7 +93,9 @@ def unavailable_hint():
         return 'AG CuteMusic\'s mixer is not a sound device on Windows yet'
     if not installed():
         return 'Install AG CuteMusic to use its mixer in calls:  sudo apt install ag-cute-music'
-    return 'Start AG CuteMusic to use its mixer in calls'
+    if app_running():
+        return 'AG CuteMusic runs, its mixer is off: turn on POWER in its Mixer view to use it in calls'
+    return 'Start AG CuteMusic and turn on POWER in its Mixer view to use its mixer in calls'
 
 
 def running():

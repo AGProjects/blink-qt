@@ -24,7 +24,10 @@ from dateutil.tz import tzlocal
 from PyQt6.QtCore import Qt, QAbstractListModel, QEasingCurve, QModelIndex, QObject, QProcess, QPropertyAnimation, pyqtSignal
 from PyQt6.QtCore import QByteArray, QEvent, QMimeData, QPointF, QRect, QRectF, QSize, QTimer, QUrl, QFileInfo, QSettings
 from PyQt6.QtGui import QAction, QBrush, QColor, QDesktopServices, QDrag, QIcon, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF, QScreen, QShortcut
+from PyQt6.QtGui import QFont, QFontDatabase, QKeySequence, QSyntaxHighlighter, QTextCharFormat
+from html import escape as escape_html
 from PyQt6.QtWidgets import QApplication, QDialog, QLabel, QListView, QMenu, QMessageBox, QStyle, QStyledItemDelegate, QStyleOption, QFileIconProvider, QFileDialog
+from PyQt6.QtWidgets import QDialogButtonBox, QGridLayout, QPlainTextEdit, QSizePolicy, QTabWidget, QToolTip, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
 
 from application import log
 from application.notification import IObserver, NotificationCenter, NotificationData, ObserverWeakrefProxy
@@ -1926,6 +1929,7 @@ class ConferenceParticipant(object):
         self.multi_device = False    # its account is in the room from more than one device
         self.audio_ssrcs = set()     # the SSRCs of its audio, as the focus receives it (conference-info <src-id>)
         self.audio_levels = None     # its VU meter (a fraction lit, per channel), from the focus' RFC 6465 levels; None: none
+        self.conference_info = None  # what it was last updated from: its conference-info <user>, or the conference_devices.Device of it
 
         notification_center = NotificationCenter()
         notification_center.add_observer(ObserverWeakrefProxy(self), sender=contact)
@@ -1982,6 +1986,7 @@ class ConferenceParticipant(object):
         old_values = dict(active_media=self.active_media.copy(), display_name=self.display_name, on_hold=self.on_hold,
                           radio_key=[radio.key for radio in self.radios], device_label=self.device_label, webrtc=self.webrtc,
                           multi_device=self.multi_device, this_device=self.this_device)
+        self.conference_info = data
         self.display_name = data.display_text.value if data.display_text else None
         self.device_label = getattr(data, 'label', None)
         self.endpoint_ids = set(getattr(data, 'ids', ()))
@@ -3001,6 +3006,7 @@ class AudioSessionItem(object):
             widget.record_button.setEnabled(old_widget.record_button.isEnabled())
             widget.record_button.setChecked(old_widget.record_button.isChecked())
             widget.hangup_button.setEnabled(old_widget.hangup_button.isEnabled())
+        self._update_chat_button()
         widget.mute_button.clicked.connect(self._SH_MuteButtonClicked)
         widget.hold_button.clicked.connect(self._SH_HoldButtonClicked)
         widget.info_button.clicked.connect(self._SH_InfoButtonClicked)
@@ -3050,6 +3056,12 @@ class AudioSessionItem(object):
         if self.status == expected_status:
             self.status = self.__saved_status
         self.__saved_status = None
+
+    def _update_chat_button(self):
+        """The Conference chat button of the audio drawer, above the participants: a conference connected with chat."""
+        main_window = getattr(QApplication.instance(), 'main_window', None)
+        if main_window is not None and hasattr(main_window, '_update_audio_participants'):
+            main_window._update_audio_participants()      # its Conference chat window button, above the participants
 
     def _SH_HangupButtonClicked(self):
         self.end()
@@ -3154,6 +3166,7 @@ class AudioSessionItem(object):
     def _NH_BlinkSessionDidConnect(self, notification):
         session = notification.sender
         self.tls = session.transport == 'tls'
+        self._update_chat_button()
         if self.widget is not Null:
             self.widget.address_label.setText(self.name)    # 'Room ...' once the remote turns out to be a focus
         if 'audio' in session.streams:
@@ -3173,6 +3186,7 @@ class AudioSessionItem(object):
             self._cleanup()
 
     def _NH_BlinkSessionDidAddStream(self, notification):
+        self._update_chat_button()
         if notification.data.stream.type == 'audio':
             self.media_connected = True
             self.type = self._connected_type()
@@ -3197,12 +3211,14 @@ class AudioSessionItem(object):
             self.widget.hangup_button.setEnabled(False)
 
     def _NH_BlinkSessionDidRemoveStream(self, notification):
+        self._update_chat_button()
         if notification.data.stream.type == 'audio':
             self.status = Status('Audio removed') if self.blink_session.streams else Status('Call ended')
             self._cleanup()
 
     def _NH_BlinkSessionWillEnd(self, notification):
         self.status = Status('Ending...')
+        self._update_chat_button()
         self.widget.mute_button.setEnabled(False)
         self.widget.hold_button.setEnabled(False)
         self.widget.record_button.setEnabled(False)
@@ -7268,6 +7284,11 @@ class ConferenceParticipantWidget(ChatSessionWidget):
     def __init__(self, parent=None):
         super(ConferenceParticipantWidget, self).__init__(parent)
         self.stream_icons.hide()        # replaced by the larger icons below
+        # no presence indicator for a participant; its place stays, the remove cross is drawn in it
+        policy = self.state_label.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self.state_label.setSizePolicy(policy)
+        self.state_label.hide()
         position = self.widget_layout.indexOf(self.unread_label)
         self.radio_label = QLabel(self)
         self.radio_label.setObjectName('radio_label')
@@ -7302,7 +7323,6 @@ class ConferenceParticipantWidget(ChatSessionWidget):
         self.name_label.setText(participant.name)
         self.info_label.setText(participant.info)
         self.icon_label.setPixmap(participant.pixmap)
-        self.state_label.state = participant.state
         self.hold_icon.setVisible(participant.on_hold)
         self.composing_icon.setVisible(participant.is_composing)
         radio_state = participant.radio_state
@@ -7435,16 +7455,24 @@ class ConferenceParticipantDelegate(QStyledItemDelegate, ColorHelperMixin):
             cross_rect = option.rect.adjusted(int(option.rect.width()) - 14, 0, 0, int(-option.rect.height() / 2))  # top half of the rightmost 14 pixels
             if cross_rect.contains(event.pos()):
                 item = index.data(Qt.ItemDataRole.UserRole)
-                if self.is_myself(item, model.session) or not item.widget.isEnabled():
-                    return True     # no remove button for myself, nor while a request is pending
-                title = translate('sessions', 'Remove participant')
-                who = f'{item.name} ({item.participant.device_label})' if item.participant.multi_device and item.participant.device_label else item.name
-                message = translate('sessions', 'Would you like to kick %s out of the conference?') % who
-                if QMessageBox.question(self.parent(), title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-                    ActivityLog().info(f'[conference] Remove {item.participant.uri}' + (f' ({item.participant.device_label})' if item.participant.multi_device else '') + f' from {model.session.uri}')
-                    model.session.server_conference.remove_participant(item.participant)
-                return True
+                if self.can_remove(item, model.session):
+                    self.remove_participant(self.parent(), item, model.session)
+                return True     # no remove button for myself, nor while a request is pending
         return super(ConferenceParticipantDelegate, self).editorEvent(event, model, option, index)
+
+    @classmethod
+    def can_remove(cls, item, blink_session):
+        return blink_session is not None and getattr(blink_session, 'server_conference', None) is not None and not cls.is_myself(item, blink_session) and item.widget.isEnabled()
+
+    @staticmethod
+    def remove_participant(parent, item, blink_session):
+        """Kick a participant out of the conference, once confirmed."""
+        title = translate('sessions', 'Remove participant')
+        who = f'{item.name} ({item.participant.device_label})' if item.participant.multi_device and item.participant.device_label else item.name
+        message = translate('sessions', 'Would you like to kick %s out of the conference?') % who
+        if QMessageBox.question(parent, title, message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            ActivityLog().info(f'[conference] Remove {item.participant.uri}' + (f' ({item.participant.device_label})' if item.participant.multi_device else '') + f' from {blink_session.uri}')
+            blink_session.server_conference.remove_participant(item.participant)
 
     @staticmethod
     def is_myself(item, blink_session):
@@ -7705,6 +7733,346 @@ class ConferenceParticipantModel(QAbstractListModel):
         self.endResetModel()
 
 
+def conference_info_element(participant):
+    """The conference-info of a participant, as an lxml element: its <user>, with only the endpoints of its
+    device when its account is in the room from several devices (each one a participant of its own)."""
+    from copy import deepcopy
+    from lxml import etree
+    data = participant.conference_info
+    if data is None:
+        return ''
+    user = getattr(data, 'user', data)
+    element = deepcopy(user.element)
+    if data is not user:
+        entities = {str(endpoint.entity) for endpoint in data}
+        for child in list(element):
+            if etree.QName(child).localname == 'endpoint' and child.get('entity') not in entities:
+                element.remove(child)
+    for node in element.iter():
+        if node.text is not None and not node.text.strip():
+            node.text = None
+        if node.tail is not None and not node.tail.strip():
+            node.tail = None
+    return element
+
+
+def conference_info_xml(element):
+    from lxml import etree
+    return etree.tostring(element, pretty_print=True, encoding='unicode').rstrip() if element is not None else ''
+
+
+class ConferenceInfoTree(QTreeWidget):
+    """A conference-info element as a tree of properties: each element a row named after it, its text
+    or what identifies it (its entity, its media type) as the value, its attributes and children under it."""
+
+    names = {'display-text': 'Name', 'src-id': 'SSRC', 'call-id': 'Call-ID', 'from-tag': 'From tag', 'to-tag': 'To tag',
+             'sip': 'SIP dialog', 'call-info': 'Call info', 'user-agent': 'User agent', 'entity': 'Address', 'uri': 'URI', 'id': 'ID'}
+
+    def __init__(self, element, parent=None):
+        super(ConferenceInfoTree, self).__init__(parent)
+        self.setColumnCount(2)
+        self.setHeaderLabels([translate('sessions', 'Property'), translate('sessions', 'Value')])
+        self.setAlternatingRowColors(True)
+        self.setUniformRowHeights(True)
+        self.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
+        if element is not None:
+            self._add(self.invisibleRootItem(), element)
+        self.expandAll()
+        self.resizeColumnToContents(0)
+        self.setColumnWidth(0, self.columnWidth(0) + 20)
+
+    @classmethod
+    def _name(cls, tag):
+        from lxml import etree
+        name = etree.QName(tag).localname
+        return cls.names.get(name) or name.replace('-', ' ').replace('_', ' ').capitalize()
+
+    @staticmethod
+    def _text(element):
+        return (element.text or '').strip()
+
+    def _summary(self, element, children):
+        """What a row with rows under it shows as its value: its text, else what identifies it."""
+        from lxml import etree
+        text = self._text(element)
+        if text:
+            return text
+        by_name = {etree.QName(child).localname: self._text(child) for child in children}
+        if etree.QName(element).localname == 'media':
+            return ' · '.join(value for value in (by_name.get('type'), by_name.get('status')) if value)
+        for key in ('entity', 'id'):
+            if element.get(key):
+                return element.get(key)
+        return by_name.get('display-text', '')
+
+    def _add(self, parent, element):
+        from lxml import etree
+        children = [child for child in element if isinstance(child.tag, str)]     # no comments
+        attributes = [(etree.QName(key).localname, value) for key, value in element.attrib.items()]
+        row = QTreeWidgetItem(parent, [self._name(element.tag), ''])
+        if not children and not attributes:
+            row.setText(1, self._text(element))
+            return row
+        font = row.font(0)
+        font.setBold(True)
+        row.setFont(0, font)
+        row.setText(1, self._summary(element, children))
+        for key, value in attributes:
+            if key == 'state' and value == 'full':
+                continue    # a detail of the protocol, not of the participant
+            if value == row.text(1):
+                continue    # already the row's value
+            QTreeWidgetItem(row, [self._name(key), value])
+        for child in children:
+            self._add(row, child)
+        return row
+
+    @staticmethod
+    def _section(item, depth=0):
+        lines = ['    ' * depth + (f'{item.text(0)}: {item.text(1)}' if item.text(1) else item.text(0))]
+        for index in range(item.childCount()):
+            lines.extend(ConferenceInfoTree._section(item.child(index), depth + 1))
+        return lines
+
+    @staticmethod
+    def _copy(text):
+        QApplication.clipboard().setText(text)
+
+    def contextMenuEvent(self, event):
+        item = self.itemAt(self.viewport().mapFromGlobal(event.globalPos()))
+        if item is None:
+            return
+        if item not in self.selectedItems():
+            self.setCurrentItem(item)
+        menu = QMenu(self)
+        value = menu.addAction(translate('sessions', 'Copy value'), lambda: self._copy(item.text(1)))
+        value.setEnabled(bool(item.text(1)))
+        menu.addAction(translate('sessions', 'Copy property and value'), lambda: self._copy(f'{item.text(0)}: {item.text(1)}'))
+        if item.childCount():
+            menu.addAction(translate('sessions', 'Copy %s with everything under it') % item.text(0), lambda: self._copy('\n'.join(self._section(item))))
+        selected = self.selectedItems()
+        if len(selected) > 1:
+            menu.addAction(translate('sessions', 'Copy the %d selected rows') % len(selected), lambda: self._copy('\n'.join(f'{row.text(0)}: {row.text(1)}' for row in selected)))
+        menu.exec(event.globalPos())
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Copy):
+            # one row: its value (what one usually wants to paste); several: a line each
+            rows = self.selectedItems()
+            if len(rows) == 1:
+                self._copy(rows[0].text(1) or rows[0].text(0))
+            elif rows:
+                self._copy('\n'.join(f'{item.text(0)}: {item.text(1)}' for item in rows))
+            return
+        super(ConferenceInfoTree, self).keyPressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        item = self.itemAt(event.pos())
+        if item is not None and self.columnAt(event.pos().x()) == 1 and item.text(1):
+            self._copy(item.text(1))      # a value double clicked: copied
+            QToolTip.showText(event.globalPosition().toPoint(), translate('sessions', 'Copied'), self, QRect(), 1000)
+            return
+        super(ConferenceInfoTree, self).mouseDoubleClickEvent(event)
+
+
+class XMLHighlighter(QSyntaxHighlighter):
+    """Tags, attribute names and attribute values of an XML document, each in its own color."""
+
+    def __init__(self, document):
+        super(XMLHighlighter, self).__init__(document)
+        dark = is_dark_theme()
+
+        def text_format(color, bold=False):
+            char_format = QTextCharFormat()
+            char_format.setForeground(QColor(color))
+            if bold:
+                char_format.setFontWeight(QFont.Weight.Bold)
+            return char_format
+        self.rules = [(re.compile(r'</?[\w:.-]+|/?>'), text_format('#7aa2f7' if dark else '#1f4fa8', True)),
+                      (re.compile(r'\s([\w:.-]+)(?==)'), text_format('#e0af68' if dark else '#8a5a00')),
+                      (re.compile(r'"[^"]*"'), text_format('#9ece6a' if dark else '#2e7d32'))]
+
+    def highlightBlock(self, text):
+        for pattern, char_format in self.rules:
+            for match in pattern.finditer(text):
+                start, end = match.span(1) if pattern.groups else match.span()
+                self.setFormat(start, end - start, char_format)
+
+
+class VUMeterBar(QWidget):
+    """A horizontal VU meter: a level (0 to 1, the part lit) in VU_STEPS segments, green, then yellow, then red."""
+
+    def __init__(self, parent=None):
+        super(VUMeterBar, self).__init__(parent)
+        self.level = 0.0
+        self.setMinimumSize(160, 12)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def set_level(self, level):
+        if level != self.level:
+            self.level = level
+            self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        gap = 2
+        width = (self.width() - gap * (VU_STEPS - 1)) / VU_STEPS
+        lit = round(self.level * VU_STEPS)
+        for step in range(VU_STEPS):
+            rect = QRectF(step * (width + gap), 0, width, self.height())
+            fraction = (step + 1) / VU_STEPS
+            if step < lit:
+                color = QColor(220, 60, 40) if fraction > 0.95 else QColor(230, 180, 30) if fraction > 0.8 else QColor(60, 180, 75)
+            else:
+                color = QColor(128, 128, 128, 60)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawRoundedRect(rect, 2, 2)
+        painter.end()
+
+
+class ParticipantAudioLevels(QWidget):
+    """A participant's live VU meter: a bar per channel (one, or left and right) with its level in dBov,
+    from the focus' RFC 6465 levels (our own: from our microphone)."""
+
+    interval = 100   # ms
+
+    def __init__(self, participant, parent=None):
+        super(ParticipantAudioLevels, self).__init__(parent)
+        self.participant = participant
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setHorizontalSpacing(8)
+        self.grid.setVerticalSpacing(4)
+        self.rows = []
+        self.none_label = QLabel(translate('sessions', 'No audio levels: the focus sends none for it (no RFC 6465 levels, or no <src-id> for its audio)'), self)
+        self.none_label.setWordWrap(True)
+        self.none_label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
+        self.grid.addWidget(self.none_label, 0, 0, 1, 3)
+        self.timer = QTimer(self)
+        self.timer.setInterval(self.interval)
+        self.timer.timeout.connect(self.refresh)
+        self.timer.start()
+        self.refresh()
+
+    def _make_rows(self, count):
+        for name, bar, value in self.rows:
+            for widget in (name, bar, value):
+                self.grid.removeWidget(widget)
+                widget.deleteLater()
+        self.rows = []
+        names = [translate('sessions', 'Left'), translate('sessions', 'Right')] if count == 2 else [translate('sessions', 'Level')]
+        metrics = self.fontMetrics()
+        for index, text in enumerate(names[:count]):
+            name = QLabel(text, self)
+            bar = VUMeterBar(self)
+            value = QLabel(self)
+            value.setMinimumWidth(metrics.horizontalAdvance('-60 dBov') + 4)
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.grid.addWidget(name, index + 1, 0)
+            self.grid.addWidget(bar, index + 1, 1)
+            self.grid.addWidget(value, index + 1, 2)
+            self.rows.append((name, bar, value))
+
+    def refresh(self):
+        levels = self.participant.audio_levels
+        self.none_label.setVisible(levels is None)
+        if levels is None:
+            if self.rows:
+                self._make_rows(0)
+            return
+        if len(self.rows) != len(levels):
+            self._make_rows(len(levels))
+        for (name, bar, value), level in zip(self.rows, levels):
+            bar.set_level(level)
+            dbov = round((1.0 - level) * VU_FLOOR_DBOV)
+            value.setText(translate('sessions', 'silent') if level <= 0 else f'-{dbov} dBov' if dbov else '0 dBov')
+
+
+class ConferenceParticipantInfoDialog(QDialog):
+    """What the conference server tells of a participant: a summary, then its conference-info payload.
+    A window of its own, not modal: one per participant, several open at a time."""
+
+    open_windows = {}   # the participant -> its window
+
+    @classmethod
+    def show_for(cls, item):
+        window = cls.open_windows.get(item.participant)
+        if window is None:
+            window = cls.open_windows[item.participant] = cls(item)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        return window
+
+    def __init__(self, item, parent=None):
+        super(ConferenceParticipantInfoDialog, self).__init__(parent)
+        participant = item.participant
+        self.participant = participant
+        self.setWindowFlags(Qt.WindowType.Window)     # a regular window: minimize, maximize, in the task bar
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setModal(False)
+        self.setWindowTitle(translate('sessions', 'Participant info: %s') % (item.name or participant.uri))
+        self.destroyed.connect(lambda *args, participant=participant: ConferenceParticipantInfoDialog.open_windows.pop(participant, None))
+        layout = QVBoxLayout(self)
+        rows = [(translate('sessions', 'Name'), item.name),
+                (translate('sessions', 'Address'), participant.uri)]
+        if participant.device_label:
+            rows.append((translate('sessions', 'Device'), participant.device_label + (' ' + translate('sessions', '(this device)') if participant.this_device else '')))
+        rows.append((translate('sessions', 'Media'), ', '.join(sorted(item.active_media)) or translate('sessions', 'none')))
+        if participant.on_hold:
+            rows.append((translate('sessions', 'State'), translate('sessions', 'on hold')))
+        if participant.webrtc:
+            rows.append((translate('sessions', 'Video room'), translate('sessions', 'yes (WebRTC)')))
+        summary = QLabel(self)
+        summary.setTextFormat(Qt.TextFormat.RichText)
+        summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        summary.setText('<table cellspacing="2">' + ''.join(f'<tr><td align="right"><b>{escape_html(label)}:</b>&nbsp;</td><td>{escape_html(str(value))}</td></tr>' for label, value in rows) + '</table>')
+        layout.addWidget(summary)
+        # its audio, live: what the focus tells of its level (with the SSRCs it sends them for)
+        audio_title = QLabel(self)
+        ssrcs = ', '.join(str(ssrc) for ssrc in sorted(participant.audio_ssrcs))
+        audio_title.setText('<b>%s</b>' % escape_html(translate('sessions', 'Audio level')) + (f' <span style="color: gray">(SSRC {escape_html(ssrcs)})</span>' if ssrcs else ''))
+        audio_title.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(audio_title)
+        self.audio_levels = ParticipantAudioLevels(participant, self)
+        layout.addWidget(self.audio_levels)
+        try:
+            element = conference_info_element(participant)
+            xml = conference_info_xml(element)
+        except Exception as e:
+            element, xml = None, f'{e!r}'
+        # the properties to read, the payload as it came (pretty printed) behind them
+        self.tabs = QTabWidget(self)
+        self.tree = ConferenceInfoTree(element, self.tabs)
+        self.tabs.addTab(self.tree, translate('sessions', 'Properties'))
+        self.text = QPlainTextEdit(self.tabs)
+        self.text.setReadOnly(True)
+        self.text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.text.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.highlighter = XMLHighlighter(self.text.document())
+        self.text.setPlainText(xml)
+        self.tabs.addTab(self.text, translate('sessions', 'XML'))
+        layout.addWidget(self.tabs, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
+        copy_button = buttons.addButton(translate('sessions', 'Copy'), QDialogButtonBox.ButtonRole.ActionRole)
+        copy_button.setToolTip(translate('sessions', 'Copy the conference-info XML'))
+        copy_button.clicked.connect(lambda: QApplication.clipboard().setText(self.text.toPlainText()))
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        rows_count = sum(1 for _ in self._tree_items())
+        width = min(self.tree.columnWidth(0) + max((self.tree.fontMetrics().horizontalAdvance(item.text(1)) for item in self._tree_items()), default=0) + 60, 900)
+        height = min(self.tree.fontMetrics().lineSpacing() * 1.4 * (rows_count + 2), 600)
+        self.resize(max(width, 460), int(height) + summary.sizeHint().height() + 110)
+
+    def _tree_items(self):
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value() is not None:
+            yield iterator.value()
+            iterator += 1
+
+
 class ConferenceParticipantListView(QListView, ColorHelperMixin):
     def __init__(self, parent=None):
         super(ConferenceParticipantListView, self).__init__(parent)
@@ -7722,7 +8090,20 @@ class ConferenceParticipantListView(QListView, ColorHelperMixin):
         super(ConferenceParticipantListView, self).setModel(model)
 
     def contextMenuEvent(self, event):
-        pass
+        index = self.indexAt(event.pos())
+        model = self.model()
+        if not index.isValid() or model is None:
+            return
+        item = index.data(Qt.ItemDataRole.UserRole)
+        session = getattr(model, 'session', None)
+        menu = self.context_menu
+        menu.clear()
+        remove = menu.addAction(translate('sessions', 'Remove from conference'), lambda: ConferenceParticipantDelegate.remove_participant(self, item, session))
+        remove.setEnabled(ConferenceParticipantDelegate.can_remove(item, session))
+        menu.addSeparator()
+        info = menu.addAction(translate('sessions', 'Info'), lambda: ConferenceParticipantInfoDialog.show_for(item))
+        info.setEnabled(item.participant.conference_info is not None)
+        menu.exec(event.globalPos())
 
     def hideEvent(self, event):
         self.context_menu.hide()
