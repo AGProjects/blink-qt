@@ -58,14 +58,11 @@ No sound server modules, no ALSA configuration, no driver, no root.
 
 ### Blink for macOS
 
-6. **Devices menu and Preferences**, as in Blink Qt:
-   - AG CuteMusic running: "AG Podcast Mixer" listed first.
-   - AG CuteMusic installed but not running: listed first, greyed out, with the reason ("start AG CuteMusic").
-   - AG CuteMusic not installed: not listed at all.
-
-   Installed means the bundle `com.ag-projects.ag-cute-music` is known to Launch Services
-   (`NSWorkspace URLForApplicationWithBundleIdentifier:`). AG CuteMusic run from its source tree counts only while
-   it runs.
+6. **Devices menu**: done. "AG Podcast Mixer" is always in the Devices menu (input, output, input and output):
+   listed first while AG CuteMusic's mixer runs, otherwise greyed out with the reason in brackets: "turn on
+   POWER in AG CuteMusic's mixer" (AG CuteMusic holds `cutemusic.lock` while it runs), "start AG CuteMusic"
+   (installed: Launch Services knows `com.ag-projects.ag-cute-music`) or "install AG CuteMusic". Still to do: the
+   same in Preferences → Audio.
 7. **Underruns and drops in the Activity log.** The device's capture underruns and dropped playback frames are logged
    by pjmedia (level 4, the PJSIP log) when a call ends. They are wanted in the Activity log; that needs a small SDK
    accessor for the last stream's counts.

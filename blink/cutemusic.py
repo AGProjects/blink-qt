@@ -30,7 +30,7 @@ from blink.logging import ActivityLog
 from blink.resources import ApplicationData
 
 
-__all__ = ['DEVICE', 'DEVICE_HINT', 'installed', 'app_running', 'unavailable_reason', 'unavailable_hint', 'running', 'visible', 'selected', 'apply_music_mode', 'Watcher', 'CallPublisher']
+__all__ = ['DEVICE', 'DEVICE_HINT', 'installed', 'app_running', 'unavailable_reason', 'unavailable_hint', 'running', 'visible', 'selected', 'apply_music_mode', 'open_mixer', 'Watcher', 'CallPublisher']
 
 
 DEVICE = agpm.DEVICE                    # 'AG Podcast Mixer': its name in the device lists
@@ -175,6 +175,38 @@ def apply_music_mode():
             pass
         ActivityLog().info(f'[audio] {DEVICE} no longer the input: echo cancelling '
                            f'{"on" if settings.audio.echo_canceller.enabled else "off"}, {settings.audio.sample_rate} Hz again')
+
+
+BUNDLE_ID = 'com.ag-projects.ag-cute-music'      # macOS
+
+
+def open_mixer():
+    """AG CuteMusic in front on its Mixer view (the notice's icon, MainWindow.MixerNotice): asked through the link
+    directory (show-mixer.request, which it checks twice a second); started with --mixer when it is installed but not
+    running."""
+    import shutil
+    import subprocess
+    import sys
+    try:
+        os.makedirs(LINK_DIR, mode=0o700, exist_ok=True)
+        with open(agpm.path('show-mixer.request'), 'w'):
+            pass
+    except OSError as e:
+        ActivityLog().warning(f'[audio] Cannot ask AG CuteMusic for its mixer: {e}')
+    if app_running():
+        return      # it shows itself (the request)
+    if sys.platform == 'darwin':
+        command = ['open', '-b', BUNDLE_ID, '--args', '--mixer']
+    elif shutil.which('ag-cute-music'):
+        command = [shutil.which('ag-cute-music'), '--mixer']
+    else:
+        ActivityLog().info('[audio] AG CuteMusic is not installed')
+        return
+    try:
+        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        ActivityLog().info('[audio] Starting AG CuteMusic on its mixer')
+    except OSError as e:
+        ActivityLog().warning(f'[audio] Cannot start AG CuteMusic: {e}')
 
 
 class Watcher(QObject):

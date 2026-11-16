@@ -6,7 +6,7 @@ import os
 from functools import partial
 
 from PyQt6.QtCore import Qt, QRectF, QSettings, QSize, QTimer, QUrl, QTranslator
-from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QShortcut
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QAction, QActionGroup, QPainter, QPalette, QShortcut
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QStyle, QStyleOptionComboBox, QStyleOptionFrame, QSystemTrayIcon, QApplication, QStyleFactory
 from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressBar, QSizePolicy, QSplitter, QToolButton, QVBoxLayout, QWidget
 
@@ -127,6 +127,40 @@ class ProgressLine(QWidget):
         if watched is self.bar and event.type() == QEvent.Type.Resize and self.shown is not None:
             self.show_progress(*self.shown)     # the text that fits the new width
         return super().eventFilter(watched, event)
+
+
+class MixerNotice(QWidget):
+    """Above the progress lines, while AG CuteMusic's mixer is the audio input: AG CuteMusic's icon (a button that
+    opens its mixer) and a notice that echo cancelling is off. Shown at once, no delay (as Blink Cocoa's
+    JournalProgressStrip)."""
+
+    def __init__(self, parent, font):
+        super().__init__(parent)
+        from PyQt6.QtWidgets import QHBoxLayout
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(8)
+        size = 32       # as Blink Cocoa: the icon about as tall as two lines of the notice
+        self.icon = QToolButton(self)
+        self.icon.setAutoRaise(True)
+        self.icon.setIcon(QIcon(Resources.get('icons/ag-cute-music.png')))
+        self.icon.setIconSize(QSize(size, size))
+        self.icon.setToolTip(translate('main_window', "Open AG CuteMusic's mixer"))
+        self.icon.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.icon.clicked.connect(cutemusic.open_mixer)
+        layout.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.label = QLabel(self)
+        self.label.setFont(font)
+        self.label.setWordWrap(True)
+        self.label.setText(translate('main_window', 'You are now using AG CuteMusic Podcast Mixer for mixing audio. Wear headsets to make sure echo is cancelled. To change the device, go to the Devices menu.'))
+        self.label.setForegroundRole(QPalette.ColorRole.Highlight)       # the accent colour, as on macOS
+        self.label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)     # wraps to any width
+        layout.addWidget(self.label, 1)
+        self.setToolTip(translate('main_window', 'Echo cancelling is off while AG CuteMusic Podcast Mixer is the audio device, for music: without headsets, the other party hears themselves'))
+        self.hide()
+
+    def update_state(self, settings=None):
+        self.setVisible(cutemusic.selected(settings))
 
 
 @implementer(IObserver)
@@ -513,6 +547,8 @@ class MainWindow(base_class, ui_class):
         progress_layout = QVBoxLayout(self.progress_area)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(2)
+        self.mixer_notice = MixerNotice(self.progress_area, font)       # AG CuteMusic's mixer is the input
+        progress_layout.addWidget(self.mixer_notice)
         self.journal_line = ProgressLine(self.progress_area, font)
         from blink.pgp_decryptor import BackgroundDecryptor
         self.import_speed_button, self.import_speed_group = self._speed_button(
@@ -2306,6 +2342,7 @@ class MainWindow(base_class, ui_class):
                            f'AG CuteMusic {"running" if self.cutemusic_watcher.running else "not running"} (link directory {cutemusic.LINK_DIR}); '
                            f'engine inputs: {", ".join(engine.input_devices)}')
         self.cutemusic_watcher.changed.connect(self._cutemusic_changed)
+        self.mixer_notice.update_state()
         if not self.cutemusic_watcher.running and cutemusic.DEVICE in (SIPSimpleSettings().audio.input_device, SIPSimpleSettings().audio.output_device):
             self._cutemusic_changed(False)
         notification.center.add_observer(self, name='CFGSettingsObjectDidChange')
@@ -2381,6 +2418,7 @@ class MainWindow(base_class, ui_class):
             if 'audio.input_device' in notification.data.modified:
                 self._check_device_action(self.input_devices_group, settings.audio.input_device, 'audio input')
                 cutemusic.apply_music_mode()        # AG CuteMusic's mixer: echo cancelling off while it is the input
+                self.mixer_notice.update_state(settings)
             if 'audio.alert_device' in notification.data.modified:
                 self._check_device_action(self.alert_devices_group, settings.audio.alert_device, 'alert')
             if 'video.device' in notification.data.modified:
