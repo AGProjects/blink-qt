@@ -1,3 +1,10 @@
+blink (7.3.1) unstable; urgency=medium
+
+  * Show a warning when AG CuteMusic Podcast Mixer is the audio device
+  * Added button to open AG CuteMusic's mixer
+
+ -- Adrian Georgescu <ag@ag-projects.com>  Tue, 17 Nov 2026 08:58:00 -0300
+
 blink (7.3.0) unstable; urgency=medium
 
   * Added stereo one to one and conference calls support
